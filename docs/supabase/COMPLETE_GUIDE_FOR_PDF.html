@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Ride Pro - Complete Supabase Integration Guide</title>
+    <style>
+        @media print {
+            @page {
+                size: letter;
+                margin: 0.75in;
+            }
+            body {
+                margin: 0;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            h1 {
+                page-break-after: avoid;
+            }
+            h2 {
+                page-break-after: avoid;
+            }
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+            margin-top: 25px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f4f4f4;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            overflow-x: auto;
+            border-radius: 5px;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .checklist {
+            list-style: none;
+            margin-left: 0;
+        }
+        .checklist li:before {
+            content: "☐ ";
+            margin-right: 8px;
+        }
+        .toc {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .toc ul {
+            list-style: none;
+            margin-left: 0;
+        }
+        .toc li {
+            margin-bottom: 5px;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #3498db;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Team Ride Pro - Complete Supabase Integration Guide</h1>
+    
+    <div class="info">
+        <strong>Version:</strong> 1.0<br>
+        <strong>Date:</strong> December 2024<br>
+        <strong>Purpose:</strong> Complete step-by-step guide for integrating Team Ride Pro with Supabase
+    </div>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#quick-start">1. Quick Start Guide</a></li>
+            <li><a href="#complete-setup">2. Complete Setup Guide</a></li>
+            <li><a href="#feasibility">3. Authentication Feasibility Analysis</a></li>
+            <li><a href="#implementation">4. Authentication Implementation Details</a></li>
+            <li><a href="#migration">5. Data Migration Guide</a></li>
+            <li><a href="#deployment">6. Deployment Guide</a></li>
+        </ul>
+    </div>
+
+    <div id="quick-start" class="page-break">
+        <h1>1. Quick Start Guide</h1>
+        <p>This is your starting point for integrating Supabase with Team Ride Pro.</p>
+        
+        <div class="success">
+            <h3>✅ Authentication Requirements - CONFIRMED POSSIBLE</h3>
+            <p>All your authentication requirements are feasible with Supabase:</p>
+            <ol>
+                <li>✅ <strong>Admin Coaches</strong>: Email/Password → Full site access</li>
+                <li>✅ <strong>Non-Admin Coaches</strong>: Phone + SMS code → "Coach Assignments" tab only</li>
+                <li>✅ <strong>Riders</strong>: Phone + SMS code → "Rider Assignments" tab only</li>
+            </ol>
+        </div>
+
+        <h2>🚀 Recommended Implementation Order</h2>
+        
+        <h3>Phase 1: Setup (Day 1) ⏱️ ~2-3 hours</h3>
+        <ol>
+            <li>✅ Create Supabase project</li>
+            <li>✅ Run database schema SQL</li>
+            <li>✅ Configure email authentication</li>
+            <li>✅ Get API credentials</li>
+            <li>✅ Update <code>scripts/supabase-config.js</code></li>
+        </ol>
+
+        <h3>Phase 2: Admin Coaches (Day 2) ⏱️ ~2 hours</h3>
+        <ol>
+            <li>✅ Create first admin account</li>
+            <li>✅ Test email/password login</li>
+            <li>✅ Verify full access works</li>
+            <li>✅ Test data loading/saving</li>
+        </ol>
+
+        <h3>Phase 3: Data Migration (Day 3) ⏱️ ~1-2 hours</h3>
+        <ol>
+            <li>✅ Export localStorage data</li>
+            <li>✅ Run migration script</li>
+            <li>✅ Verify all data migrated</li>
+            <li>✅ Normalize phone numbers</li>
+        </ol>
+
+        <h3>Phase 4: Phone Auth Infrastructure (Day 4-5) ⏱️ ~4-6 hours</h3>
+        <ol>
+            <li>✅ Set up Twilio account</li>
+            <li>✅ Configure SMS in Supabase</li>
+            <li>✅ Create phone verification Edge Function</li>
+            <li>✅ Test phone auth flow</li>
+        </ol>
+
+        <h3>Phase 5: Non-Admin Coaches (Day 6) ⏱️ ~3-4 hours</h3>
+        <ol>
+            <li>✅ Implement phone login for coaches</li>
+            <li>✅ Auto-create user_roles entries</li>
+            <li>✅ Restrict to "Coach Assignments" tab</li>
+            <li>✅ Test with real coach account</li>
+        </ol>
+
+        <h3>Phase 6: Riders (Day 7) ⏱️ ~2-3 hours</h3>
+        <ol>
+            <li>✅ Adapt phone login for riders</li>
+            <li>✅ Restrict to "Rider Assignments" tab</li>
+            <li>✅ Test with real rider account</li>
+        </ol>
+
+        <h3>Phase 7: Deployment (Day 8) ⏱️ ~2-3 hours</h3>
+        <ol>
+            <li>✅ Deploy to GitHub Pages</li>
+            <li>✅ Test on production URL</li>
+            <li>✅ Connect custom domain</li>
+            <li>✅ Final testing</li>
+        </ol>
+
+        <p><strong>Total Estimated Time</strong>: 1-2 weeks (depending on experience level)</p>
+
+        <h2>⚠️ Important Notes</h2>
+        
+        <h3>Phone Authentication</h3>
+        <ul>
+            <li>Requires SMS provider (Twilio recommended)</li>
+            <li>Costs ~$0.0075 per SMS</li>
+            <li>Free trial available ($15.50 credit)</li>
+            <li>Phone numbers must be in E.164 format (+14155551234)</li>
+        </ul>
+
+        <h3>Security</h3>
+        <ul>
+            <li>Supabase <code>anon</code> key is meant to be public</li>
+            <li>Security comes from Row Level Security (RLS) policies</li>
+            <li>Already configured in database schema</li>
+            <li>Admin keys should NEVER be exposed</li>
+        </ul>
+    </div>
+
+    <div id="complete-setup" class="page-break">
+        <h1>2. Complete Setup Guide</h1>
+        <p>This guide will walk you through setting up Supabase for Team Ride Pro, including authentication, database setup, and data migration.</p>
+
+        <h2>1. Supabase Project Setup</h2>
+
+        <h3>Step 1.1: Create/Login to Supabase Account</h3>
+        <ol>
+            <li>Go to https://supabase.com</li>
+            <li>Sign up or log in to your account</li>
+            <li>You should see your dashboard</li>
+        </ol>
+
+        <h3>Step 1.2: Create a New Project</h3>
+        <ol>
+            <li>Click <strong>"New Project"</strong> button</li>
+            <li>Fill in project details:
+                <ul>
+                    <li><strong>Name</strong>: <code>team-ride-pro</code> (or your preferred name)</li>
+                    <li><strong>Database Password</strong>: Create a strong password (save this securely!)</li>
+                    <li><strong>Region</strong>: Choose closest to your users (e.g., <code>US West</code> for California)</li>
+                </ul>
+            </li>
+            <li>Click <strong>"Create new project"</strong></li>
+            <li>Wait 2-3 minutes for project initialization</li>
+        </ol>
+
+        <h3>Step 1.3: Get Your API Credentials</h3>
+        <ol>
+            <li>In your project dashboard, go to <strong>Settings</strong> (gear icon) → <strong>API</strong></li>
+            <li>You'll need two keys:
+                <ul>
+                    <li><strong>Project URL</strong>: <code>https://xxxxx.supabase.co</code></li>
+                    <li><strong>anon public key</strong>: Long string starting with <code>eyJ...</code></li>
+                </ul>
+            </li>
+            <li>Copy both values (you'll need them later)</li>
+        </ol>
+
+        <h2>2. Authentication Configuration</h2>
+
+        <h3>Step 2.1: Enable Phone Authentication</h3>
+        <ol>
+            <li>In Supabase dashboard, go to <strong>Authentication</strong> → <strong>Providers</strong></li>
+            <li>Find <strong>"Phone"</strong> in the list</li>
+            <li>Toggle it <strong>ON</strong></li>
+            <li><strong>Important</strong>: Phone authentication requires a third-party SMS provider (Twilio, MessageBird, etc.)
+                <ul>
+                    <li>For testing/development, you can use Supabase's test mode (limited functionality)</li>
+                    <li>For production, you'll need to set up Twilio</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3>Step 2.2: Configure Email Authentication (for Admin Coaches)</h3>
+        <ol>
+            <li>In <strong>Authentication</strong> → <strong>Providers</strong></li>
+            <li>Ensure <strong>"Email"</strong> is enabled (toggle should be ON - this is the "Enable Email provider" setting)</li>
+            <li>Configure email settings:
+                <ul>
+                    <li><strong>Secure email change</strong>: Toggle ON (recommended) - Requires confirmation on both old and new email</li>
+                    <li><strong>Secure password change</strong>: Toggle OFF (can enable later) - Requires recent login to change password</li>
+                    <li><strong>Minimum password length</strong>: Set to 8 or higher (recommended)</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3>Step 2.3: Configure Redirect URLs</h3>
+        <ol>
+            <li>Go to <strong>Authentication</strong> → <strong>URL Configuration</strong></li>
+            <li>Add your site URLs:
+                <ul>
+                    <li><strong>Site URL</strong>: <code>http://localhost:8000</code> (for local testing)</li>
+                    <li><strong>Redirect URLs</strong>: Add:
+                        <ul>
+                            <li><code>http://localhost:8000/**</code></li>
+                            <li><code>https://teamridepro.com/**</code> (for production)</li>
+                            <li><code>https://*.github.io/**</code> (if using GitHub Pages)</li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+        </ol>
+
+        <h2>3. Database Setup</h2>
+
+        <h3>Step 3.1: Run Database Schema</h3>
+        <ol>
+            <li>In Supabase dashboard, go to <strong>SQL Editor</strong></li>
+            <li>Click <strong>"New query"</strong></li>
+            <li>Open the file <code>sql/database-schema.sql</code> from this project</li>
+            <li>Copy the entire contents</li>
+            <li>Paste into the SQL Editor</li>
+            <li>Click <strong>"Run"</strong> (or press Ctrl+Enter)</li>
+            <li>You should see "Success. No rows returned" message</li>
+        </ol>
+
+        <h3>Step 3.2: Verify Tables Created</h3>
+        <ol>
+            <li>Go to <strong>Table Editor</strong> in the sidebar</li>
+            <li>You should see these tables:
+                <ul>
+                    <li><code>user_roles</code></li>
+                    <li><code>riders</code></li>
+                    <li><code>coaches</code></li>
+                    <li><code>rides</code></li>
+                    <li><code>rider_feedback</code></li>
+                    <li><code>ride_notes</code></li>
+                    <li><code>rider_availability</code></li>
+                    <li><code>season_settings</code></li>
+                    <li><code>auto_assign_settings</code></li>
+                    <li><code>routes</code></li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3>Step 3.3: Update Schema for Phone Authentication (Required)</h3>
+        <p>We need to add a function to verify phone numbers. Run this SQL:</p>
+        <pre><code>-- Function to verify if a phone number exists in coaches or riders table
+CREATE OR REPLACE FUNCTION verify_phone_number(phone_to_check TEXT)
+RETURNS TABLE(
+    exists_in_coaches BOOLEAN,
+    exists_in_riders BOOLEAN,
+    coach_id BIGINT,
+    rider_id BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        EXISTS(SELECT 1 FROM coaches WHERE phone = phone_to_check) as exists_in_coaches,
+        EXISTS(SELECT 1 FROM riders WHERE phone = phone_to_check) as exists_in_riders,
+        (SELECT id FROM coaches WHERE phone = phone_to_check LIMIT 1)::BIGINT as coach_id,
+        (SELECT id FROM riders WHERE phone = phone_to_check LIMIT 1)::BIGINT as rider_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to anon users (for phone verification)
+GRANT EXECUTE ON FUNCTION verify_phone_number(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION verify_phone_number(TEXT) TO authenticated;</code></pre>
+
+        <h3>Step 3.4: Update Schema for Phone Authentication Support</h3>
+        <p>We need to run additional SQL to support phone authentication and ensure the role structure is correct (3 roles: coach-admin, ride_leader, rider).</p>
+        <p><strong>Where to paste this SQL:</strong></p>
+        <ol>
+            <li>In your Supabase dashboard, go to <strong>SQL Editor</strong> (found in the left sidebar)</li>
+            <li>Click the <strong>"+ New query"</strong> button (top right of the SQL Editor area)</li>
+            <li>A new query tab will open</li>
+            <li>You'll see a large text area where you can type or paste SQL</li>
+        </ol>
+        <p><strong>How to run the SQL:</strong></p>
+        <ol>
+            <li>Open the file <code>sql/ADD_PHONE_AUTH_SUPPORT.sql</code> from this project in a text editor</li>
+            <li><strong>Copy the ENTIRE contents</strong> of the file (Ctrl+A to select all, then Ctrl+C to copy)</li>
+            <li><strong>Paste it into the SQL Editor</strong> in Supabase (click in the text area, then Ctrl+V)</li>
+            <li>Review the SQL code to make sure it pasted correctly</li>
+            <li>Click the <strong>"Run"</strong> button (usually a green "Run" button, or press <strong>Ctrl+Enter</strong>)</li>
+            <li>You should see a success message: "Success. No rows returned" or similar</li>
+            <li>If you see any errors, check the error message and ensure you ran <code>database-schema.sql</code> first (Step 3.1)</li>
+        </ol>
+        <p><strong>What this SQL does:</strong></p>
+        <ul>
+            <li>Updates the <code>user_roles</code> table constraint to use the 3 correct roles: <code>'coach-admin'</code>, <code>'ride_leader'</code>, <code>'rider'</code></li>
+            <li>Updates RLS policies to use <code>'coach-admin'</code> role</li>
+            <li>Creates functions for phone number verification and normalization</li>
+            <li>Adds indexes for faster phone number lookups</li>
+            <li>Creates helper functions for Edge Functions</li>
+        </ul>
+        <p><strong>Important Notes:</strong></p>
+        <ul>
+            <li>Make sure you've completed Step 3.1 (running <code>database-schema.sql</code>) BEFORE running this</li>
+            <li>This SQL will update existing policies and constraints - that's expected and correct</li>
+            <li>If you see any errors, they may be harmless (like "policy does not exist") - the <code>IF EXISTS</code> clauses handle this</li>
+        </ul>
+
+        <h2>4. Data Migration</h2>
+
+        <h3>Step 4.1: Export Current Local Data</h3>
+        <ol>
+            <li>Open your application in the browser</li>
+            <li>Open Developer Console (F12)</li>
+            <li>Run this command to export your data:</li>
+        </ol>
+        <pre><code>// Export current localStorage data
+const data = JSON.parse(localStorage.getItem('teamRideProData') || '{}');
+const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = 'team-ride-pro-export-' + new Date().toISOString().split('T')[0] + '.json';
+a.click();</code></pre>
+        <ol start="4">
+            <li>Save the downloaded file - this is your backup!</li>
+        </ol>
+
+        <h3>Step 4.2: Prepare Migration Script</h3>
+        <p>See the Data Migration Guide section for the complete migration script.</p>
+
+        <h3>Step 4.3: Create First Admin Coach Account</h3>
+        <ol>
+            <li>In Supabase dashboard, go to <strong>Authentication</strong> → <strong>Users</strong></li>
+            <li>Click <strong>"Add user"</strong> → <strong>"Create new user"</strong></li>
+            <li>Fill in:
+                <ul>
+                    <li><strong>Email</strong>: Your admin email</li>
+                    <li><strong>Password</strong>: Strong password</li>
+                    <li><strong>Auto Confirm User</strong>: Check this (or confirm via email)</li>
+                </ul>
+            </li>
+            <li>Click <strong>"Create user"</strong></li>
+            <li>Copy the <strong>User UID</strong> (UUID format)</li>
+            <li>Go to <strong>SQL Editor</strong> and run:</li>
+        </ol>
+        <pre><code>-- Replace USER_UUID_HERE with the UUID from step 5
+-- Replace COACH_ID_HERE with the ID of your coach record
+INSERT INTO user_roles (user_id, role)
+VALUES ('USER_UUID_HERE', 'admin')
+ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
+
+-- Link the auth user to your coach record
+UPDATE coaches 
+SET user_id = 'USER_UUID_HERE'
+WHERE id = COACH_ID_HERE;</code></pre>
+
+        <h2>5. Application Configuration</h2>
+
+        <h3>Step 5.1: Update Supabase Config</h3>
+        <ol>
+            <li>Open <code>scripts/supabase-config.js</code></li>
+            <li>Replace the placeholder values:</li>
+        </ol>
+        <pre><code>const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';</code></pre>
+        <ol start="3">
+            <li>Use the values from Step 1.3</li>
+        </ol>
+
+        <h2>6. Deployment</h2>
+        <p>See the Deployment Guide section for detailed deployment instructions.</p>
+
+        <h2>Authentication Flow Summary</h2>
+        <p>The system uses <strong>3 roles</strong>:</p>
+
+        <h3>Coach-Admin (Full Site Access)</h3>
+        <ol>
+            <li>Login with <strong>email + password</strong></li>
+            <li>Full access to all tabs and features</li>
+            <li>Role: <code>coach-admin</code> in <code>user_roles</code> table</li>
+            <li>Can manage all data, settings, and user roles</li>
+        </ol>
+
+        <h3>Ride Leader (Coach Assignments Tab Only)</h3>
+        <ol>
+            <li>Login with <strong>phone number + SMS code</strong> OR <strong>email + password</strong></li>
+            <li>System verifies phone/email exists in <code>coaches</code> table</li>
+            <li>If using phone: SMS code sent to phone (via Twilio), enter code to authenticate</li>
+            <li>If using email: Standard email/password authentication</li>
+            <li>Access limited to <strong>"Coach Assignments"</strong> tab only</li>
+            <li>Role: <code>ride_leader</code> in <code>user_roles</code> table</li>
+            <li>Session persists on device (can choose "Remember Me" for mobile devices)</li>
+        </ol>
+
+        <h3>Rider (Rider Assignments Tab Only)</h3>
+        <ol>
+            <li>Login with <strong>phone number + SMS code</strong> OR <strong>email + password</strong></li>
+            <li>System verifies phone/email exists in <code>riders</code> table</li>
+            <li>If using phone: SMS code sent to phone (via Twilio), enter code to authenticate</li>
+            <li>If using email: Standard email/password authentication</li>
+            <li>Access limited to <strong>"Rider Assignments"</strong> tab only</li>
+            <li>Role: <code>rider</code> in <code>user_roles</code> table</li>
+            <li>Session persists on device (can choose "Remember Me" for mobile devices)</li>
+        </ol>
+
+        <p><strong>Note</strong>: Supabase sessions persist by default, so users remain logged in on their device until they explicitly log out. For mobile devices, this provides a "remember me" experience automatically.</p>
+    </div>
+
+    <div id="feasibility" class="page-break">
+        <h1>3. Authentication Feasibility Analysis</h1>
+
+        <h2>Your Requirements Summary</h2>
+        <ol>
+            <li><strong>Admin Coaches</strong>: Email/Password login → Full site access</li>
+            <li><strong>Non-Admin Coaches</strong>: Phone + SMS code → "Coach Assignments" tab only</li>
+            <li><strong>Riders</strong>: Phone + SMS code → "Rider Assignments" tab only</li>
+        </ol>
+
+        <div class="success">
+            <h2>✅ Confirmation: YES, This is Possible with Supabase</h2>
+            <p>All three authentication methods are feasible with Supabase, though phone authentication requires some custom implementation.</p>
+        </div>
+
+        <h2>Detailed Feasibility</h2>
+
+        <h3>1. Admin Coaches (Email/Password) ✅ FULLY SUPPORTED</h3>
+        <p><strong>Status</strong>: ✅ Native Supabase feature - no custom code needed</p>
+        <p><strong>Effort</strong>: ⭐ Easy (1-2 hours)</p>
+
+        <h3>2. Non-Admin Coaches (Phone + SMS) ⚠️ SUPPORTED WITH CUSTOM FLOW</h3>
+        <p><strong>Status</strong>: ✅ Possible, requires custom implementation</p>
+        <p><strong>Effort</strong>: ⭐⭐⭐ Moderate (4-8 hours)</p>
+
+        <h3>3. Riders (Phone + SMS) ⚠️ SUPPORTED WITH CUSTOM FLOW</h3>
+        <p><strong>Status</strong>: ✅ Same as non-admin coaches</p>
+        <p><strong>Effort</strong>: ⭐⭐⭐ Moderate (4-8 hours, or shared with coaches implementation)</p>
+
+        <h2>Implementation Strategy</h2>
+
+        <h3>Recommended Approach: Phased Implementation</h3>
+        <ul>
+            <li><strong>Phase 1: Admin Coaches (Email/Password)</strong> ⏱️ ~2 hours</li>
+            <li><strong>Phase 2: Phone Authentication Infrastructure</strong> ⏱️ ~4 hours</li>
+            <li><strong>Phase 3: Non-Admin Coaches</strong> ⏱️ ~3 hours</li>
+            <li><strong>Phase 4: Riders</strong> ⏱️ ~2 hours (reuse coach implementation)</li>
+        </ul>
+
+        <p><strong>Total Estimated Time</strong>: 11-15 hours</p>
+
+        <h2>Cost Estimate</h2>
+
+        <h3>Supabase</h3>
+        <ul>
+            <li><strong>Free Tier</strong>: Includes phone auth, 50,000 monthly active users</li>
+            <li><strong>Cost</strong>: $0/month for your use case (unless you exceed free tier limits)</li>
+        </ul>
+
+        <h3>Twilio (SMS)</h3>
+        <ul>
+            <li><strong>Free Trial</strong>: $15.50 credit (~2,000 SMS)</li>
+            <li><strong>Production</strong>: ~$0.0075 per SMS</li>
+            <li><strong>Monthly Estimate</strong>: 
+                <ul>
+                    <li>50 coaches × 10 logins/month = 500 SMS = ~$3.75/month</li>
+                    <li>100 riders × 5 logins/month = 500 SMS = ~$3.75/month</li>
+                    <li><strong>Total</strong>: ~$7.50/month for 1,000 SMS</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p><strong>Annual SMS Cost</strong>: ~$90/year (very affordable)</p>
+
+        <div class="success">
+            <h2>Final Recommendation</h2>
+            <p>✅ <strong>YES, proceed with Supabase</strong></p>
+            <p>Your authentication requirements are all feasible:
+            <ol>
+                <li>✅ Admin coaches (email/password) - native feature</li>
+                <li>✅ Non-admin coaches (phone/SMS) - requires custom flow but well-supported</li>
+                <li>✅ Riders (phone/SMS) - same as coaches</li>
+            </ol>
+            </p>
+        </div>
+    </div>
+
+    <div id="implementation" class="page-break">
+        <h1>4. Authentication Implementation Details</h1>
+        <p>This document explains how the authentication system works and addresses the specific requirements for admin coaches, non-admin coaches, and riders.</p>
+
+        <h2>Authentication Requirements Summary</h2>
+        <ol>
+            <li><strong>Admin Coaches</strong>: Email + Password → Full site access</li>
+            <li><strong>Non-Admin Coaches</strong>: Phone + SMS Code → "Coach Assignments" tab only</li>
+            <li><strong>Riders</strong>: Phone + SMS Code → "Rider Assignments" tab only</li>
+        </ol>
+
+        <h2>Implementation Approach</h2>
+
+        <h3>Challenge: Supabase Phone Auth Limitations</h3>
+        <p>Supabase's phone authentication has these characteristics:</p>
+        <ul>
+            <li>Uses phone number as the primary identifier (like email for email auth)</li>
+            <li>Automatically creates auth users when phone auth succeeds</li>
+            <li>Requires phone numbers to be unique across all users</li>
+            <li>Requires an SMS provider (Twilio, MessageBird, etc.)</li>
+        </ul>
+
+        <h3>Solution: Hybrid Approach with Edge Function</h3>
+        <p>We'll implement a custom flow that:</p>
+        <ol>
+            <li>Validates phone numbers against existing records BEFORE authentication</li>
+            <li>Uses Supabase's phone auth for OTP delivery</li>
+            <li>Auto-creates user_roles entries after successful phone auth</li>
+            <li>Assigns appropriate role based on phone match (coach vs rider)</li>
+        </ol>
+
+        <h2>Detailed Flow Diagrams</h2>
+
+        <h3>Admin Coach Login Flow</h3>
+        <pre>User enters email + password
+    ↓
+Supabase email auth
+    ↓
+Success → Load user_roles
+    ↓
+Check role = 'admin'
+    ↓
+Grant full access</pre>
+
+        <h3>Non-Admin Coach Login Flow</h3>
+        <pre>User enters phone number
+    ↓
+Call Edge Function: verify-phone
+    ↓
+Check if phone exists in coaches table
+    ↓
+If YES:
+    Send OTP via Supabase phone auth
+    ↓
+User enters OTP code
+    ↓
+Verify OTP with Supabase
+    ↓
+Create/link auth user
+    ↓
+Auto-create user_roles entry (role = 'coach')
+    ↓
+Grant access to "Coach Assignments" tab only</pre>
+
+        <h3>Rider Login Flow</h3>
+        <pre>User enters phone number
+    ↓
+Call Edge Function: verify-phone
+    ↓
+Check if phone exists in riders table
+    ↓
+If YES:
+    Send OTP via Supabase phone auth
+    ↓
+User enters OTP code
+    ↓
+Verify OTP with Supabase
+    ↓
+Create/link auth user
+    ↓
+Auto-create user_roles entry (role = 'rider')
+    ↓
+Grant access to "Rider Assignments" tab only</pre>
+
+        <h2>Twilio Setup for SMS</h2>
+
+        <h3>Step 1: Create Twilio Account</h3>
+        <ol>
+            <li>Go to https://www.twilio.com</li>
+            <li>Sign up for free trial (includes $15.50 credit)</li>
+            <li>Verify your phone number</li>
+        </ol>
+
+        <h3>Step 2: Get Credentials</h3>
+        <ol>
+            <li>In Twilio Console → Settings → General</li>
+            <li>Copy:
+                <ul>
+                    <li><strong>Account SID</strong></li>
+                    <li><strong>Auth Token</strong></li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3>Step 3: Get Phone Number</h3>
+        <ol>
+            <li>In Twilio Console → Phone Numbers → Manage → Buy a number</li>
+            <li>Select a number with SMS capability</li>
+            <li>Note the phone number</li>
+        </ol>
+
+        <h3>Step 4: Configure in Supabase</h3>
+        <ol>
+            <li>In Supabase Dashboard → Authentication → Providers → Phone</li>
+            <li>Enter:
+                <ul>
+                    <li><strong>Twilio Account SID</strong></li>
+                    <li><strong>Twilio Auth Token</strong></li>
+                    <li><strong>Twilio Phone Number</strong></li>
+                </ul>
+            </li>
+            <li>Save</li>
+        </ol>
+
+        <div class="warning">
+            <p><strong>Note</strong>: Free tier has limits. For production, consider upgrading Twilio plan.</p>
+        </div>
+
+        <h2>Testing Checklist</h2>
+        <ul class="checklist">
+            <li>Admin coach can login with email/password</li>
+            <li>Admin coach has full access to all tabs</li>
+            <li>Non-admin coach can login with phone number</li>
+            <li>OTP code is received via SMS</li>
+            <li>Non-admin coach can verify OTP</li>
+            <li>Non-admin coach only sees "Coach Assignments" tab</li>
+            <li>Rider can login with phone number</li>
+            <li>Rider only sees "Rider Assignments" tab</li>
+            <li>Invalid phone numbers are rejected</li>
+            <li>Users without matching phone numbers cannot access app</li>
+            <li>Role changes are reflected immediately after login</li>
+            <li>Logout works correctly</li>
+            <li>Session persists across page refreshes</li>
+        </ul>
+    </div>
+
+    <div id="migration" class="page-break">
+        <h1>5. Data Migration Guide</h1>
+        <p>This guide explains how to migrate your existing localStorage data to Supabase.</p>
+
+        <h2>Pre-Migration Checklist</h2>
+        <ul class="checklist">
+            <li>Supabase project is set up</li>
+            <li>Database schema has been run (see Complete Setup Guide Step 3)</li>
+            <li>You have exported your localStorage data (backup)</li>
+            <li>You have your Supabase project URL and anon key</li>
+        </ul>
+
+        <h2>Migration Options</h2>
+
+        <h3>Option 1: Browser Console Script (Recommended)</h3>
+        <p>This script runs in your browser console and migrates data directly to Supabase.</p>
+
+        <ol>
+            <li>Open your application in the browser</li>
+            <li>Open Developer Console (F12)</li>
+            <li>Make sure Supabase is configured in <code>scripts/supabase-config.js</code></li>
+            <li>Paste and run the migration script (see complete script in COMPLETE_GUIDE_COMBINED.md)</li>
+        </ol>
+
+        <div class="info">
+            <p><strong>Note</strong>: The complete migration script is available in the combined markdown guide. It migrates:</p>
+            <ul>
+                <li>All riders</li>
+                <li>All coaches</li>
+                <li>All rides</li>
+                <li>All routes</li>
+                <li>Season settings</li>
+                <li>Auto-assign settings</li>
+            </ul>
+        </div>
+
+        <h2>Post-Migration Tasks</h2>
+
+        <h3>1. Verify Data</h3>
+        <p>Check that all data was migrated using the verification script provided in the complete guide.</p>
+
+        <h3>2. Create Admin Coach Account</h3>
+        <p>See Complete Setup Guide Step 4.3 for instructions on creating your first admin account.</p>
+
+        <h3>3. Normalize Phone Numbers</h3>
+        <p>Ensure all phone numbers are in consistent format (E.164):</p>
+        <pre><code>-- Run in Supabase SQL Editor
+UPDATE coaches 
+SET phone = '+' || REGEXP_REPLACE(phone, '[^0-9]', '', 'g')
+WHERE phone IS NOT NULL 
+  AND phone NOT LIKE '+%'
+  AND LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '', 'g')) >= 10;
+
+UPDATE riders 
+SET phone = '+' || REGEXP_REPLACE(phone, '[^0-9]', '', 'g')
+WHERE phone IS NOT NULL 
+  AND phone NOT LIKE '+%'
+  AND LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '', 'g')) >= 10;</code></pre>
+
+        <h3>4. Handle ID Mapping (If Needed)</h3>
+        <div class="warning">
+            <p><strong>Important</strong>: If your rides reference rider/coach IDs, those IDs will have changed after migration.</p>
+        </div>
+
+        <p>You have two options:</p>
+        <ul>
+            <li><strong>Option A</strong>: Re-run assignments (recommended)
+                <ul>
+                    <li>The application will re-assign riders/coaches to rides based on availability</li>
+                    <li>Old assignments may need to be recreated</li>
+                </ul>
+            </li>
+            <li><strong>Option B</strong>: Create ID mapping and update rides
+                <ul>
+                    <li>Create a mapping of old IDs → new IDs</li>
+                    <li>Update ride.available_coaches and ride.available_riders arrays</li>
+                    <li>This is complex and error-prone</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h2>Troubleshooting</h2>
+
+        <h3>"RLS policy violation" errors</h3>
+        <p>This means your user doesn't have proper permissions. Ensure:</p>
+        <ol>
+            <li>You've created an admin user account</li>
+            <li>The user_roles table has an entry for your user</li>
+            <li>The role is set to 'admin' or 'coach'</li>
+        </ol>
+
+        <h3>"Duplicate key" errors</h3>
+        <p>Data already exists in the database. Options:</p>
+        <ol>
+            <li>Clear existing data (dangerous - backup first!)</li>
+            <li>Skip duplicates (modify script to check before insert)</li>
+            <li>Use upsert instead of insert</li>
+        </ol>
+
+        <h3>Phone number format issues</h3>
+        <p>Phone numbers must be consistent. Run the normalization SQL (see Post-Migration Task #3).</p>
+    </div>
+
+    <div id="deployment" class="page-break">
+        <h1>6. Deployment Guide</h1>
+        <p>This guide covers deploying your application and connecting it to your custom domain (teamridepro.com).</p>
+
+        <h2>Deployment Options</h2>
+
+        <h3>Option 1: GitHub Pages (Recommended for Testing)</h3>
+        <p>GitHub Pages is free and perfect for hosting static sites.</p>
+
+        <h4>Step 1: Create GitHub Repository</h4>
+        <ol>
+            <li>Go to https://github.com and sign in</li>
+            <li>Click <strong>"New repository"</strong></li>
+            <li>Repository name: <code>team-ride-pro</code> (or your preferred name)</li>
+            <li>Choose <strong>Public</strong> or <strong>Private</strong> (Public is free)</li>
+            <li><strong>Don't</strong> initialize with README (we'll push existing code)</li>
+            <li>Click <strong>"Create repository"</strong></li>
+        </ol>
+
+        <h4>Step 2: Push Your Code</h4>
+        <p>If you don't have Git set up locally:</p>
+        <ol>
+            <li>Install Git: https://git-scm.com/downloads</li>
+            <li>Open terminal/command prompt in your project folder</li>
+            <li>Run these commands:</li>
+        </ol>
+        <pre><code># Initialize git repository
+git init
+
+# Add all files
+git add .
+
+# Create initial commit
+git commit -m "Initial commit - Team Ride Pro"
+
+# Add GitHub remote (replace USERNAME and REPO_NAME)
+git remote add origin https://github.com/USERNAME/REPO_NAME.git
+
+# Push to GitHub
+git branch -M main
+git push -u origin main</code></pre>
+
+        <h4>Step 3: Enable GitHub Pages</h4>
+        <ol>
+            <li>Go to your repository on GitHub</li>
+            <li>Click <strong>Settings</strong> (in repository tabs)</li>
+            <li>Scroll to <strong>Pages</strong> (in left sidebar)</li>
+            <li>Under <strong>Source</strong>, select:
+                <ul>
+                    <li><strong>Branch</strong>: <code>main</code> (or <code>master</code>)</li>
+                    <li><strong>Folder</strong>: <code>/ (root)</code></li>
+                </ul>
+            </li>
+            <li>Click <strong>Save</strong></li>
+            <li>Your site will be available at: <code>https://USERNAME.github.io/REPO_NAME</code></li>
+        </ol>
+
+        <h4>Step 4: Update Supabase Redirect URLs</h4>
+        <ol>
+            <li>In Supabase Dashboard → <strong>Authentication</strong> → <strong>URL Configuration</strong></li>
+            <li>Add to <strong>Redirect URLs</strong>:
+                <ul>
+                    <li><code>https://USERNAME.github.io/REPO_NAME/**</code></li>
+                    <li><code>https://USERNAME.github.io/REPO_NAME/teamridepro_v2.html</code></li>
+                </ul>
+            </li>
+            <li>Click <strong>Save</strong></li>
+        </ol>
+
+        <h2>Connecting Custom Domain (teamridepro.com)</h2>
+
+        <p>Since your domain is registered through Wix, you have a few options:</p>
+
+        <h3>Option A: Use Wix DNS (Recommended if staying on Wix)</h3>
+        <ol>
+            <li>Log into Wix account</li>
+            <li>Go to <strong>Domains</strong> → <strong>teamridepro.com</strong></li>
+            <li>Click <strong>"Manage DNS"</strong> or <strong>"DNS Settings"</strong></li>
+            <li>Add/Edit DNS records:</li>
+        </ol>
+
+        <h4>For GitHub Pages:</h4>
+        <ul>
+            <li><strong>Type</strong>: CNAME</li>
+            <li><strong>Name</strong>: <code>@</code> or <code>www</code> (or both)</li>
+            <li><strong>Value</strong>: <code>USERNAME.github.io</code></li>
+            <li><strong>TTL</strong>: 3600 (default)</li>
+        </ul>
+
+        <h4>For Netlify:</h4>
+        <ul>
+            <li><strong>Type</strong>: CNAME</li>
+            <li><strong>Name</strong>: <code>@</code></li>
+            <li><strong>Value</strong>: <code>your-site-name.netlify.app</code></li>
+            <li><strong>TTL</strong>: 3600</li>
+        </ul>
+
+        <ol start="5">
+            <li>Save changes</li>
+            <li>Wait 24-48 hours for DNS propagation</li>
+        </ol>
+
+        <h3>Option B: Transfer DNS to Hosting Provider</h3>
+        <ol>
+            <li>In Wix, find your domain's nameservers</li>
+            <li>Update nameservers at your hosting provider (GitHub/Netlify)</li>
+            <li>Let hosting provider manage DNS</li>
+        </ol>
+
+        <div class="info">
+            <p><strong>Note</strong>: This gives hosting provider full control but is more flexible.</p>
+        </div>
+
+        <h3>Option C: Use Subdomain (Easiest)</h3>
+        <p>If DNS changes are complicated, use a subdomain:</p>
+        <ol>
+            <li>In Wix DNS, add:
+                <ul>
+                    <li><strong>Type</strong>: CNAME</li>
+                    <li><strong>Name</strong>: <code>app</code> (or <code>team</code> or <code>admin</code>)</li>
+                    <li><strong>Value</strong>: <code>USERNAME.github.io</code></li>
+                </ul>
+            </li>
+            <li>Access site at: <code>app.teamridepro.com</code></li>
+            <li>Update Supabase redirect URLs to include subdomain</li>
+        </ol>
+
+        <h2>Production Checklist</h2>
+
+        <h3>Security</h3>
+        <ul class="checklist">
+            <li>Supabase RLS policies are enabled and tested</li>
+            <li>User roles are properly configured</li>
+            <li>Admin accounts have strong passwords</li>
+            <li>Phone authentication is configured with production SMS provider</li>
+            <li>Email verification is enabled (optional but recommended)</li>
+        </ul>
+
+        <h3>Configuration</h3>
+        <ul class="checklist">
+            <li>Supabase redirect URLs include production domain</li>
+            <li>Site URL is set to production domain in Supabase</li>
+            <li>Environment variables are set (if using)</li>
+            <li>API keys are configured correctly</li>
+        </ul>
+
+        <h3>Testing</h3>
+        <ul class="checklist">
+            <li>Admin login works (email/password)</li>
+            <li>Coach login works (phone/SMS)</li>
+            <li>Rider login works (phone/SMS)</li>
+            <li>All tabs are accessible to appropriate users</li>
+            <li>Data loads correctly from Supabase</li>
+            <li>Data saves correctly to Supabase</li>
+            <li>Logout works</li>
+            <li>Session persists across page refreshes</li>
+        </ul>
+
+        <h3>DNS</h3>
+        <ul class="checklist">
+            <li>Domain is pointing to hosting provider</li>
+            <li>SSL certificate is active (automatic with GitHub/Netlify/Vercel)</li>
+            <li>Both www and non-www work (or redirect configured)</li>
+        </ul>
+
+        <h2>Troubleshooting Deployment</h2>
+
+        <h3>Issue: "Redirect URL mismatch"</h3>
+        <p><strong>Solution</strong>:</p>
+        <ul>
+            <li>Check Supabase redirect URLs include your production domain</li>
+            <li>Ensure URL format matches exactly (including https://)</li>
+            <li>Wait a few minutes after updating (cache)</li>
+        </ul>
+
+        <h3>Issue: "Site not loading"</h3>
+        <p><strong>Solution</strong>:</p>
+        <ul>
+            <li>Check DNS propagation (can take 24-48 hours)</li>
+            <li>Verify CNAME/A records are correct</li>
+            <li>Check hosting provider status page</li>
+        </ul>
+
+        <h3>Issue: "API key errors"</h3>
+        <p><strong>Solution</strong>:</p>
+        <ul>
+            <li>Verify SUPABASE_URL and SUPABASE_ANON_KEY are correct</li>
+            <li>Check environment variables are set (if using)</li>
+            <li>Ensure config file is loaded before other scripts</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p><strong>End of Guide</strong></p>
+        <p>Good luck with your Supabase integration! 🚴‍♂️</p>
+        <p>For questions or issues, refer to the troubleshooting sections in each guide or check the Supabase documentation.</p>
+    </div>
+
+    <script>
+        // Add print functionality
+        window.onload = function() {
+            // Add print button
+            const printBtn = document.createElement('button');
+            printBtn.textContent = 'Print to PDF';
+            printBtn.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; z-index: 1000;';
+            printBtn.onclick = function() {
+                window.print();
+            };
+            document.body.appendChild(printBtn);
+        };
+    </script>
+</body>
+</html>
+

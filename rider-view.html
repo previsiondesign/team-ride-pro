@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tam High MTB Team - Rider View</title>
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Custom Scripts -->
+    <script src="supabase-config.js"></script>
+    <script src="api/database.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .header img {
+            height: 60px;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .ride-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .ride-date {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+
+        .ride-details {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .ride-detail-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ride-detail-label {
+            font-weight: 600;
+            min-width: 80px;
+        }
+
+        .group-section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #2196F3;
+        }
+
+        .group-card {
+            background: #f8f9fa;
+            border-left: 4px solid #2196F3;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .group-label {
+            font-weight: 600;
+            color: #2196F3;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .riders-list {
+            list-style: none;
+        }
+
+        .rider-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .rider-item:last-child {
+            border-bottom: none;
+        }
+
+        .availability-section {
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .availability-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            background: #ccc;
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #4CAF50;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: white;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            left: 26px;
+        }
+
+        .availability-status {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .availability-status.available {
+            color: #4CAF50;
+        }
+
+        .availability-status.unavailable {
+            color: #f44336;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .ride-info {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="tam-high-logo.png" alt="Tam High Logo" onerror="this.style.display='none'">
+            <h1>Tam High MTB Team</h1>
+            <p>Practice Ride Information</p>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading ride information...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentRide = null;
+        let currentRiderId = null;
+
+        // Get ride ID from URL or use current/upcoming ride
+        async function init() {
+            initSupabase();
+            
+            // Check for ride ID in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const rideId = urlParams.get('rideId');
+            const riderId = urlParams.get('riderId'); // Optional: specific rider
+            
+            if (rideId) {
+                await loadRide(parseInt(rideId), riderId ? parseInt(riderId) : null);
+            } else {
+                // Load next upcoming ride
+                await loadNextRide(riderId ? parseInt(riderId) : null);
+            }
+        }
+
+        async function loadNextRide(riderId) {
+            const client = getSupabaseClient();
+            if (!client) {
+                showError('Unable to connect to server');
+                return;
+            }
+
+            try {
+                const { data: rides, error } = await client
+                    .from('rides')
+                    .select('*')
+                    .eq('cancelled', false)
+                    .gte('date', new Date().toISOString().split('T')[0])
+                    .order('date', { ascending: true })
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (rides && rides.length > 0) {
+                    const ride = rides[0];
+                    const rideWithPublished = {
+                        id: ride.id,
+                        date: ride.date,
+                        groups: ride.groups || [],
+                        publishedGroups: ride.published_groups || false,
+                        endTime: ride.end_time || ride.endTime || ''
+                    };
+                    
+                    // Check and auto-unpublish if 12 hours have passed
+                    await checkAndAutoUnpublish(rideWithPublished);
+                    
+                    await displayRide(rideWithPublished, riderId);
+                } else {
+                    showEmptyState('No upcoming rides scheduled.');
+                }
+            } catch (error) {
+                console.error('Error loading ride:', error);
+                showError('Error loading ride information');
+            }
+        }
+
+        async function checkAndAutoUnpublish(ride) {
+            if (!ride || !ride.publishedGroups) return false; // Only check if published
+            
+            // Get practice end time - need to get from ride or practice settings
+            // For rider-view, we'll check ride.endTime directly
+            const practiceEndTime = ride.endTime || '';
+            
+            if (!practiceEndTime) return false; // Can't check without end time
+            
+            // Get ride date
+            const rideDate = new Date(ride.date);
+            if (isNaN(rideDate.getTime())) return false;
+            
+            // Parse end time (format: "HH:MM" or "HH:MM:SS")
+            const timeParts = practiceEndTime.split(':');
+            if (timeParts.length < 2) return false;
+            
+            const endHour = parseInt(timeParts[0], 10);
+            const endMinute = parseInt(timeParts[1], 10);
+            
+            if (!Number.isFinite(endHour) || !Number.isFinite(endMinute)) return false;
+            
+            // Create practice end datetime
+            const practiceEndDateTime = new Date(rideDate);
+            practiceEndDateTime.setHours(endHour, endMinute, 0, 0);
+            
+            // Add 12 hours to get the unpublish time
+            const unpublishDateTime = new Date(practiceEndDateTime);
+            unpublishDateTime.setHours(unpublishDateTime.getHours() + 12);
+            
+            // Check if current time is past the unpublish time
+            const now = new Date();
+            if (now >= unpublishDateTime) {
+                // Auto-unpublish - update in database
+                ride.publishedGroups = false;
+                
+                // Try to save to database
+                if (typeof updateRide === 'function') {
+                    try {
+                        await updateRide(ride.id, {
+                            publishedGroups: false,
+                            groups: ride.groups
+                        });
+                    } catch (error) {
+                        console.warn('Could not save auto-unpublish to database:', error);
+                    }
+                }
+                
+                return true; // Indicates unpublish happened
+            }
+            
+            return false; // No unpublish needed
+        }
+
+        async function loadRide(rideId, riderId) {
+            try {
+                const ride = await getRideById(rideId);
+                if (ride) {
+                    // Ensure publishedGroups is included
+                    const rideWithPublished = {
+                        ...ride,
+                        publishedGroups: ride.publishedGroups || ride.published_groups || false
+                    };
+                    
+                    // Check and auto-unpublish if 12 hours have passed
+                    await checkAndAutoUnpublish(rideWithPublished);
+                    
+                    await displayRide(rideWithPublished, riderId);
+                } else {
+                    showError('Ride not found');
+                }
+            } catch (error) {
+                console.error('Error loading ride:', error);
+                showError('Error loading ride information');
+            }
+        }
+
+        async function displayRide(ride, riderId) {
+            currentRide = ride;
+            currentRiderId = riderId;
+
+            // Load rider list to get names
+            const riders = await getAllRiders();
+
+            // Get ride details (date, location, etc.) - would need to extend ride data
+            const rideDate = new Date(ride.date);
+            const formattedDate = rideDate.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+
+            // Check availability if riderId is provided
+            let availability = null;
+            if (riderId) {
+                const availabilityData = await getRiderAvailability(ride.id);
+                const riderAvail = availabilityData.find(a => a.rider_id === riderId);
+                if (riderAvail) {
+                    availability = riderAvail.available;
+                }
+            }
+
+            // Build HTML
+            let html = `
+                <div class="ride-info">
+                    <div class="ride-date">${escapeHtml(formattedDate)}</div>
+                </div>
+            `;
+
+            // Availability toggle if rider ID provided
+            if (riderId) {
+                const rider = riders.find(r => r.id === riderId);
+                if (rider) {
+                    html += `
+                        <div class="availability-section">
+                            <div class="section-title">Your Availability</div>
+                            <p style="margin-bottom: 10px;">Update your availability for this ride:</p>
+                            <div class="availability-toggle">
+                                <div class="toggle-switch ${availability !== false ? 'active' : ''}" 
+                                     onclick="toggleAvailability(${riderId})" 
+                                     id="availability-toggle"></div>
+                                <span class="availability-status ${availability !== false ? 'available' : 'unavailable'}" 
+                                      id="availability-status">
+                                    ${availability !== false ? 'Available' : 'Not Available'}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            // Group assignments - check if published
+            if (!ride.publishedGroups) {
+                html += `
+                    <div class="empty-state" style="text-align: center; padding: 40px 20px;">
+                        <p style="font-size: 18px; margin-bottom: 8px; color: #666;">Group Assignments Pending</p>
+                        <p style="font-size: 14px; color: #999;">Group assignments will be posted here once they are published.</p>
+                    </div>
+                `;
+            } else if (ride.groups && ride.groups.length > 0) {
+                html += '<div class="group-section">';
+                html += '<div class="section-title">Ride Groups</div>';
+
+                // Sort groups sequentially by label (Group 1, Group 2, etc.)
+                const sortedGroups = [...ride.groups].sort((a, b) => {
+                    const labelA = a.label || '';
+                    const labelB = b.label || '';
+                    // Extract numbers from labels for comparison
+                    const numA = parseInt(labelA.replace(/\D/g, '')) || 0;
+                    const numB = parseInt(labelB.replace(/\D/g, '')) || 0;
+                    return numA - numB;
+                });
+
+                sortedGroups.forEach(group => {
+                    const groupRiders = (group.riders || []).map(id => {
+                        const rider = riders.find(r => r.id === id);
+                        return rider ? rider.name : null;
+                    }).filter(Boolean);
+
+                    if (groupRiders.length > 0) {
+                        html += `
+                            <div class="group-card">
+                                <div class="group-label">${escapeHtml(group.label || 'Group')}</div>
+                                <ul class="riders-list">
+                        `;
+                        
+                        groupRiders.forEach(riderName => {
+                            html += `<li class="rider-item">${escapeHtml(riderName)}</li>`;
+                        });
+
+                        html += `
+                                </ul>
+                            </div>
+                        `;
+                    }
+                });
+
+                html += '</div>';
+            } else {
+                html += '<div class="empty-state">Group assignments will be posted here.</div>';
+            }
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function toggleAvailability(riderId) {
+            if (!currentRide) return;
+
+            const toggle = document.getElementById('availability-toggle');
+            const status = document.getElementById('availability-status');
+            const isCurrentlyAvailable = toggle.classList.contains('active');
+            const newAvailability = !isCurrentlyAvailable;
+
+            try {
+                await setRiderAvailability(currentRide.id, riderId, newAvailability);
+                
+                toggle.classList.toggle('active');
+                status.textContent = newAvailability ? 'Available' : 'Not Available';
+                status.className = `availability-status ${newAvailability ? 'available' : 'unavailable'}`;
+                
+                // Show success message
+                showMessage('Availability updated successfully', 'success');
+            } catch (error) {
+                console.error('Error updating availability:', error);
+                showMessage('Error updating availability. Please try again.', 'error');
+            }
+        }
+
+        function showMessage(text, type) {
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.textContent = text;
+            
+            const content = document.getElementById('content');
+            content.insertBefore(message, content.firstChild);
+            
+            setTimeout(() => {
+                message.remove();
+            }, 3000);
+        }
+
+        function showError(message) {
+            document.getElementById('content').innerHTML = `
+                <div class="message error">${escapeHtml(message)}</div>
+            `;
+        }
+
+        function showEmptyState(message) {
+            document.getElementById('content').innerHTML = `
+                <div class="empty-state">${escapeHtml(message)}</div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

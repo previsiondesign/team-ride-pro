@@ -1,0 +1,23 @@
+Rider Name
+Rider Email
+Rider Cell Number
+Rider Address	
+Rider Sex	
+Rider Grade	
+Rider Birthday	
+Primary Parent/Guardian	
+Primary Parent/Guardian Cell Number	
+Primary Parent/Guardian Email	
+Primary Parent/Guardian Address if different	
+Second Parent/Guardian Name	
+Second Parent/Guardian Cell Number	
+Second Parent/Guardian Email	
+Alternate Emergency Contact Name	
+Alternate Emergency Contact Relationship	
+Alternate Emergency Contact Cell Number	
+Primary Physician	
+Primary Physician Phone Number	
+Medical Insurance Company Name	
+Medical Insurance Account Number	
+Any Rider allergies or special medical needs	
+T Shirt Size
