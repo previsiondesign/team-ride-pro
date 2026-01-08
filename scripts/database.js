@@ -27,6 +27,7 @@ async function getAllRiders() {
         gender: rider.gender,
         racingGroup: rider.racing_group,
         fitness: rider.fitness,
+        skills: rider.skills,
         photo: rider.photo,
         notes: rider.notes
     }));
@@ -57,6 +58,7 @@ async function getRiderById(id) {
         gender: data.gender,
         racingGroup: data.racing_group,
         fitness: data.fitness,
+        skills: data.skills,
         photo: data.photo,
         notes: data.notes
     };
@@ -75,6 +77,7 @@ async function createRider(riderData) {
         gender: riderData.gender,
         racing_group: riderData.racing_group || riderData.racingGroup,
         fitness: riderData.fitness,
+        skills: riderData.skills,
         photo: riderData.photo || null,
         notes: riderData.notes || null
     };
@@ -116,6 +119,7 @@ async function updateRider(id, riderData) {
     if (riderData.racing_group !== undefined) dbData.racing_group = riderData.racing_group;
     if (riderData.racingGroup !== undefined) dbData.racing_group = riderData.racingGroup;
     if (riderData.fitness !== undefined) dbData.fitness = riderData.fitness;
+    if (riderData.skills !== undefined) dbData.skills = riderData.skills;
     if (riderData.photo !== undefined) dbData.photo = riderData.photo;
     if (riderData.notes !== undefined) dbData.notes = riderData.notes;
     
@@ -184,6 +188,7 @@ async function getAllCoaches() {
         email: coach.email,
         level: coach.level,
         fitness: coach.fitness,
+        skills: coach.skills,
         photo: coach.photo,
         notes: coach.notes,
         user_id: coach.user_id
@@ -213,6 +218,7 @@ async function getCoachById(id) {
         email: data.email,
         level: data.level,
         fitness: data.fitness,
+        skills: data.skills,
         photo: data.photo,
         notes: data.notes,
         user_id: data.user_id

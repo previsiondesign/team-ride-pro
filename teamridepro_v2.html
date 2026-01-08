@@ -4167,43 +4167,76 @@
                 // Authenticated user - save to Supabase only (no localStorage fallback)
                 try {
                     console.log('Saving settings to Supabase...');
-                    // Save season settings (including timeEstimationSettings)
-                    if (data.seasonSettings) {
-                        const seasonData = {
-                            id: 'current',
-                            start_date: data.seasonSettings.startDate || null,
-                            end_date: data.seasonSettings.endDate || null,
-                            practices: data.seasonSettings.practices || [],
-                            fitnessScale: data.seasonSettings.fitnessScale !== undefined ? data.seasonSettings.fitnessScale : 5,
-                            skillsScale: data.seasonSettings.skillsScale !== undefined ? data.seasonSettings.skillsScale : 3,
-                            timeEstimationSettings: data.timeEstimationSettings || {
-                                fastSpeedBase: 12.5,
-                                slowSpeedBase: 10,
-                                fastSpeedMin: 5.5,
-                                slowSpeedMin: 4,
-                                elevationAdjustment: 0.5,
-                                lengthAdjustmentFactor: 0.1
+                    // Check if user has coach-admin role before saving settings
+                    const hasPermission = typeof hasRole === 'function' ? hasRole('coach-admin') : false;
+                    
+                    // Save season settings (including timeEstimationSettings) - only if user has permission
+                    if (data.seasonSettings && hasPermission) {
+                        try {
+                            const seasonData = {
+                                id: 'current',
+                                start_date: data.seasonSettings.startDate || null,
+                                end_date: data.seasonSettings.endDate || null,
+                                practices: data.seasonSettings.practices || [],
+                                fitnessScale: data.seasonSettings.fitnessScale !== undefined ? data.seasonSettings.fitnessScale : 5,
+                                skillsScale: data.seasonSettings.skillsScale !== undefined ? data.seasonSettings.skillsScale : 3,
+                                timeEstimationSettings: data.timeEstimationSettings || {
+                                    fastSpeedBase: 12.5,
+                                    slowSpeedBase: 10,
+                                    fastSpeedMin: 5.5,
+                                    slowSpeedMin: 4,
+                                    elevationAdjustment: 0.5,
+                                    lengthAdjustmentFactor: 0.1
+                                }
+                            };
+                            console.log('Saving season settings to Supabase:', { fitnessScale: seasonData.fitnessScale, skillsScale: seasonData.skillsScale });
+                            const result = await updateSeasonSettings(seasonData);
+                            console.log('Season settings saved to Supabase, returned:', { fitnessScale: result.fitnessScale, skillsScale: result.skillsScale });
+                        } catch (error) {
+                            // Handle RLS errors gracefully - user may not have coach-admin role yet
+                            if (error.message && error.message.includes('row-level security')) {
+                                console.warn('User does not have permission to save season settings. They may need to be assigned the coach-admin role.');
+                                // Don't show error to user - this is expected for new users without roles
+                            } else {
+                                throw error; // Re-throw other errors
                             }
-                        };
-                        console.log('Saving season settings to Supabase:', { fitnessScale: seasonData.fitnessScale, skillsScale: seasonData.skillsScale });
-                        const result = await updateSeasonSettings(seasonData);
-                        console.log('Season settings saved to Supabase, returned:', { fitnessScale: result.fitnessScale, skillsScale: result.skillsScale });
+                        }
+                    } else if (data.seasonSettings && !hasPermission) {
+                        console.warn('User does not have coach-admin role - skipping season settings save');
                     }
                     
-                    // Save auto-assign settings
-                    if (data.autoAssignSettings && data.autoAssignSettings.parameters) {
-                        const autoAssignData = {
-                            id: 'current',
-                            parameters: data.autoAssignSettings.parameters
-                        };
-                        await updateAutoAssignSettings(autoAssignData);
-                        console.log('Auto-assign settings saved to Supabase');
+                    // Save auto-assign settings - only if user has permission
+                    if (data.autoAssignSettings && data.autoAssignSettings.parameters && hasPermission) {
+                        try {
+                            const autoAssignData = {
+                                id: 'current',
+                                parameters: data.autoAssignSettings.parameters
+                            };
+                            await updateAutoAssignSettings(autoAssignData);
+                            console.log('Auto-assign settings saved to Supabase');
+                        } catch (error) {
+                            // Handle RLS errors gracefully
+                            if (error.message && error.message.includes('row-level security')) {
+                                console.warn('User does not have permission to save auto-assign settings.');
+                            } else {
+                                throw error; // Re-throw other errors
+                            }
+                        }
                     }
                     
-                    // Save races
-                    if (typeof upsertAllRaces === 'function' && Array.isArray(data.races)) {
-                        await upsertAllRaces(data.races);
-                        console.log('Races saved to Supabase');
+                    // Save races - only if user has permission
+                    if (typeof upsertAllRaces === 'function' && Array.isArray(data.races) && hasPermission) {
+                        try {
+                            await upsertAllRaces(data.races);
+                            console.log('Races saved to Supabase');
+                        } catch (error) {
+                            // Handle RLS errors gracefully
+                            if (error.message && error.message.includes('row-level security')) {
+                                console.warn('User does not have permission to save races.');
+                            } else {
+                                throw error; // Re-throw other errors
+                            }
+                        }
                     }
                     
                     console.log('Settings saved to Supabase successfully');
@@ -4533,6 +4566,7 @@
                         gender: riderData.gender || null,
                         racing_group: riderData.racingGroup || riderData.racing_group || null,
                         fitness: riderData.fitness || '5',
+                        skills: riderData.skills || '3',
                         photo: riderData.photo || null,
                         notes: riderData.notes || null
                     };
@@ -4593,13 +4627,14 @@
             if (client && currentUser && typeof updateCoach !== 'undefined' && typeof createCoach !== 'undefined') {
                 // Authenticated user - save to Supabase only
                 try {
-                    // Map app fields to database fields (database only supports: name, phone, email, level, fitness, photo, notes, user_id)
+                    // Map app fields to database fields (database supports: name, phone, email, level, fitness, skills, photo, notes, user_id)
                     const dbData = {
                         name: coachData.name,
                         phone: coachData.phone || null,
                         email: coachData.email || null,
                         level: coachData.coachingLicenseLevel || coachData.level || '1',
                         fitness: coachData.fitness || '5',
+                        skills: coachData.skills || '3',
                         photo: coachData.photo || null,
                         notes: coachData.notes || null
                     };
@@ -5617,7 +5652,8 @@
             const newPace = Math.max(1, Math.min(fitnessScale, currentPace + delta));
             
             coach.fitness = String(newPace);
-            saveData();
+            // Save directly to database
+            await saveCoachToDB(coach);
             
             // Update only the fitness display without re-sorting
             updateCoachFitnessDisplay(coachId, newPace);
@@ -5645,13 +5681,14 @@
             const newSkills = Math.max(1, Math.min(skillsScale, currentSkills + delta));
             
             coach.skills = String(newSkills);
-            saveData();
+            // Save directly to database
+            await saveCoachToDB(coach);
             
             // Update only the skills display without re-sorting
             updateCoachSkillsDisplay(coachId, newSkills);
         }
 
-        function adjustRiderPace(riderId, delta) {
+        async function adjustRiderPace(riderId, delta) {
             // Permission check - allow if canEditRiders exists, otherwise allow by default
             if (typeof canEditRiders === 'function' && !canEditRiders()) {
                 alert('You do not have permission to update rider pace');
@@ -5666,7 +5703,8 @@
             const newPace = Math.max(1, Math.min(fitnessScale, currentPace + delta));
             
             rider.fitness = String(newPace);
-            saveData();
+            // Save directly to database
+            await saveRiderToDB(rider);
             
             // Update only the fitness display without re-sorting
             updateRiderFitnessDisplay(riderId, newPace);
@@ -5679,7 +5717,7 @@
             }
         }
 
-        function adjustRiderSkills(riderId, delta) {
+        async function adjustRiderSkills(riderId, delta) {
             // Permission check - allow if canEditRiders exists, otherwise allow by default
             if (typeof canEditRiders === 'function' && !canEditRiders()) {
                 alert('You do not have permission to update rider skills');
@@ -5694,7 +5732,8 @@
             const newSkills = Math.max(1, Math.min(skillsScale, currentSkills + delta));
             
             rider.skills = String(newSkills);
-            saveData();
+            // Save directly to database
+            await saveRiderToDB(rider);
             
             // Update only the skills display without re-sorting
             updateRiderSkillsDisplay(riderId, newSkills);
