@@ -287,17 +287,44 @@ async function getAllRides() {
         return [];
     }
     
+    // Debug: Log raw data from database
+    const deletedRides = (data || []).filter(r => r.deleted === true);
+    console.log('📥 getAllRides: Raw data from DB - total:', (data || []).length, 'deleted in DB:', deletedRides.length, 'deleted rides:', deletedRides.map(r => ({ id: r.id, date: r.date, deleted: r.deleted, deletedType: typeof r.deleted })));
+    
     // Map database structure to app structure
-    return (data || []).map(ride => ({
-        id: ride.id,
-        date: ride.date,
-        availableCoaches: ride.available_coaches || [],
-        availableRiders: ride.available_riders || [],
-        assignments: ride.assignments || {},
-        groups: ride.groups || [],
-        cancelled: ride.cancelled || false,
-        publishedGroups: ride.published_groups || false
-    }));
+    const mapped = (data || []).map(ride => {
+        // Explicitly handle deleted field - check for true, false, null, undefined
+        const deletedValue = ride.deleted === true ? true : (ride.deleted === false ? false : false);
+        const result = {
+            id: ride.id,
+            date: ride.date,
+            time: ride.time || '',
+            endTime: ride.end_time || ride.endTime || '',
+            description: ride.description || '',
+            meetLocation: ride.meet_location || ride.meetLocation || '',
+            locationLat: ride.location_lat != null ? ride.location_lat : (ride.locationLat != null ? ride.locationLat : null),
+            locationLng: ride.location_lng != null ? ride.location_lng : (ride.locationLng != null ? ride.locationLng : null),
+            goals: ride.goals || '',
+            availableCoaches: ride.available_coaches || [],
+            availableRiders: ride.available_riders || [],
+            assignments: ride.assignments || {},
+            groups: ride.groups || [],
+            cancelled: ride.cancelled || false,
+            cancellationReason: ride.cancellation_reason || ride.cancellationReason || '',
+            deleted: deletedValue,
+            rescheduledFrom: ride.rescheduled_from || ride.rescheduledFrom || null,
+            publishedGroups: ride.published_groups || false
+        };
+        if (ride.deleted === true || deletedValue === true) {
+            console.log('📥 getAllRides: Mapped deleted ride, id:', result.id, 'date:', result.date, 'deleted from DB:', ride.deleted, 'deleted mapped:', result.deleted);
+        }
+        return result;
+    });
+    
+    const mappedDeleted = mapped.filter(r => r.deleted === true);
+    console.log('📥 getAllRides: Mapped rides - total:', mapped.length, 'deleted:', mappedDeleted.length);
+    
+    return mapped;
 }
 
 async function getRideById(id) {
@@ -319,13 +346,22 @@ async function getRideById(id) {
     return {
         id: data.id,
         date: data.date,
+        time: data.time || '',
+        endTime: data.end_time || data.endTime || '',
+        description: data.description || '',
+        meetLocation: data.meet_location || data.meetLocation || '',
+        locationLat: data.location_lat != null ? data.location_lat : (data.locationLat != null ? data.locationLat : null),
+        locationLng: data.location_lng != null ? data.location_lng : (data.locationLng != null ? data.locationLng : null),
+        goals: data.goals || '',
         availableCoaches: data.available_coaches || [],
         availableRiders: data.available_riders || [],
         assignments: data.assignments || {},
         groups: data.groups || [],
         cancelled: data.cancelled || false,
-        publishedGroups: data.published_groups || false,
-        endTime: data.end_time || data.endTime || ''
+        cancellationReason: data.cancellation_reason || data.cancellationReason || '',
+        deleted: data.deleted || false,
+        rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
+        publishedGroups: data.published_groups || false
     };
 }
 
@@ -336,11 +372,21 @@ async function createRide(rideData) {
     // Map app structure to database structure
     const dbData = {
         date: rideData.date,
+        time: rideData.time || '',
+        end_time: rideData.endTime || rideData.end_time || '',
+        description: rideData.description || '',
+        meet_location: rideData.meetLocation || rideData.meet_location || '',
+        location_lat: rideData.locationLat != null ? rideData.locationLat : (rideData.location_lat != null ? rideData.location_lat : null),
+        location_lng: rideData.locationLng != null ? rideData.locationLng : (rideData.location_lng != null ? rideData.location_lng : null),
+        goals: rideData.goals || '',
         available_coaches: rideData.availableCoaches || rideData.available_coaches || [],
         available_riders: rideData.availableRiders || rideData.available_riders || [],
         assignments: rideData.assignments || {},
         groups: rideData.groups || [],
         cancelled: rideData.cancelled || false,
+        cancellation_reason: rideData.cancellationReason || rideData.cancellation_reason || '',
+        deleted: rideData.deleted || false,
+        rescheduled_from: rideData.rescheduledFrom || rideData.rescheduled_from || null,
         published_groups: rideData.publishedGroups || rideData.published_groups || false
     };
     
@@ -356,11 +402,21 @@ async function createRide(rideData) {
     return {
         id: data.id,
         date: data.date,
+        time: data.time || '',
+        endTime: data.end_time || data.endTime || '',
+        description: data.description || '',
+        meetLocation: data.meet_location || data.meetLocation || '',
+        locationLat: data.location_lat != null ? data.location_lat : (data.locationLat != null ? data.locationLat : null),
+        locationLng: data.location_lng != null ? data.location_lng : (data.locationLng != null ? data.locationLng : null),
+        goals: data.goals || '',
         availableCoaches: data.available_coaches || [],
         availableRiders: data.available_riders || [],
         assignments: data.assignments || {},
         groups: data.groups || [],
         cancelled: data.cancelled || false,
+        cancellationReason: data.cancellation_reason || data.cancellationReason || '',
+        deleted: data.deleted || false,
+        rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
         publishedGroups: data.published_groups || false
     };
 }
@@ -372,30 +428,55 @@ async function updateRide(id, rideData) {
     // Map app structure to database structure
     const dbData = {};
     if (rideData.date !== undefined) dbData.date = rideData.date;
+    if (rideData.time !== undefined) dbData.time = rideData.time || '';
+    if (rideData.endTime !== undefined) dbData.end_time = rideData.endTime || '';
+    if (rideData.end_time !== undefined) dbData.end_time = rideData.end_time || '';
+    if (rideData.description !== undefined) dbData.description = rideData.description || '';
+    if (rideData.meetLocation !== undefined) dbData.meet_location = rideData.meetLocation || '';
+    if (rideData.meet_location !== undefined) dbData.meet_location = rideData.meet_location || '';
+    if (rideData.locationLat !== undefined) dbData.location_lat = rideData.locationLat != null ? rideData.locationLat : null;
+    if (rideData.location_lat !== undefined) dbData.location_lat = rideData.location_lat != null ? rideData.location_lat : null;
+    if (rideData.locationLng !== undefined) dbData.location_lng = rideData.locationLng != null ? rideData.locationLng : null;
+    if (rideData.location_lng !== undefined) dbData.location_lng = rideData.location_lng != null ? rideData.location_lng : null;
+    if (rideData.goals !== undefined) dbData.goals = rideData.goals || '';
     if (rideData.availableCoaches !== undefined) dbData.available_coaches = rideData.availableCoaches;
     if (rideData.available_riders !== undefined) dbData.available_riders = rideData.available_riders;
     if (rideData.availableRiders !== undefined) dbData.available_riders = rideData.availableRiders;
     if (rideData.assignments !== undefined) dbData.assignments = rideData.assignments;
     if (rideData.groups !== undefined) dbData.groups = rideData.groups;
     if (rideData.cancelled !== undefined) dbData.cancelled = rideData.cancelled;
+    if (rideData.cancellationReason !== undefined) dbData.cancellation_reason = rideData.cancellationReason || '';
+    if (rideData.cancellation_reason !== undefined) dbData.cancellation_reason = rideData.cancellation_reason || '';
+    if (rideData.deleted !== undefined) {
+        dbData.deleted = rideData.deleted === true ? true : (rideData.deleted === false ? false : false); // Explicitly handle true/false
+        console.log('📥 updateRide: Including deleted in dbData, id:', id, 'deleted:', dbData.deleted, 'rideData.deleted:', rideData.deleted);
+    } else {
+        console.log('📥 updateRide: deleted NOT in rideData, id:', id);
+    }
+    if (rideData.rescheduledFrom !== undefined) dbData.rescheduled_from = rideData.rescheduledFrom || null;
+    if (rideData.rescheduled_from !== undefined) dbData.rescheduled_from = rideData.rescheduled_from || null;
     if (rideData.publishedGroups !== undefined) dbData.published_groups = rideData.publishedGroups;
     if (rideData.published_groups !== undefined) dbData.published_groups = rideData.published_groups;
     
     // Update the record - don't use .single() as RLS might prevent row return
+    console.log('📥 updateRide: Updating ride in database, id:', id, 'dbData keys:', Object.keys(dbData), 'deleted in dbData:', dbData.deleted);
     const { data, error, count } = await client
         .from('rides')
         .update(dbData)
         .eq('id', id)
         .select();
     
+    console.log('📥 updateRide: Update response - data:', data, 'error:', error, 'count:', count);
+    
     if (error) {
+        console.error('📥 updateRide: Update error:', error);
         // If it's a PGRST116 (no rows), check if it's because RLS blocked the return
         // The update might have succeeded even if we can't read it back
         if (error.code === 'PGRST116') {
             // Try to verify the update succeeded by checking count
             // If we can't verify, assume it succeeded (RLS blocking read)
             console.warn('Update may have succeeded but RLS prevented reading back the row');
-            // Return the input data as confirmation
+            // Return the input data as confirmation (include deleted field)
             return {
                 id: id,
                 date: rideData.date,
@@ -404,6 +485,7 @@ async function updateRide(id, rideData) {
                 assignments: rideData.assignments || {},
                 groups: rideData.groups || [],
                 cancelled: rideData.cancelled || false,
+                deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Include deleted field
                 publishedGroups: rideData.publishedGroups || false
             };
         }
@@ -413,19 +495,22 @@ async function updateRide(id, rideData) {
     // If we got data back, use it; otherwise return the input data
     if (data && data.length > 0) {
         const updated = data[0];
-            return {
-                id: updated.id,
-                date: updated.date,
-                availableCoaches: updated.available_coaches || [],
-                availableRiders: updated.available_riders || [],
-                assignments: updated.assignments || {},
-                groups: updated.groups || [],
-                cancelled: updated.cancelled || false,
-                publishedGroups: updated.published_groups || false
-            };
+        const result = {
+            id: updated.id,
+            date: updated.date,
+            availableCoaches: updated.available_coaches || [],
+            availableRiders: updated.available_riders || [],
+            assignments: updated.assignments || {},
+            groups: updated.groups || [],
+            cancelled: updated.cancelled || false,
+            deleted: updated.deleted === true ? true : (updated.deleted === false ? false : false), // Explicitly handle true/false
+            publishedGroups: updated.published_groups || false
+        };
+        console.log('📥 updateRide: Updated ride returned, id:', result.id, 'date:', result.date, 'deleted:', result.deleted, 'deleted from DB:', updated.deleted);
+        return result;
     } else {
         // Update succeeded but no data returned (RLS blocking)
-        // Return the input data as confirmation
+        // Return the input data as confirmation (include deleted field)
         return {
             id: id,
             date: rideData.date,
@@ -433,7 +518,8 @@ async function updateRide(id, rideData) {
             availableRiders: rideData.availableRiders || [],
             assignments: rideData.assignments || {},
             groups: rideData.groups || [],
-            cancelled: rideData.cancelled || false
+            cancelled: rideData.cancelled || false,
+            deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false) // Include deleted field
         };
     }
 }
@@ -625,7 +711,9 @@ async function getSeasonSettings() {
         endDate: data.end_date,
         practices: data.practices || [],
         fitnessScale: data.fitness_scale !== null && data.fitness_scale !== undefined ? data.fitness_scale : 5,
-        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3
+        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3,
+        coachRoles: Array.isArray(data.coach_roles) ? data.coach_roles : [],
+        riderRoles: Array.isArray(data.rider_roles) ? data.rider_roles : []
     };
     
     // Map time_estimation_settings from database to app format
@@ -669,6 +757,14 @@ async function updateSeasonSettings(settings) {
     // Map timeEstimationSettings to time_estimation_settings
     if (settings.timeEstimationSettings !== undefined) {
         dbData.time_estimation_settings = settings.timeEstimationSettings;
+    }
+    
+    // Map coachRoles and riderRoles
+    if (settings.coachRoles !== undefined) {
+        dbData.coach_roles = Array.isArray(settings.coachRoles) ? settings.coachRoles : [];
+    }
+    if (settings.riderRoles !== undefined) {
+        dbData.rider_roles = Array.isArray(settings.riderRoles) ? settings.riderRoles : [];
     }
     
     const { data, error } = await client
@@ -968,7 +1064,15 @@ async function getAllRoutes() {
         id: route.id,
         name: route.name,
         description: route.description,
-        stravaEmbedCode: route.strava_embed_code
+        stravaEmbedCode: route.strava_embed_code,
+        stravaUrl: route.strava_url || null,
+        distance: route.distance || null,
+        elevation: route.elevation || null,
+        estimatedTime: route.estimated_time || null,
+        fitnessMin: route.fitness_min || 1,
+        fitnessMax: route.fitness_max || null,
+        skillsMin: route.skills_min || 1,
+        skillsMax: route.skills_max || null
     }));
 }
 
@@ -991,7 +1095,15 @@ async function getRouteById(id) {
         id: data.id,
         name: data.name,
         description: data.description,
-        stravaEmbedCode: data.strava_embed_code
+        stravaEmbedCode: data.strava_embed_code,
+        stravaUrl: data.strava_url || null,
+        distance: data.distance || null,
+        elevation: data.elevation || null,
+        estimatedTime: data.estimated_time || null,
+        fitnessMin: data.fitness_min || 1,
+        fitnessMax: data.fitness_max || null,
+        skillsMin: data.skills_min || 1,
+        skillsMax: data.skills_max || null
     };
 }
 
@@ -1004,7 +1116,15 @@ async function createRoute(route) {
         .insert({
             name: route.name,
             description: route.description || null,
-            strava_embed_code: route.stravaEmbedCode
+            strava_embed_code: route.stravaEmbedCode || null,
+            strava_url: route.stravaUrl || null,
+            distance: route.distance || null,
+            elevation: route.elevation || null,
+            estimated_time: route.estimatedTime || null,
+            fitness_min: route.fitnessMin || 1,
+            fitness_max: route.fitnessMax || null,
+            skills_min: route.skillsMin || 1,
+            skills_max: route.skillsMax || null
         })
         .select()
         .single();
@@ -1015,7 +1135,15 @@ async function createRoute(route) {
         id: data.id,
         name: data.name,
         description: data.description,
-        stravaEmbedCode: data.strava_embed_code
+        stravaEmbedCode: data.strava_embed_code,
+        stravaUrl: data.strava_url || null,
+        distance: data.distance || null,
+        elevation: data.elevation || null,
+        estimatedTime: data.estimated_time || null,
+        fitnessMin: data.fitness_min || 1,
+        fitnessMax: data.fitness_max || null,
+        skillsMin: data.skills_min || 1,
+        skillsMax: data.skills_max || null
     };
 }
 
@@ -1028,7 +1156,15 @@ async function updateRoute(id, route) {
         .update({
             name: route.name,
             description: route.description || null,
-            strava_embed_code: route.stravaEmbedCode,
+            strava_embed_code: route.stravaEmbedCode || null,
+            strava_url: route.stravaUrl || null,
+            distance: route.distance || null,
+            elevation: route.elevation || null,
+            estimated_time: route.estimatedTime || null,
+            fitness_min: route.fitnessMin || 1,
+            fitness_max: route.fitnessMax || null,
+            skills_min: route.skillsMin || 1,
+            skills_max: route.skillsMax || null,
             updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -1041,7 +1177,15 @@ async function updateRoute(id, route) {
         id: data.id,
         name: data.name,
         description: data.description,
-        stravaEmbedCode: data.strava_embed_code
+        stravaEmbedCode: data.strava_embed_code,
+        stravaUrl: data.strava_url || null,
+        distance: data.distance || null,
+        elevation: data.elevation || null,
+        estimatedTime: data.estimated_time || null,
+        fitnessMin: data.fitness_min || 1,
+        fitnessMax: data.fitness_max || null,
+        skillsMin: data.skills_min || 1,
+        skillsMax: data.skills_max || null
     };
 }
 
@@ -1055,4 +1199,126 @@ async function deleteRoute(id) {
         .eq('id', id);
     
     if (error) throw error;
+}
+
+// ============ BACKUPS ============
+
+async function createBackup(backupName, backupData, backupType = 'manual') {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    
+    const currentUser = getCurrentUser();
+    const { data, error } = await client
+        .from('backups')
+        .insert({
+            backup_name: backupName,
+            backup_data: backupData,
+            created_by: currentUser ? currentUser.id : null,
+            backup_type: backupType
+        })
+        .select()
+        .single();
+    
+    if (error) throw error;
+    return data;
+}
+
+async function getAllBackups() {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    
+    const { data, error } = await client
+        .from('backups')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (error) {
+        console.error('Error fetching backups:', error);
+        return [];
+    }
+    return data || [];
+}
+
+async function getBackupById(id) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await client
+        .from('backups')
+        .select('*')
+        .eq('id', id)
+        .single();
+    
+    if (error) throw error;
+    return data;
+}
+
+async function deleteBackup(id) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    
+    const { error } = await client
+        .from('backups')
+        .delete()
+        .eq('id', id);
+    
+    if (error) throw error;
+}
+
+// ============ USERS ============
+
+// Get all users with their roles and login info
+// Note: This requires a database function or view to access auth.users
+// For now, we'll query user_roles and coaches/riders tables to get user info
+async function getAllUsersWithLoginInfo() {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    
+    try {
+        // Get all user roles
+        const { data: userRoles, error: rolesError } = await client
+            .from('user_roles')
+            .select('*');
+        
+        if (rolesError) {
+            console.error('Error fetching user roles:', rolesError);
+            return [];
+        }
+        
+        // For each user, try to get email from coaches or riders table
+        // Note: We can't directly query auth.users from the client
+        // This is a limitation - we'd need a database function to join with auth.users
+        const users = [];
+        
+        for (const userRole of (userRoles || [])) {
+            // Try to find email in coaches table
+            const { data: coach } = await client
+                .from('coaches')
+                .select('email, name, phone')
+                .eq('user_id', userRole.user_id)
+                .maybeSingle();
+            
+            // Try to find email in riders table (if rider role)
+            let rider = null;
+            if (userRole.role === 'rider') {
+                // We'd need to match by phone or email, which is complex
+                // For now, just use what we have
+            }
+            
+            users.push({
+                id: userRole.user_id,
+                role: userRole.role,
+                email: coach?.email || null,
+                name: coach?.name || null,
+                phone: coach?.phone || null,
+                createdAt: userRole.created_at,
+                lastLogin: null // Would need auth.users access to get this
+            });
+        }
+        
+        return users;
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        return [];
+    }
 }

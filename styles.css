@@ -897,12 +897,12 @@
         .attendance-list {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 1px;
         }
 
         .attendance-card {
             position: relative;
-            padding: 6px 38px 6px 10px;
+            padding: 2px 34px 2px 8px;
             border-left-width: 3px;
         }
 
