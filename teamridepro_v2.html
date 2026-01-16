@@ -1561,7 +1561,7 @@
             autoAssignSettings: {
                 parameters: [
                     { id: 'ridersPerCoach', name: 'Riders per Coach', value: 6, priority: 1, enabled: true, type: 'number', min: 1, max: 20, description: 'Maximum riders per coach (capacity multiplier)' },
-                    { id: 'minLeaderLevel', name: 'Minimum Leader Level', value: 2, priority: 2, enabled: true, type: 'number', min: 1, max: 3, description: 'Minimum coach level required to lead a group (Level 2 or 3)' },
+                    { id: 'minLeaderLevel', name: 'Minimum Leader Level', value: 2, priority: 2, enabled: true, type: 'number', min: 1, max: 3, description: 'Minimum coach level required to lead a group' },
                     { id: 'preferredCoachesPerGroup', name: 'Preferred Coaches per Group', value: 3, priority: 3, enabled: true, type: 'number', min: 1, max: 10, description: 'Target number of coaches per group' },
                     { id: 'preferredGroupSize', name: 'Preferred Group Size Range', valueMin: 4, valueMax: 8, priority: 4, enabled: true, type: 'range', min: 1, max: 30, description: 'Preferred number of riders per group (min-max range)' }
                 ]
@@ -20155,13 +20155,14 @@
                 const capacity = groupCapacity(group);
                 const warnings = [];
 
+                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
                 if (!group.coaches.leader) {
-                    warnings.push('Assign a leader (Level 2 or 3)');
+                    warnings.push(`Assign a leader (Level ${minLeaderLevel}+)`);
                 } else {
                     const leader = getCoachById(group.coaches.leader);
-                    const leaderLevel = leader ? parseInt(leader.level, 10) : 0;
-                    if (!Number.isFinite(leaderLevel) || leaderLevel < 2) {
-                        warnings.push('Leader must be Level 2 or 3');
+                    const leaderLevel = leader ? parseInt(leader.coachingLicenseLevel || leader.level || '1', 10) : 0;
+                    if (!Number.isFinite(leaderLevel) || leaderLevel < minLeaderLevel) {
+                        warnings.push(`Leader must be Level ${minLeaderLevel}+`);
                     }
                 }
 
@@ -25835,7 +25836,7 @@
                     data.autoAssignSettings = {
                         parameters: [
                             { id: 'ridersPerCoach', name: 'Riders per Coach', value: 6, priority: 1, enabled: true, type: 'number', min: 1, max: 20, description: 'Maximum riders per coach (capacity multiplier)' },
-                            { id: 'minLeaderLevel', name: 'Minimum Leader Level', value: 2, priority: 2, enabled: true, type: 'number', min: 1, max: 3, description: 'Minimum coach level required to lead a group (Level 2 or 3)' },
+                            { id: 'minLeaderLevel', name: 'Minimum Leader Level', value: 2, priority: 2, enabled: true, type: 'number', min: 1, max: 3, description: 'Minimum coach level required to lead a group' },
                             { id: 'preferredCoachesPerGroup', name: 'Preferred Coaches per Group', value: 3, priority: 3, enabled: true, type: 'number', min: 1, max: 10, description: 'Target number of coaches per group' },
                             { id: 'preferredGroupSize', name: 'Preferred Group Size Range', valueMin: 4, valueMax: 8, priority: 4, enabled: true, type: 'range', min: 1, max: 30, description: 'Preferred number of riders per group (min-max range)' }
                         ]
