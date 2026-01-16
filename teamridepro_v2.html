@@ -385,16 +385,25 @@
             <div class="section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <button class="btn-small" onclick="openRoutesManagerModal()">Add/Edit Routes...</button>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <label for="routes-sort-by" style="font-size: 14px; color: #666;">Sort By:</label>
-                        <select id="routes-sort-by" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;" onchange="renderRoutes()">
-                            <option value="distance-asc">Distance (shortest to longest)</option>
-                            <option value="distance-desc">Distance (longest to shortest)</option>
-                            <option value="elevation-asc">Elev Gain (least to most)</option>
-                            <option value="elevation-desc">Elev Gain (most to least)</option>
-                            <option value="time-asc">Duration (shortest to longest)</option>
-                            <option value="time-desc">Duration (longest to shortest)</option>
-                        </select>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="routes-view-mode" style="font-size: 14px; color: #666;">View:</label>
+                            <div id="routes-view-mode" class="routes-view-toggle">
+                                <button id="routes-view-thumbnails" class="routes-view-btn" onclick="setRoutesViewMode('thumbnails')">Thumbnails</button>
+                                <button id="routes-view-list" class="routes-view-btn" onclick="setRoutesViewMode('list')">List View</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="routes-sort-by" style="font-size: 14px; color: #666;">Sort By:</label>
+                            <select id="routes-sort-by" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;" onchange="renderRoutes()">
+                                <option value="distance-asc">Distance (shortest to longest)</option>
+                                <option value="distance-desc">Distance (longest to shortest)</option>
+                                <option value="elevation-asc">Elev Gain (least to most)</option>
+                                <option value="elevation-desc">Elev Gain (most to least)</option>
+                                <option value="time-asc">Duration (shortest to longest)</option>
+                                <option value="time-desc">Duration (longest to shortest)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div id="routes-grid" class="routes-grid">
@@ -2800,7 +2809,7 @@
                          ondragover="allowDrop(event)"
                          ondragleave="dragLeave(event)"
                          style="display: flex; align-items: center; justify-content: center; margin-bottom: 2px; padding: 8px; border-radius: 4px; background: #ffebee; border: 2px dashed #d32f2f; min-height: 40px; transition: all 0.2s;">
-                        <span style="color: #d32f2f; font-weight: 500; font-size: 13px;">⚠️ Drop Leader here (Level 2 or 3)</span>
+                        <span style="color: #d32f2f; font-weight: 500; font-size: 13px;">⚠️ Drop Leader here (Level ${getAutoAssignSetting('minLeaderLevel', 2)}+)</span>
                     </div>
                 `;
             }
@@ -23130,7 +23139,7 @@
             if (group.coaches.leader) {
                 const leader = getCoachById(group.coaches.leader);
                 if (leader) {
-                    const leaderLevel = parseInt(leader.level, 10);
+                    const leaderLevel = parseInt(leader.coachingLicenseLevel || leader.level || '1', 10);
                     const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
                     if (!Number.isFinite(leaderLevel) || leaderLevel < minLeaderLevel) {
                         warnings.push(`Leader must be Level ${minLeaderLevel} or higher (current: Level ${leaderLevel || 1})`);
@@ -23140,11 +23149,11 @@
                 warnings.push('Group must have a leader assigned');
             }
 
-            // Check leader:rider ratio specifically (must be 1:6 or better)
-            if (group.coaches.leader) {
-                const leaderRiderRatio = group.riders.length / 1; // 1 leader
-                if (leaderRiderRatio > ridersPerCoach) {
-                    warnings.push(`Leader:rider ratio exceeds 1:${ridersPerCoach} (current: 1:${group.riders.length})`);
+            // Check leader:rider ratio based on total coaches (not just leader)
+            if (coachCount > 0) {
+                const ridersPerCoachActual = group.riders.length / coachCount;
+                if (ridersPerCoachActual > ridersPerCoach) {
+                    warnings.push(`Leader:rider ratio exceeds 1:${ridersPerCoach} (current: 1:${Math.ceil(ridersPerCoachActual)})`);
                 }
             }
 
@@ -24203,6 +24212,25 @@
             return parseTime(timeStr);
         }
 
+        function getRoutesViewMode() {
+            return localStorage.getItem('routesViewMode') || 'thumbnails';
+        }
+
+        function setRoutesViewMode(mode) {
+            if (mode !== 'thumbnails' && mode !== 'list') return;
+            localStorage.setItem('routesViewMode', mode);
+            updateRoutesViewToggle();
+            renderRoutes();
+        }
+
+        function updateRoutesViewToggle() {
+            const mode = getRoutesViewMode();
+            const thumbBtn = document.getElementById('routes-view-thumbnails');
+            const listBtn = document.getElementById('routes-view-list');
+            if (thumbBtn) thumbBtn.classList.toggle('active', mode === 'thumbnails');
+            if (listBtn) listBtn.classList.toggle('active', mode === 'list');
+        }
+
         function renderRoutes() {
             const container = document.getElementById('routes-grid');
             if (!container) return;
@@ -24218,6 +24246,11 @@
             // Get sort option
             const sortBySelect = document.getElementById('routes-sort-by');
             const sortBy = sortBySelect ? sortBySelect.value : 'distance-desc';
+            const viewMode = getRoutesViewMode();
+            updateRoutesViewToggle();
+
+            container.classList.toggle('routes-list', viewMode === 'list');
+            container.classList.toggle('routes-grid', viewMode !== 'list');
 
             // Separate Strava routes (with embed code) and manual routes (without embed code)
             let stravaRoutes = data.routes.filter(route => route.stravaEmbedCode);
@@ -24257,6 +24290,41 @@
 
             stravaRoutes = sortRoutes(stravaRoutes);
             manualRoutes = sortRoutes(manualRoutes);
+
+            if (viewMode === 'list') {
+                const allRoutes = sortRoutes(data.routes);
+                const rows = allRoutes.map(route => {
+                    const name = escapeHtml(route.name || 'Untitled Route');
+                    const distance = escapeHtml(route.distance || 'N/A');
+                    const elevation = escapeHtml(route.elevation || 'N/A');
+                    const duration = escapeHtml(route.estimatedTime || 'N/A');
+                    return `<tr>
+                        <td>${name}</td>
+                        <td>${distance}</td>
+                        <td>${elevation}</td>
+                        <td>${duration}</td>
+                    </tr>`;
+                }).join('');
+
+                container.innerHTML = `
+                    <div class="routes-list-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Route Name</th>
+                                    <th>Distance</th>
+                                    <th>Elevation Gain</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                return;
+            }
 
             // Render Strava routes first
             stravaRoutes.forEach(route => {
