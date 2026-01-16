@@ -21781,14 +21781,15 @@
         }
 
         function checkGroupCompliance(group) {
-            // Check if group has a Level 2/3 leader
+            // Check if group has a leader that meets the minimum level setting
             if (!group.coaches.leader) {
                 return false;
             }
             const leader = getCoachById(group.coaches.leader);
             if (!leader) return false;
+            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
             const leaderLevel = parseInt(leader.coachingLicenseLevel || leader.level || '1', 10);
-            if (!Number.isFinite(leaderLevel) || leaderLevel < 2) {
+            if (!Number.isFinite(leaderLevel) || leaderLevel < minLeaderLevel) {
                 return false;
             }
             
