@@ -183,6 +183,23 @@
                     <button class="btn-small" onclick="saveSeasonSettings()" style="margin-left: auto;">Save Settings</button>
                 </div>
                 
+                <!-- Add Administrators Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Add Additional Administrators</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Send an invitation link to grant admin access to a new user. They will receive an email with a unique link to create their account.</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="email" id="admin-invite-email" placeholder="Enter email address" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        <button class="btn-small" onclick="sendAdminInvitation()" style="background-color: #fc5200; color: white; border-color: #fc5200;">Send Invitation</button>
+                    </div>
+                    <div id="admin-invite-status" style="margin-top: 8px; font-size: 13px; display: none;"></div>
+                    <div id="admin-invitations-list" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                        <button class="btn-small secondary" onclick="loadAdminInvitations()" style="margin-bottom: 12px;">Refresh Invitations</button>
+                        <div id="admin-invitations-content">
+                            <p style="color: #666; margin: 0;">Click "Refresh Invitations" to view pending invitations.</p>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Users Section -->
                 <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                     <h3 style="margin-bottom: 12px; color: #555;">Registered Users</h3>
@@ -1038,26 +1055,15 @@
                 </div>
                 
                 <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-                    <span style="font-size: 14px; color: #64748b;">Don't have an account? </span>
-                    <a href="#" class="auth-link" onclick="event.preventDefault(); showSignup();">Sign up</a>
+                    <span style="font-size: 14px; color: #64748b;">Need Admin Access? </span>
+                    <a href="#" class="auth-link" onclick="event.preventDefault(); showAdminRequest();">Request</a>
                 </div>
             </div>
             
-            <div id="signup-form" style="display: none;">
+            <div id="admin-request-form" style="display: none;">
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <div>
-                        <label class="field-label" for="signup-name">Name</label>
-                        <input type="text" id="signup-name" class="modal-field-input" placeholder="Your Name" autocomplete="name">
-                    </div>
-                    <div>
-                        <label class="field-label" for="signup-email">Email</label>
-                        <input type="email" id="signup-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email">
-                    </div>
-                    <div>
-                        <label class="field-label" for="signup-password">Password</label>
-                        <input type="password" id="signup-password" class="modal-field-input" placeholder="Create a password" autocomplete="new-password">
-                    </div>
-                    <button class="btn-small" onclick="handleSignup()" style="width: 100%; margin-top: 8px;">Create Account</button>
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;">To get admin access, you need to receive an invitation from an existing administrator. Please contact your team administrator to request access.</p>
+                    <p style="font-size: 13px; color: #999; margin-top: 8px;">If you have received an invitation link, please use that link to create your account.</p>
                 </div>
                 
                 <div style="text-align: center; margin-top: 20px;">
@@ -1081,7 +1087,7 @@
             </div>
             
             <div id="public-access-link" style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-                <a href="rider-view.html" class="auth-link" style="font-size: 14px; text-decoration: none;">Continue as rider (public access)</a>
+                <a href="teamridepro_v2.html?view=rider" class="auth-link" style="font-size: 14px; text-decoration: none;">Continue as rider (public access)</a>
             </div>
         </div>
     </div>
@@ -2566,18 +2572,18 @@
             // Make pace and skills badges clickable for context menu
             let badgeHtml = '';
             if (!hideBadges) {
-                if (sortBy === 'pace') {
+            if (sortBy === 'pace') {
                     badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">Pace ${fitness}</span>`;
-                } else if (sortBy === 'skills') {
-                    const skillsScale = getSkillsScale();
-                    const skills = Math.max(1, Math.min(skillsScale, parseInt(rider.skills || Math.ceil(skillsScale / 2), 10)));
-                    const skillsTooltip = getBikeSkillsTooltip(skills, skillsScale);
+            } else if (sortBy === 'skills') {
+                const skillsScale = getSkillsScale();
+                const skills = Math.max(1, Math.min(skillsScale, parseInt(rider.skills || Math.ceil(skillsScale / 2), 10)));
+                const skillsTooltip = getBikeSkillsTooltip(skills, skillsScale);
                     badgeHtml = `<span class="badge badge-skills-${skills}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'skills', ${skills})" style="cursor: pointer;" title="${skillsTooltip.replace(/\n/g, '&#10;')}" data-rider-id="${rider.id}" data-badge-type="skills">Bike Skills ${skills}</span>`;
-                } else if (sortBy === 'grade') {
-                    badgeHtml = gradeLabel ? `<span class="badge badge-grade">${gradeLabel}</span>` : '';
-                } else if (sortBy === 'gender') {
-                    badgeHtml = genderValue ? `<span class="badge badge-gender">${escapeHtml(genderValue)}</span>` : '';
-                } else {
+            } else if (sortBy === 'grade') {
+                badgeHtml = gradeLabel ? `<span class="badge badge-grade">${gradeLabel}</span>` : '';
+            } else if (sortBy === 'gender') {
+                badgeHtml = genderValue ? `<span class="badge badge-gender">${escapeHtml(genderValue)}</span>` : '';
+            } else {
                     // For name sort, show pace badge as default (clickable)
                     badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">Pace ${fitness}</span>`;
                 }
@@ -2698,17 +2704,17 @@
             let badgeHtml = '';
             if (compact) {
                 if (sortBy === 'pace') {
-                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Fitness ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span>`;
                 } else if (sortBy === 'level') {
                     const levelDisplay = levelRaw === 'N/A' ? 'N/A' : `Level ${level}`;
                     badgeHtml = `<span class="badge badge-level">${levelDisplay}</span>`;
                 } else {
                     // For name sort, show pace badge as default (clickable)
-                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Fitness ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span>`;
                 }
             } else {
                 // Non-compact mode: show both level and pace (pace is clickable)
-                badgeHtml = `<div class="coach-meta">Level ${level} · <span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer; display: inline;" data-coach-id="${coach.id}" data-badge-type="pace">Fitness ${fitness}</span></div>`;
+                badgeHtml = `<div class="coach-meta">Level ${level} · <span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer; display: inline;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span></div>`;
             }
 
             // Set background color based on coach level for practice planner (when showAttendance is true)
@@ -3576,7 +3582,8 @@
                     if (coach) {
                         const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                         const level = levelRaw === 'N/A' ? 0 : parseInt(levelRaw, 10);
-                        if (Number.isFinite(level) && level >= 2) {
+                        const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                        if (Number.isFinite(level) && level >= minLeaderLevel) {
                             group.coaches.leader = coachId;
                         } else {
                             group.coaches.sweep = coachId;
@@ -3648,7 +3655,8 @@
                 if (!normalized.coaches.leader && normalized.coaches.sweep) {
                     const sweepCoach = getCoachById(normalized.coaches.sweep);
                     const level = sweepCoach ? parseInt(sweepCoach.level, 10) : 0;
-                    if (Number.isFinite(level) && level >= 2) {
+                    const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                    if (Number.isFinite(level) && level >= minLeaderLevel) {
                         normalized.coaches.leader = normalized.coaches.sweep;
                         normalized.coaches.sweep = null;
                     }
@@ -3711,21 +3719,21 @@
 
         function showLogin() {
             document.getElementById('login-form').style.display = 'block';
-            document.getElementById('signup-form').style.display = 'none';
+            document.getElementById('admin-request-form').style.display = 'none';
             document.getElementById('password-reset-form').style.display = 'none';
             hideAuthError();
         }
 
-        function showSignup() {
+        function showAdminRequest() {
             document.getElementById('login-form').style.display = 'none';
-            document.getElementById('signup-form').style.display = 'block';
+            document.getElementById('admin-request-form').style.display = 'block';
             document.getElementById('password-reset-form').style.display = 'none';
             hideAuthError();
         }
 
         function showPasswordReset() {
             document.getElementById('login-form').style.display = 'none';
-            document.getElementById('signup-form').style.display = 'none';
+            document.getElementById('admin-request-form').style.display = 'none';
             document.getElementById('password-reset-form').style.display = 'block';
             hideAuthError();
         }
@@ -3982,6 +3990,15 @@
 
         // Initialize
         async function init() {
+            // Check for rider view mode
+            const urlParams = new URLSearchParams(window.location.search);
+            const isRiderView = urlParams.get('view') === 'rider';
+            
+            if (isRiderView) {
+                // Rider view mode - restrict navigation
+                enableRiderViewMode();
+            }
+            
             // Initialize Supabase client
             if (typeof initSupabase === 'function') {
                 initSupabase();
@@ -3994,6 +4011,47 @@
                 // Fallback: if auth not available, use localStorage mode
                 await loadApplicationData();
             }
+        }
+        
+        function enableRiderViewMode() {
+            // Hide all tabs except Rider Assignments
+            const allTabs = document.querySelectorAll('.tab, .mobile-menu-item');
+            allTabs.forEach(tab => {
+                const tabText = tab.textContent.trim();
+                if (tabText !== 'Rider Assignments' && !tabText.includes('Rider Assignments')) {
+                    tab.style.display = 'none';
+                }
+            });
+            
+            // Hide header actions (user menu, etc.)
+            const headerActions = document.querySelector('.header-actions');
+            if (headerActions) {
+                headerActions.style.display = 'none';
+            }
+            
+            // Switch to Rider Assignments tab
+            setTimeout(() => {
+                const assignmentsTab = document.querySelector('.tab[onclick*="assignments"]');
+                if (assignmentsTab) {
+                    assignmentsTab.click();
+                } else {
+                    // Fallback: switch programmatically
+                    switchTab('assignments', null);
+                }
+            }, 100);
+            
+            // Prevent tab switching (override switchTab function for rider view)
+            const originalSwitchTab = window.switchTab;
+            window.switchTab = function(tabName, element) {
+                if (tabName !== 'assignments') {
+                    // Only allow switching to assignments tab
+                    return;
+                }
+                // Call original function
+                if (originalSwitchTab) {
+                    originalSwitchTab.call(this, tabName, element);
+                }
+            };
         }
         
         // Load application data (from Supabase if authenticated, otherwise localStorage)
@@ -8689,6 +8747,186 @@
         }
         
         // ============ USERS MANAGEMENT ============
+        
+        function formatAdminInvitationError(error) {
+            if (!error) return 'Failed to send invitation.';
+            const message = String(error.message || '');
+            const status = error.status || error?.response?.status;
+            if (status === 404 || message.includes('404')) {
+                return 'Admin invitations table not found. Please run sql/ADD_ADMIN_INVITATIONS_TABLE.sql in Supabase.';
+            }
+            if (status === 401 || status === 403) {
+                return 'Permission denied. Please ensure you are signed in as a coach-admin.';
+            }
+            return message || 'Failed to send invitation.';
+        }
+
+        async function sendAdminInvitation() {
+            const emailInput = document.getElementById('admin-invite-email');
+            const statusDiv = document.getElementById('admin-invite-status');
+            
+            if (!emailInput || !statusDiv) return;
+            
+            const email = emailInput.value.trim();
+            if (!email) {
+                statusDiv.textContent = 'Please enter an email address.';
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#d32f2f';
+                return;
+            }
+            
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                statusDiv.textContent = 'Please enter a valid email address.';
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#d32f2f';
+                return;
+            }
+            
+            statusDiv.textContent = 'Sending invitation...';
+            statusDiv.style.display = 'block';
+            statusDiv.style.color = '#666';
+            
+            try {
+                if (typeof getAdminInvitationsByEmail === 'function') {
+                    const existingInvites = await getAdminInvitationsByEmail(email);
+                    if (existingInvites && existingInvites.length > 0) {
+                        const latest = existingInvites[0];
+                        const isExpired = new Date(latest.expires_at) < new Date();
+                        if (latest.used) {
+                            statusDiv.textContent = 'This email is already registered. Ask them to sign in or use password reset.';
+                            statusDiv.style.color = '#d32f2f';
+                            return;
+                        }
+                        if (!isExpired) {
+                            statusDiv.textContent = 'An active invitation already exists for this email. Please use the existing invite link.';
+                            statusDiv.style.color = '#d32f2f';
+                            return;
+                        }
+                    }
+                }
+
+                const invitation = await createAdminInvitation(email);
+                
+                // Generate invitation URL
+                const invitationUrl = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}accept-invitation.html?token=${invitation.token}`;
+                
+                // For now, we'll show the link. In production, you'd send this via email
+                // You'll need to set up an email service (like SendGrid, AWS SES, or Supabase Edge Function)
+                statusDiv.innerHTML = `
+                    <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px; margin-top: 8px;">
+                        <strong style="color: #2e7d32;">Invitation created successfully!</strong><br>
+                        <span style="font-size: 12px; color: #666; margin-top: 4px; display: block;">Invitation link (send this to ${email}):</span>
+                        <div style="margin-top: 8px; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; word-break: break-all; font-family: monospace;">
+                            ${invitationUrl}
+                        </div>
+                        <p style="font-size: 11px; color: #666; margin-top: 8px; margin-bottom: 0;">
+                            <strong>Note:</strong> To automatically send emails, you'll need to set up an email service. 
+                            For now, copy the link above and send it manually to the user.
+                        </p>
+                    </div>
+                `;
+                statusDiv.style.color = '#2e7d32';
+                
+                emailInput.value = '';
+                
+                // Refresh invitations list
+                await loadAdminInvitations();
+                
+            } catch (error) {
+                console.error('Error sending invitation:', error);
+                statusDiv.textContent = `Error: ${formatAdminInvitationError(error)}`;
+                statusDiv.style.color = '#d32f2f';
+            }
+        }
+
+        async function resendAdminInvitation(email) {
+            const statusDiv = document.getElementById('admin-invite-status');
+            if (!statusDiv) return;
+
+            statusDiv.textContent = 'Resending invitation...';
+            statusDiv.style.display = 'block';
+            statusDiv.style.color = '#666';
+
+            try {
+                if (typeof expireAdminInvitationsByEmail === 'function') {
+                    await expireAdminInvitationsByEmail(email);
+                }
+
+                const invitation = await createAdminInvitation(email);
+                const invitationUrl = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}accept-invitation.html?token=${invitation.token}`;
+
+                statusDiv.innerHTML = `
+                    <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px; margin-top: 8px;">
+                        <strong style="color: #2e7d32;">Invitation resent successfully!</strong><br>
+                        <span style="font-size: 12px; color: #666; margin-top: 4px; display: block;">New invitation link (send this to ${email}):</span>
+                        <div style="margin-top: 8px; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; word-break: break-all; font-family: monospace;">
+                            ${invitationUrl}
+                        </div>
+                    </div>
+                `;
+                statusDiv.style.color = '#2e7d32';
+
+                await loadAdminInvitations();
+            } catch (error) {
+                console.error('Error resending invitation:', error);
+                statusDiv.textContent = `Error: ${formatAdminInvitationError(error)}`;
+                statusDiv.style.color = '#d32f2f';
+            }
+        }
+        
+        async function loadAdminInvitations() {
+            const container = document.getElementById('admin-invitations-content');
+            if (!container) return;
+            
+            container.innerHTML = '<p style="color: #666; margin: 0;">Loading invitations...</p>';
+            
+            try {
+                const invitations = await getAllAdminInvitations();
+                
+                if (!invitations || invitations.length === 0) {
+                    container.innerHTML = '<p style="color: #666; margin: 0;">No invitations found.</p>';
+                    return;
+                }
+
+                const visibleInvites = invitations.filter(inv => !inv.used);
+                if (visibleInvites.length === 0) {
+                    container.innerHTML = '<p style="color: #666; margin: 0;">No active invitations. (Used invitations are hidden)</p>';
+                    return;
+                }
+
+                let html = '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
+                html += '<thead><tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
+                html += '<th style="padding: 8px; text-align: left;">Email</th>';
+                html += '<th style="padding: 8px; text-align: left;">Status</th>';
+                html += '<th style="padding: 8px; text-align: left;">Expires</th>';
+                html += '<th style="padding: 8px; text-align: left;">Created</th>';
+                html += '<th style="padding: 8px; text-align: left;">Actions</th>';
+                html += '</tr></thead><tbody>';
+
+                visibleInvites.forEach(inv => {
+                    const isExpired = new Date(inv.expires_at) < new Date();
+                    const status = inv.used ? 'Used' : (isExpired ? 'Expired' : 'Pending');
+                    const statusColor = inv.used ? '#4caf50' : (isExpired ? '#f44336' : '#ff9800');
+                    
+                    html += '<tr style="border-bottom: 1px solid #eee;">';
+                    html += `<td style="padding: 8px;">${escapeHtml(inv.email)}</td>`;
+                    html += `<td style="padding: 8px; color: ${statusColor}; font-weight: 600;">${status}</td>`;
+                    html += `<td style="padding: 8px;">${new Date(inv.expires_at).toLocaleDateString()}</td>`;
+                    html += `<td style="padding: 8px;">${new Date(inv.created_at).toLocaleDateString()}</td>`;
+                    html += `<td style="padding: 8px;">${!inv.used ? `<button class="btn-small secondary" onclick="resendAdminInvitation('${escapeHtml(inv.email)}')">Resend</button>` : ''}</td>`;
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                container.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading invitations:', error);
+                container.innerHTML = `<p style="color: #d32f2f; margin: 0;">Error loading invitations: ${escapeHtml(formatAdminInvitationError(error))}</p>`;
+            }
+        }
         
         async function loadUsersList() {
             const container = document.getElementById('users-list');
@@ -18035,7 +18273,8 @@
                         if (coach) {
                             const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                             const level = parseInt(levelRaw, 10);
-                            if (Number.isFinite(level) && level >= 2) {
+                            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                            if (Number.isFinite(level) && level >= minLeaderLevel) {
                                 qualifiedCoaches.push({ id: coach.id, role: 'sweep', level });
                             }
                         }
@@ -18047,7 +18286,8 @@
                         if (coach) {
                             const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                             const level = parseInt(levelRaw, 10);
-                            if (Number.isFinite(level) && level >= 2) {
+                            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                            if (Number.isFinite(level) && level >= minLeaderLevel) {
                                 qualifiedCoaches.push({ id: coach.id, role: 'roam', level });
                             }
                         }
@@ -18060,7 +18300,8 @@
                             if (coach) {
                                 const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                                 const level = parseInt(levelRaw, 10);
-                                if (Number.isFinite(level) && level >= 2) {
+                                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                                if (Number.isFinite(level) && level >= minLeaderLevel) {
                                     qualifiedCoaches.push({ id: coach.id, role: 'extraRoam', level });
                                 }
                             }
@@ -19924,7 +20165,21 @@
                             if (aGender !== bGender) return aGender.localeCompare(bGender);
                             // If gender is equal, sort by name
                             return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || ''));
-                        } else { // name
+                        } else if (sortBy === 'firstName') {
+                            const aFirstName = (a.firstName || a.name || '').toLowerCase();
+                            const bFirstName = (b.firstName || b.name || '').toLowerCase();
+                            if (aFirstName !== bFirstName) return aFirstName.localeCompare(bFirstName);
+                            // If first name is equal, sort by last name
+                            return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || ''));
+                        } else if (sortBy === 'lastName') {
+                            const aLastName = getSortableLastName(a.name || '');
+                            const bLastName = getSortableLastName(b.name || '');
+                            if (aLastName !== bLastName) return aLastName.localeCompare(bLastName);
+                            // If last name is equal, sort by first name
+                            const aFirstName = (a.firstName || a.name || '').toLowerCase();
+                            const bFirstName = (b.firstName || b.name || '').toLowerCase();
+                            return aFirstName.localeCompare(bFirstName);
+                        } else { // name (default)
                             return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || '')) || (a.name || '').localeCompare(b.name || '');
                         }
                     });
@@ -21680,6 +21935,79 @@
             }
         }
 
+        // Auto-scroll during drag
+        let autoScrollInterval = null;
+        let isAssignmentDragging = false;
+        let currentMouseY = 0;
+
+        // Add global mousemove listener to track mouse position during drag
+        if (!window.dragScrollListenerAdded) {
+            document.addEventListener('mousemove', (e) => {
+                if (isAssignmentDragging) {
+                    currentMouseY = e.clientY;
+                    checkAndScroll();
+                }
+            });
+            window.dragScrollListenerAdded = true;
+        }
+
+        // Auto-scroll functionality
+        function startAutoScroll() {
+            // Clear any existing interval
+            stopAutoScroll();
+            
+            // Check mouse position periodically during drag
+            autoScrollInterval = setInterval(() => {
+                if (!isAssignmentDragging) {
+                    stopAutoScroll();
+                    return;
+                }
+                
+                // Get mouse position (we'll track this via document mousemove)
+                checkAndScroll();
+            }, 50); // Check every 50ms
+        }
+
+        function stopAutoScroll() {
+            if (autoScrollInterval) {
+                clearInterval(autoScrollInterval);
+                autoScrollInterval = null;
+            }
+        }
+
+        function checkAndScroll() {
+            if (!isAssignmentDragging) return;
+            
+            const viewportHeight = window.innerHeight;
+            const scrollTriggerZone = 100; // 100px from bottom
+            const scrollSpeed = 15; // Pixels to scroll per check
+            
+            // Check if mouse is in the bottom scroll trigger zone
+            const distanceFromBottom = viewportHeight - currentMouseY;
+            
+            if (distanceFromBottom < scrollTriggerZone && distanceFromBottom > 0) {
+                // Calculate scroll amount based on how close to bottom
+                // Closer to bottom = faster scroll
+                const scrollAmount = Math.max(5, scrollSpeed * (1 - (distanceFromBottom / scrollTriggerZone)));
+                
+                // Scroll down
+                window.scrollBy({
+                    top: scrollAmount,
+                    behavior: 'auto' // Instant scroll for smooth dragging
+                });
+            }
+            
+            // Also check top of viewport for scrolling up
+            const scrollTriggerZoneTop = 100; // 100px from top
+            if (currentMouseY < scrollTriggerZoneTop && currentMouseY > 0) {
+                const scrollAmount = Math.max(5, scrollSpeed * (1 - (currentMouseY / scrollTriggerZoneTop)));
+                window.scrollBy({
+                    top: -scrollAmount,
+                    behavior: 'auto'
+                });
+            }
+        }
+
         function drag(ev) {
             const type = ev.target.dataset.dragType;
             if (!type) return;
@@ -21701,10 +22029,18 @@
 
             ev.dataTransfer.setData('application/json', JSON.stringify(payload));
             ev.target.classList.add('dragging');
+            
+            // Start auto-scroll monitoring
+            isAssignmentDragging = true;
+            startAutoScroll();
         }
 
         function dragEnd(ev) {
             ev.target.classList.remove('dragging');
+            
+            // Stop auto-scroll monitoring
+            isAssignmentDragging = false;
+            stopAutoScroll();
         }
 
         function drop(ev) {
@@ -21823,9 +22159,10 @@
                     const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
                     const hasCoach = role === 'leader' ? group.coaches.leader : role === 'sweep' ? group.coaches.sweep : group.coaches.roam;
                     
-                    // Check if coach can be leader (Level 2/3 only)
+                    // Check if coach can be leader (must meet minimum level requirement)
                     const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                    if (role === 'leader' && (!Number.isFinite(level) || level < 2)) {
+                    const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                    if (role === 'leader' && (!Number.isFinite(level) || level < minLeaderLevel)) {
                         return; // Skip leader option if not eligible
                     }
                     
@@ -21886,11 +22223,12 @@
             const coach = getCoachById(coachId);
             if (!coach) return;
             
-            // Check Level 2/3 requirement for leader
+            // Check minimum level requirement for leader
             if (targetRole === 'leader') {
                 const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                if (!Number.isFinite(level) || level < 2) {
-                    alert('Only Level 2 or Level 3 coaches can serve as leader.');
+                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                if (!Number.isFinite(level) || level < minLeaderLevel) {
+                    alert(`Only Level ${minLeaderLevel} or higher coaches can serve as leader.`);
                     return;
                 }
             }
@@ -21977,7 +22315,8 @@
             // Add to target group at next available position
             if (!targetGroup.coaches.leader) {
                 const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                if (Number.isFinite(level) && level >= 2) {
+                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                if (Number.isFinite(level) && level >= minLeaderLevel) {
                     targetGroup.coaches.leader = coachId;
                 } else {
                     targetGroup.coaches.sweep = coachId;
@@ -22121,9 +22460,10 @@
                 if (!coachObj) return;
                 
                 if (index === 0) {
-                    // First position = Leader (only if Level 2/3)
+                    // First position = Leader (only if meets minimum level requirement)
                     const level = parseInt(coachObj.coachingLicenseLevel || coachObj.level || '1', 10);
-                    if (Number.isFinite(level) && level >= 2) {
+                    const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                    if (Number.isFinite(level) && level >= minLeaderLevel) {
                         group.coaches.leader = coach.id;
                     } else {
                         // Not eligible for leader, assign as sweep
@@ -22133,7 +22473,8 @@
                     // Second position = Sweep (or Leader if first wasn't eligible)
                     if (!group.coaches.leader) {
                         const level = parseInt(coachObj.coachingLicenseLevel || coachObj.level || '1', 10);
-                        if (Number.isFinite(level) && level >= 2) {
+                        const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                        if (Number.isFinite(level) && level >= minLeaderLevel) {
                             group.coaches.leader = coach.id;
                         } else {
                             group.coaches.sweep = coach.id;
@@ -22331,7 +22672,8 @@
                             // Check level requirement for leader
                             if (targetRole === 'leader') {
                                 const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                                if (!Number.isFinite(level) || level < 2) {
+                                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                                if (!Number.isFinite(level) || level < minLeaderLevel) {
                                     // Can't be leader, restore original state
                                     if (draggedRole === 'extraRoam') {
                                         if (!Array.isArray(group.coaches.extraRoam)) {
@@ -22407,8 +22749,9 @@
             if (targetRole && targetRole !== 'unassigned') {
                 // Dropping to a specific role slot (e.g., leader drop zone)
                 const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                if (targetRole === 'leader' && (!Number.isFinite(level) || level < 2)) {
-                    alert('Only Level 2 or Level 3 coaches can serve as leader.');
+                const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                if (targetRole === 'leader' && (!Number.isFinite(level) || level < minLeaderLevel)) {
+                    alert(`Only Level ${minLeaderLevel} or higher coaches can serve as leader.`);
                     renderAssignments(ride);
                     return;
                 }
@@ -22460,7 +22803,8 @@
                 const coach = getCoachById(coachId);
                 if (coach) {
                     const level = parseInt(coach.coachingLicenseLevel || coach.level || '1', 10);
-                    if (Number.isFinite(level) && level >= 2) {
+                    const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                    if (Number.isFinite(level) && level >= minLeaderLevel) {
                         group.coaches.leader = coachId;
                         return true;
                     }
@@ -22568,9 +22912,10 @@
                 if (!coachObj) return;
                 
                 if (index === 0) {
-                    // First position = Leader (only if Level 2/3)
+                    // First position = Leader (only if meets minimum level requirement)
                     const level = parseInt(coachObj.coachingLicenseLevel || coachObj.level || '1', 10);
-                    if (Number.isFinite(level) && level >= 2) {
+                    const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                    if (Number.isFinite(level) && level >= minLeaderLevel) {
                         group.coaches.leader = coach.id;
                     } else {
                         // Not eligible for leader, assign as sweep
@@ -22580,7 +22925,8 @@
                     // Second position = Sweep (or Leader if first wasn't eligible)
                     if (!group.coaches.leader) {
                         const level = parseInt(coachObj.coachingLicenseLevel || coachObj.level || '1', 10);
-                        if (Number.isFinite(level) && level >= 2) {
+                        const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+                        if (Number.isFinite(level) && level >= minLeaderLevel) {
                             group.coaches.leader = coach.id;
                         } else {
                             group.coaches.sweep = coach.id;
@@ -25008,8 +25354,8 @@
                         const routeIndex = data.routes.findIndex(r => r.id === routeId);
                         if (routeIndex >= 0) {
                             data.routes[routeIndex] = { ...data.routes[routeIndex], ...routeData, ...updated };
-                        }
-                    } else {
+                }
+            } else {
                         // Create new route in Supabase
                         const created = await createRoute(routeData);
                         // Add to local data (use full data from Supabase response)
@@ -25017,7 +25363,7 @@
                         data.routes.push({ ...routeData, ...created });
                     }
                     // Save to localStorage as backup (after successful Supabase save)
-                    saveData();
+            saveData();
                 } catch (error) {
                     console.error('Error saving route to Supabase:', error);
                     // Fall back to localStorage-only save

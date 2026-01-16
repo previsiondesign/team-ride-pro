@@ -93,12 +93,14 @@ async function loadUserRole() {
 }
 
 // Sign up with email and password
-async function signUpWithEmail(email, password, name) {
+async function signUpWithEmail(email, password, name, redirectUrl) {
     const client = getSupabaseClient();
     if (!client) {
         throw new Error('Supabase credentials not configured. Please add your Project URL and API key to supabase-config.js. See SETUP_AUTH.md for instructions.');
     }
-    
+    const defaultRedirect = window.location.origin + window.location.pathname.replace(/mtb-roster\.html$/, 'verify-account.html');
+    const emailRedirectTo = redirectUrl || defaultRedirect;
+
     const { data, error } = await client.auth.signUp({
         email: email,
         password: password,
@@ -106,7 +108,7 @@ async function signUpWithEmail(email, password, name) {
             data: {
                 name: name || ''
             },
-            emailRedirectTo: window.location.origin + window.location.pathname.replace(/mtb-roster\.html$/, 'verify-account.html')
+            emailRedirectTo: emailRedirectTo
         }
     });
     

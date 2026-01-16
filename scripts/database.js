@@ -900,6 +900,135 @@ async function getAllUsersWithRoles() {
     return data || [];
 }
 
+// ============ ADMIN INVITATIONS ============
+
+async function createAdminInvitation(email) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    
+    // Get current user from Supabase session
+    const { data: { session } } = await client.auth.getSession();
+    if (!session || !session.user) throw new Error('User must be authenticated');
+    const currentUser = session.user;
+    
+    // Generate a secure token
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    
+    // Set expiration to 7 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    const { data, error } = await client
+        .from('admin_invitations')
+        .insert([{
+            email: email,
+            token: token,
+            created_by: currentUser.id,
+            expires_at: expiresAt.toISOString()
+        }])
+        .select()
+        .single();
+    
+    if (error) throw error;
+    return data;
+}
+
+async function getAdminInvitationByToken(token) {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    
+    const { data, error } = await client
+        .from('admin_invitations')
+        .select('*')
+        .eq('token', token)
+        .eq('used', false)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching invitation:', error);
+        return null;
+    }
+    
+    // Check if invitation has expired
+    if (data && new Date(data.expires_at) < new Date()) {
+        return null; // Expired
+    }
+    
+    return data;
+}
+
+async function markInvitationAsUsed(token, userId) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await client
+        .from('admin_invitations')
+        .update({
+            used: true,
+            used_at: new Date().toISOString(),
+            used_by: userId
+        })
+        .eq('token', token)
+        .select()
+        .single();
+    
+    if (error) throw error;
+    return data;
+}
+
+async function getAllAdminInvitations() {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    
+    const { data, error } = await client
+        .from('admin_invitations')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (error) {
+        console.error('Error fetching invitations:', error);
+        return [];
+    }
+    return data || [];
+}
+
+async function getAdminInvitationsByEmail(email) {
+    const client = getSupabaseClient();
+    if (!client) return [];
+
+    const { data, error } = await client
+        .from('admin_invitations')
+        .select('*')
+        .eq('email', email)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching invitations by email:', error);
+        return [];
+    }
+    return data || [];
+}
+
+async function expireAdminInvitationsByEmail(email) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+
+    const { data, error } = await client
+        .from('admin_invitations')
+        .update({
+            used: true,
+            used_at: new Date().toISOString()
+        })
+        .eq('email', email)
+        .eq('used', false)
+        .select();
+
+    if (error) throw error;
+    return data || [];
+}
+
 // ============ RACES ============
 
 async function getAllRaces() {
