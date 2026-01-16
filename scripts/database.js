@@ -1404,6 +1404,26 @@ async function getAllUsersWithLoginInfo() {
     if (!client) return [];
     
     try {
+        // Prefer RPC that can access auth.users (coach-admins only)
+        const { data: rpcUsers, error: rpcError } = await client
+            .rpc('get_users_with_auth');
+
+        if (!rpcError && Array.isArray(rpcUsers)) {
+            return rpcUsers.map(user => ({
+                id: user.user_id,
+                role: user.role,
+                email: user.email || null,
+                name: user.name || null,
+                phone: user.phone || null,
+                createdAt: user.created_at || null,
+                lastLogin: null
+            }));
+        }
+
+        if (rpcError) {
+            console.warn('RPC get_users_with_auth failed, falling back:', rpcError);
+        }
+
         // Get all user roles
         const { data: userRoles, error: rolesError } = await client
             .from('user_roles')
