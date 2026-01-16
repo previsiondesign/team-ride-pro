@@ -1416,7 +1416,10 @@ async function getAllUsersWithLoginInfo() {
                 name: user.name || null,
                 phone: user.phone || null,
                 createdAt: user.created_at || null,
-                lastLogin: null
+                lastLogin: null,
+                matchedType: user.matched_type || null,
+                matchedId: user.matched_id || null,
+                isDisabled: user.is_disabled === true
             }));
         }
 
@@ -1470,4 +1473,47 @@ async function getAllUsersWithLoginInfo() {
         console.error('Error fetching users:', error);
         return [];
     }
+}
+
+async function disableAdminUser(userId, email) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+
+    const { data: { session } } = await client.auth.getSession();
+    if (!session || !session.user) throw new Error('User must be authenticated');
+
+    const { error: insertError } = await client
+        .from('admin_disabled_users')
+        .insert([{
+            user_id: userId,
+            email: email || null,
+            disabled_by: session.user.id
+        }]);
+    if (insertError) throw insertError;
+
+    const { error: deleteError } = await client
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .eq('role', 'coach-admin');
+    if (deleteError) throw deleteError;
+}
+
+async function enableAdminUser(userId) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+
+    const { error: deleteError } = await client
+        .from('admin_disabled_users')
+        .delete()
+        .eq('user_id', userId);
+    if (deleteError) throw deleteError;
+
+    const { error: insertError } = await client
+        .from('user_roles')
+        .insert([{
+            user_id: userId,
+            role: 'coach-admin'
+        }]);
+    if (insertError) throw insertError;
 }

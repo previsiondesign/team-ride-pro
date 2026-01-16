@@ -8954,16 +8954,26 @@
                 html += '<th style="padding: 8px; text-align: left;">Phone</th>';
                 html += '<th style="padding: 8px; text-align: left;">Role</th>';
                 html += '<th style="padding: 8px; text-align: left;">Registered</th>';
+                html += '<th style="padding: 8px; text-align: left;">Actions</th>';
                 html += '</tr></thead><tbody>';
                 
                 users.forEach(user => {
-                    html += '<tr style="border-bottom: 1px solid #eee;">';
-                    html += `<td style="padding: 8px;">${escapeHtml(user.name || 'N/A')}</td>`;
+                    const isDisabled = user.isDisabled === true;
+                    const rowStyle = isDisabled ? 'opacity: 0.6; font-style: italic;' : '';
+                    const linkIcon = user.matchedType ? '<span title="Linked to roster record" style="margin-left: 6px;">🔗</span>' : '';
+                    html += `<tr style="border-bottom: 1px solid #eee; ${rowStyle}">`;
+                    html += `<td style="padding: 8px;">${escapeHtml(user.name || 'N/A')}${linkIcon}</td>`;
                     html += `<td style="padding: 8px;">${escapeHtml(user.email || 'N/A')}</td>`;
                     html += `<td style="padding: 8px;">${escapeHtml(user.phone || 'N/A')}</td>`;
                     html += `<td style="padding: 8px;">${escapeHtml(user.role || 'N/A')}</td>`;
                     const regDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
                     html += `<td style="padding: 8px;">${regDate}</td>`;
+                    const actionButton = user.role === 'coach-admin'
+                        ? (isDisabled
+                            ? `<button class="btn-small secondary" onclick="enableAdmin('${user.id}')">Enable Admin</button>`
+                            : `<button class="btn-small danger" onclick="disableAdmin('${user.id}', '${escapeHtml(user.email || '')}')">Disable Admin</button>`)
+                        : '';
+                    html += `<td style="padding: 8px;">${actionButton}</td>`;
                     html += '</tr>';
                 });
                 
@@ -8972,6 +8982,36 @@
             } catch (error) {
                 console.error('Error loading users:', error);
                 container.innerHTML = `<p style="color: #d32f2f; margin: 0;">Error loading users: ${escapeHtml(error.message || 'Unknown error')}</p>`;
+            }
+        }
+
+        async function disableAdmin(userId, email) {
+            if (!userId) return;
+            if (!confirm('Disable admin access for this user? They will no longer be able to access the site.')) return;
+
+            try {
+                if (typeof disableAdminUser !== 'function') {
+                    throw new Error('Admin disable function not available.');
+                }
+                await disableAdminUser(userId, email || null);
+                await loadUsersList();
+            } catch (error) {
+                console.error('Error disabling admin:', error);
+                alert(error.message || 'Failed to disable admin.');
+            }
+        }
+
+        async function enableAdmin(userId) {
+            if (!userId) return;
+            try {
+                if (typeof enableAdminUser !== 'function') {
+                    throw new Error('Admin enable function not available.');
+                }
+                await enableAdminUser(userId);
+                await loadUsersList();
+            } catch (error) {
+                console.error('Error enabling admin:', error);
+                alert(error.message || 'Failed to enable admin.');
             }
         }
         
