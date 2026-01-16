@@ -5375,6 +5375,12 @@
                 loadSeasonSettings();
                 renderSeasonCalendarForSettings();
                 updateRoleDropdowns();
+                if (typeof loadUsersList === 'function') {
+                    loadUsersList();
+                }
+                if (typeof loadAdminInvitations === 'function') {
+                    loadAdminInvitations();
+                }
             } else if (tabName === 'roster') {
                 // Default to showing riders view
                 toggleRosterView('riders');
