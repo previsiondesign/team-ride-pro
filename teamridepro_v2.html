@@ -1513,6 +1513,17 @@
     </div>
 
     <script>
+        // Debug logging control (set true to enable verbose logs)
+        const DEBUG_LOGS = false;
+        if (!DEBUG_LOGS) {
+            const originalLog = console.log;
+            const originalInfo = console.info;
+            console.log = () => {};
+            console.info = () => {};
+            // Preserve originals in case needed elsewhere
+            console._originalLog = originalLog;
+            console._originalInfo = originalInfo;
+        }
         // Data storage
         let data = {
             riders: [],
@@ -3750,18 +3761,7 @@
 
             try {
                 await signInWithEmail(email, password);
-                console.log('Login successful, calling handleAuthStateChange');
-                // Explicitly trigger UI update (auth state listener may have delay)
-                await handleAuthStateChange(true);
-                console.log('handleAuthStateChange completed');
-                
-                // Create automatic backup on login
-                try {
-                    await createAutomaticBackup('auto_login');
-                } catch (backupError) {
-                    console.warn('Failed to create backup on login:', backupError);
-                    // Don't block login if backup fails
-                }
+                // Auth state listener will handle UI update and backups
             } catch (error) {
                 // Check if error is about email not verified
                 if (error.message && error.message.includes('Email not confirmed')) {
@@ -21986,9 +21986,51 @@
         let isAssignmentDragging = false;
         let currentMouseY = 0;
 
+        function ensureScrollIndicators() {
+            if (document.getElementById('drag-scroll-top') && document.getElementById('drag-scroll-bottom')) {
+                return;
+            }
+            const topIndicator = document.createElement('div');
+            topIndicator.id = 'drag-scroll-top';
+            topIndicator.style.position = 'fixed';
+            topIndicator.style.top = '0';
+            topIndicator.style.left = '0';
+            topIndicator.style.right = '0';
+            topIndicator.style.height = '100px';
+            topIndicator.style.pointerEvents = 'none';
+            topIndicator.style.background = 'rgba(33, 150, 243, 0.15)';
+            topIndicator.style.borderBottom = '1px dashed rgba(33, 150, 243, 0.5)';
+            topIndicator.style.opacity = '0';
+            topIndicator.style.transition = 'opacity 0.15s ease';
+            topIndicator.style.zIndex = '9999';
+
+            const bottomIndicator = document.createElement('div');
+            bottomIndicator.id = 'drag-scroll-bottom';
+            bottomIndicator.style.position = 'fixed';
+            bottomIndicator.style.bottom = '0';
+            bottomIndicator.style.left = '0';
+            bottomIndicator.style.right = '0';
+            bottomIndicator.style.height = '100px';
+            bottomIndicator.style.pointerEvents = 'none';
+            bottomIndicator.style.background = 'rgba(33, 150, 243, 0.15)';
+            bottomIndicator.style.borderTop = '1px dashed rgba(33, 150, 243, 0.5)';
+            bottomIndicator.style.opacity = '0';
+            bottomIndicator.style.transition = 'opacity 0.15s ease';
+            bottomIndicator.style.zIndex = '9999';
+
+            document.body.appendChild(topIndicator);
+            document.body.appendChild(bottomIndicator);
+        }
+
         // Add global mousemove listener to track mouse position during drag
         if (!window.dragScrollListenerAdded) {
             document.addEventListener('mousemove', (e) => {
+                if (isAssignmentDragging) {
+                    currentMouseY = e.clientY;
+                    checkAndScroll();
+                }
+            });
+            document.addEventListener('dragover', (e) => {
                 if (isAssignmentDragging) {
                     currentMouseY = e.clientY;
                     checkAndScroll();
@@ -22027,11 +22069,19 @@
             const viewportHeight = window.innerHeight;
             const scrollTriggerZone = 100; // 100px from bottom
             const scrollSpeed = 15; // Pixels to scroll per check
+            ensureScrollIndicators();
+            const topIndicator = document.getElementById('drag-scroll-top');
+            const bottomIndicator = document.getElementById('drag-scroll-bottom');
+            if (topIndicator && bottomIndicator) {
+                topIndicator.style.opacity = '0.25';
+                bottomIndicator.style.opacity = '0.25';
+            }
             
             // Check if mouse is in the bottom scroll trigger zone
             const distanceFromBottom = viewportHeight - currentMouseY;
             
             if (distanceFromBottom < scrollTriggerZone && distanceFromBottom > 0) {
+                if (bottomIndicator) bottomIndicator.style.opacity = '0.7';
                 // Calculate scroll amount based on how close to bottom
                 // Closer to bottom = faster scroll
                 const scrollAmount = Math.max(5, scrollSpeed * (1 - (distanceFromBottom / scrollTriggerZone)));
@@ -22046,6 +22096,7 @@
             // Also check top of viewport for scrolling up
             const scrollTriggerZoneTop = 100; // 100px from top
             if (currentMouseY < scrollTriggerZoneTop && currentMouseY > 0) {
+                if (topIndicator) topIndicator.style.opacity = '0.7';
                 const scrollAmount = Math.max(5, scrollSpeed * (1 - (currentMouseY / scrollTriggerZoneTop)));
                 window.scrollBy({
                     top: -scrollAmount,
@@ -22078,6 +22129,7 @@
             
             // Start auto-scroll monitoring
             isAssignmentDragging = true;
+            ensureScrollIndicators();
             startAutoScroll();
         }
 
@@ -22087,6 +22139,10 @@
             // Stop auto-scroll monitoring
             isAssignmentDragging = false;
             stopAutoScroll();
+            const topIndicator = document.getElementById('drag-scroll-top');
+            const bottomIndicator = document.getElementById('drag-scroll-bottom');
+            if (topIndicator) topIndicator.style.opacity = '0';
+            if (bottomIndicator) bottomIndicator.style.opacity = '0';
         }
 
         function drop(ev) {
