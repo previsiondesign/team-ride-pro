@@ -182,10 +182,11 @@ async function signOut() {
     if (error) {
         const message = (error.message || '').toLowerCase();
         const isMissingSession = error.name === 'AuthSessionMissingError' || message.includes('auth session missing');
-        if (!isMissingSession) {
+        const isForbidden = error.status === 403 || message.includes('forbidden');
+        if (!isMissingSession && !isForbidden) {
             throw error;
         }
-        console.warn('Sign out skipped: no active session.');
+        console.warn('Sign out skipped: no active session or forbidden.');
     }
     
     currentUser = null;

@@ -4077,6 +4077,14 @@
                     }
                 }
             } catch (error) {
+                const message = (error?.message || '').toLowerCase();
+                const isMissingSession = error?.name === 'AuthSessionMissingError' || message.includes('auth session missing');
+                const isForbidden = error?.status === 403 || message.includes('forbidden');
+                if (isMissingSession || isForbidden) {
+                    console.warn('Sign out skipped:', error);
+                    handleAuthStateChange(false);
+                    return;
+                }
                 console.error('Error signing out:', error);
                 alert('Error signing out: ' + (error.message || 'Unknown error'));
             }
