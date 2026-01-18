@@ -1101,23 +1101,23 @@
             <div id="auth-error" class="error-message" style="display: none;"></div>
             
             <div id="login-form">
-                <div style="display: flex; flex-direction: column; gap: 12px;">
+                <form onsubmit="event.preventDefault(); handleLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
                     <div>
                         <label class="field-label" for="login-email">Email</label>
-                        <input type="email" id="login-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email">
+                        <input type="email" id="login-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email" required>
                     </div>
                     <div>
                         <label class="field-label" for="login-password">Password</label>
-                        <input type="password" id="login-password" class="modal-field-input" placeholder="Password" autocomplete="current-password">
+                        <input type="password" id="login-password" class="modal-field-input" placeholder="Password" autocomplete="current-password" required>
                     </div>
-                    <button class="btn-small" onclick="handleLogin()" style="width: 100%; margin-top: 8px;">Sign In</button>
+                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;">Sign In</button>
                     <div style="text-align: center; margin-top: 8px;">
                         <a href="#" class="auth-link" onclick="event.preventDefault(); showPasswordReset();">Forgot password?</a>
                     </div>
                     <div id="resend-verification" style="text-align: center; margin-top: 8px; display: none;">
                         <a href="#" class="auth-link" onclick="event.preventDefault(); handleResendVerification();">Resend verification email</a>
                     </div>
-                </div>
+                </form>
                 
                 <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
                     <span style="font-size: 14px; color: #64748b;">Need Admin Access? </span>
@@ -3972,16 +3972,34 @@
             hideAuthError();
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
+            const loginButton = document.querySelector('#login-form button[type="submit"]');
 
             if (!email || !password) {
                 showAuthError('Please enter both email and password');
                 return;
             }
 
+            // Disable button and show loading state to prevent multiple clicks
+            if (loginButton) {
+                const originalText = loginButton.textContent;
+                loginButton.disabled = true;
+                loginButton.textContent = 'Signing in...';
+                loginButton.style.opacity = '0.6';
+                loginButton.style.cursor = 'not-allowed';
+            }
+
             try {
                 await signInWithEmail(email, password);
                 // Auth state listener will handle UI update and backups
             } catch (error) {
+                // Re-enable button on error
+                if (loginButton) {
+                    loginButton.disabled = false;
+                    loginButton.textContent = 'Sign In';
+                    loginButton.style.opacity = '1';
+                    loginButton.style.cursor = 'pointer';
+                }
+                
                 // Check if error is about email not verified
                 if (error.message && error.message.includes('Email not confirmed')) {
                     showAuthError('Please verify your email first. Check your inbox for the verification link.');
