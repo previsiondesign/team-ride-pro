@@ -23,7 +23,13 @@ function initSupabase() {
     }
     
     if (typeof supabase !== 'undefined') {
-        supabaseClient = supabase.createClient(url, key);
+        supabaseClient = supabase.createClient(url, key, {
+            auth: {
+                storage: window.sessionStorage,
+                persistSession: true,
+                autoRefreshToken: true
+            }
+        });
         return supabaseClient;
     } else {
         console.error('Supabase JS library not loaded. Please include the Supabase script.');
