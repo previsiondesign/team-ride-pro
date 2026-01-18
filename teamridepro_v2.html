@@ -7639,8 +7639,15 @@
                     const rider = item.data;
                     const fitnessScale = getFitnessScale();
                     const fitnessValue = Math.max(1, Math.min(fitnessScale, parseInt(rider.fitness || Math.ceil(fitnessScale / 2), 10)));
-                    const photoMarkup = rider.photo
-                        ? `<img src="${escapeHtml(rider.photo)}" alt="${escapeHtml(rider.name || 'Rider')}">`
+                    let photoSrc = rider.photo;
+                    if (!photoSrc || (!photoSrc.startsWith('data:') && !photoSrc.startsWith('http') && !photoSrc.startsWith('assets/'))) {
+                        const gender = (rider.gender || '').toUpperCase();
+                        if (gender === 'M') photoSrc = 'assets/male_default.png';
+                        else if (gender === 'F') photoSrc = 'assets/female_default.png';
+                        else photoSrc = 'assets/nonbinary_default.png';
+                    }
+                    const photoMarkup = photoSrc
+                        ? `<img src="${escapeHtml(photoSrc)}" alt="${escapeHtml(rider.name || 'Rider')}">`
                         : `<span class="photo-placeholder">👤</span>`;
 
                     const gradeValue = formatGradeLabel(rider.grade);
