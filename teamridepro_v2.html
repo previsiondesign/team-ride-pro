@@ -3742,24 +3742,12 @@
             if (coachesLoaded) {
                 updated.availableCoaches = updated.availableCoaches
                     .map(id => parseInt(id, 10))
-                    .filter(id => {
-                        // Filter out timestamp IDs (likely invalid - coach IDs should be < 1 million)
-                        if (id > 1000000) {
-                            return false;
-                        }
-                        return Number.isFinite(id) && validCoachIds.has(id) && !uniqueCoaches.has(id) && uniqueCoaches.add(id);
-                    });
+                    .filter(id => Number.isFinite(id) && validCoachIds.has(id) && !uniqueCoaches.has(id) && uniqueCoaches.add(id));
             } else {
-                // Preserve IDs even if rosters aren't loaded - just deduplicate and filter timestamps
+                // Preserve IDs even if rosters aren't loaded - just deduplicate
                 updated.availableCoaches = updated.availableCoaches
                     .map(id => parseInt(id, 10))
-                    .filter(id => {
-                        // Filter out timestamp IDs (likely invalid - coach IDs should be < 1 million)
-                        if (id > 1000000) {
-                            return false;
-                        }
-                        return Number.isFinite(id) && !uniqueCoaches.has(id) && uniqueCoaches.add(id);
-                    });
+                    .filter(id => Number.isFinite(id) && !uniqueCoaches.has(id) && uniqueCoaches.add(id));
             }
 
             const uniqueRiders = new Set();
@@ -5106,14 +5094,18 @@
                 data.coaches = coaches || [];
                 data.routes = routes || [];
                 
-                // Normalize rides - filter out timestamp IDs from availableCoaches
+                // Normalize rides - keep only valid coach IDs if roster is loaded
+                const validCoachIds = new Set((data.coaches || []).map(coach => {
+                    const id = typeof coach.id === 'string' ? parseInt(coach.id, 10) : coach.id;
+                    return Number.isFinite(id) ? id : coach.id;
+                }));
+                const hasCoachRoster = validCoachIds.size > 0;
                 data.rides = (rides || []).map(ride => {
                     const normalizedRide = { ...ride };
-                    // Filter out timestamp IDs (IDs > 1 million are likely timestamps, not valid coach IDs)
                     if (Array.isArray(normalizedRide.availableCoaches)) {
                         normalizedRide.availableCoaches = normalizedRide.availableCoaches
                             .map(id => typeof id === 'string' ? parseInt(id, 10) : id)
-                            .filter(id => Number.isFinite(id) && id <= 1000000);
+                            .filter(id => Number.isFinite(id) && (!hasCoachRoster || validCoachIds.has(id)));
                         normalizedRide.availableCoaches = Array.from(new Set(normalizedRide.availableCoaches)); // Deduplicate
                     }
                     return normalizedRide;
@@ -5623,7 +5615,8 @@
                     
                     console.log('💾 saveRideToDB: Saving ride to Supabase, id:', rideData.id, 'date:', rideData.date, 'deleted in rideData:', rideData.deleted, 'deleted in dbData:', dbData.deleted);
                     
-                    if (rideData.id && data.rides.find(r => r.id === rideData.id)) {
+                    const shouldCreateInDb = rideData.isPersisted !== true;
+                    if (!shouldCreateInDb && rideData.id && data.rides.find(r => r.id === rideData.id)) {
                         // Update existing
                         console.log('💾 saveRideToDB: Updating existing ride, id:', rideData.id, 'deleted:', dbData.deleted);
                         const updated = await updateRide(rideData.id, dbData);
@@ -5683,6 +5676,9 @@
                             data.rides[index] = newRide;
                         } else {
                         data.rides.push(newRide);
+                        }
+                        if (data.currentRide === rideData.id && newRide.id) {
+                            data.currentRide = newRide.id;
                         }
                         // Update localStorage with new ride ID
                         try {
@@ -5761,8 +5757,7 @@
                     loadAdminInvitations();
                 }
             } else if (tabName === 'roster') {
-                // Default to showing riders view
-                toggleRosterView('riders');
+                applyRosterPreferences();
             } else if (tabName === 'assignments') {
                 renderRideAssignments();
             } else if (tabName === 'coach-assignments') {
@@ -7423,11 +7418,21 @@
 
         function groupRiders(groupBy) {
             riderGroupBy = groupBy || '';
+            try {
+                localStorage.setItem('rosterRiderGroupBy', riderGroupBy);
+            } catch (e) {
+                console.warn('Could not save rider group-by preference:', e);
+            }
             renderRiders();
         }
 
         function groupCoaches(groupBy) {
             coachGroupBy = groupBy || '';
+            try {
+                localStorage.setItem('rosterCoachGroupBy', coachGroupBy);
+            } catch (e) {
+                console.warn('Could not save coach group-by preference:', e);
+            }
             renderCoaches();
         }
 
@@ -7771,13 +7776,25 @@
             handleFileChange('coach-photo', 'coach-photo-name');
         }
 
-        async function deleteCoach(id) {
+        async function deleteCoach(id, skipConfirm = false) {
             if (!canEditCoaches()) {
                 alert('You do not have permission to delete coaches');
                 return;
             }
 
-            if (confirm('Delete this coach?')) {
+            if (skipConfirm || confirm('Delete this coach?')) {
+                try {
+                    const client = getSupabaseClient();
+                    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                    if (client && currentUser && typeof deleteCoachFromDB === 'function') {
+                        await deleteCoachFromDB(id);
+                    }
+                } catch (error) {
+                    console.error('Error deleting coach from database:', error);
+                    alert(error.message || 'Failed to delete coach.');
+                    return;
+                }
+                
                 // Remove from coaches array
                 data.coaches = data.coaches.filter(c => c.id !== id);
                 
@@ -7950,9 +7967,13 @@
                     if (coachGroupBy === 'name') {
                         return a.localeCompare(b);
                     } else if (coachGroupBy === 'level') {
-                        const aLevel = parseInt(a.replace('Level ', '') || '1', 10);
-                        const bLevel = parseInt(b.replace('Level ', '') || '1', 10);
-                        return aLevel - bLevel;
+                        const levelOrder = (label) => {
+                            if (label === 'N/A') return 99;
+                            const parsed = parseInt(label.replace('Level ', '') || '1', 10);
+                            if (!Number.isFinite(parsed)) return 98;
+                            return -parsed;
+                        };
+                        return levelOrder(a) - levelOrder(b);
                     } else if (coachGroupBy === 'pace') {
                         const aPace = parseInt(a.replace('Pace ', '') || '5', 10);
                         const bPace = parseInt(b.replace('Pace ', '') || '5', 10);
@@ -8437,9 +8458,7 @@
 
         function deleteCoachFromModal() {
             if (!currentEditingCoachId) return;
-            if (!confirm('Delete this coach?')) return;
-            
-            deleteCoach(currentEditingCoachId);
+            deleteCoach(currentEditingCoachId, true);
             closeEditCoachModal();
         }
 
@@ -8798,7 +8817,8 @@
                                 cancellationReason: createdData.cancellation_reason || createdData.cancellationReason || '',
                                 deleted: createdData.deleted || false,
                                 rescheduledFrom: createdData.rescheduled_from || createdData.rescheduledFrom || null,
-                                publishedGroups: createdData.published_groups || false
+                                publishedGroups: createdData.published_groups || false,
+                                isPersisted: true
                             };
                             console.log('🔵 ensureRidesFromSchedule: Created ride in Supabase, id:', created.id, 'date:', created.date);
                             // Use the Supabase ID and merge with local data
@@ -9842,6 +9862,35 @@
                 if (groupByLabel) groupByLabel.setAttribute('for', 'coach-group-by');
                 renderCoaches();
             }
+            try {
+                localStorage.setItem('rosterView', view);
+            } catch (e) {
+                console.warn('Could not save roster view preference:', e);
+            }
+        }
+
+        function applyRosterPreferences() {
+            let savedView = 'riders';
+            let savedRiderGroupBy = '';
+            let savedCoachGroupBy = '';
+            try {
+                savedView = localStorage.getItem('rosterView') || 'riders';
+                savedRiderGroupBy = localStorage.getItem('rosterRiderGroupBy') || '';
+                savedCoachGroupBy = localStorage.getItem('rosterCoachGroupBy') || '';
+            } catch (e) {
+                console.warn('Could not load roster preferences:', e);
+            }
+            const riderGroupBySelect = document.getElementById('rider-group-by');
+            if (riderGroupBySelect && savedRiderGroupBy) {
+                riderGroupBySelect.value = savedRiderGroupBy;
+            }
+            const coachGroupBySelect = document.getElementById('coach-group-by');
+            if (coachGroupBySelect && savedCoachGroupBy) {
+                coachGroupBySelect.value = savedCoachGroupBy;
+            }
+            riderGroupBy = savedRiderGroupBy || '';
+            coachGroupBy = savedCoachGroupBy || '';
+            toggleRosterView(savedView);
         }
 
         function openSeasonSetupModal() {
@@ -12500,12 +12549,25 @@
         }
         
         // Purge all coaches
-        function purgeCoaches() {
+        async function purgeCoaches() {
             if (!confirm('Are you sure you want to delete ALL coaches? This action cannot be undone.')) {
                 return;
             }
             
             if (!confirm('This will permanently delete all coach records. Are you absolutely sure?')) {
+                return;
+            }
+            try {
+                const client = getSupabaseClient();
+                const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                if (client && currentUser && typeof deleteCoachFromDB === 'function') {
+                    for (const coach of data.coaches) {
+                        await deleteCoachFromDB(coach.id);
+                    }
+                }
+            } catch (error) {
+                console.error('Error deleting coaches from database:', error);
+                alert(error.message || 'Failed to delete all coaches.');
                 return;
             }
             
@@ -21364,11 +21426,15 @@
             if (!Array.isArray(ride.availableCoaches)) {
                 ride.availableCoaches = []; // No coaches available by default
             } else {
+                const validCoachIds = new Set((data.coaches || []).map(coach => {
+                    const id = typeof coach.id === 'string' ? parseInt(coach.id, 10) : coach.id;
+                    return Number.isFinite(id) ? id : coach.id;
+                }));
+                const hasRoster = validCoachIds.size > 0;
                 // Normalize IDs to numbers for consistent comparison
-                // Also filter out invalid timestamp IDs (IDs > 1 million are likely timestamps, not valid coach IDs)
                 ride.availableCoaches = ride.availableCoaches
                     .map(id => typeof id === 'string' ? parseInt(id, 10) : id)
-                    .filter(id => Number.isFinite(id) && id <= 1000000); // Filter out timestamp IDs
+                    .filter(id => Number.isFinite(id) && (!hasRoster || validCoachIds.has(id)));
                 ride.availableCoaches = Array.from(new Set(ride.availableCoaches)); // Deduplicate
             }
             

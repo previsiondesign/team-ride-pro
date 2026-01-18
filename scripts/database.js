@@ -198,6 +198,7 @@ async function getAllCoaches() {
         phone: coach.phone,
         email: coach.email,
         level: coach.level,
+        coachingLicenseLevel: coach.level,
         fitness: coach.fitness,
         skills: coach.skills,
         photo: coach.photo,
@@ -229,6 +230,7 @@ async function getCoachById(id) {
         phone: data.phone,
         email: data.email,
         level: data.level,
+        coachingLicenseLevel: data.level,
         fitness: data.fitness,
         skills: data.skills,
         photo: data.photo,
@@ -270,6 +272,7 @@ async function createCoach(coachData) {
         phone: data.phone,
         email: data.email,
         level: data.level,
+        coachingLicenseLevel: data.level,
         fitness: data.fitness,
         skills: data.skills,
         photo: data.photo,
@@ -310,6 +313,7 @@ async function updateCoach(id, coachData) {
         phone: data.phone,
         email: data.email,
         level: data.level,
+        coachingLicenseLevel: data.level,
         fitness: data.fitness,
         skills: data.skills,
         photo: data.photo,
@@ -318,7 +322,7 @@ async function updateCoach(id, coachData) {
     };
 }
 
-async function deleteCoach(id) {
+async function deleteCoachRecord(id) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -332,7 +336,7 @@ async function deleteCoach(id) {
 
 // Alias for consistency
 async function deleteCoachFromDB(id) {
-    return deleteCoach(id);
+    return deleteCoachRecord(id);
 }
 
 // ============ RIDES ============
@@ -377,7 +381,8 @@ async function getAllRides() {
             cancellationReason: ride.cancellation_reason || ride.cancellationReason || '',
             deleted: deletedValue,
             rescheduledFrom: ride.rescheduled_from || ride.rescheduledFrom || null,
-            publishedGroups: ride.published_groups || false
+            publishedGroups: ride.published_groups || false,
+            isPersisted: true
         };
         if (ride.deleted === true || deletedValue === true) {
             console.log('📥 getAllRides: Mapped deleted ride, id:', result.id, 'date:', result.date, 'deleted from DB:', ride.deleted, 'deleted mapped:', result.deleted);
@@ -425,7 +430,8 @@ async function getRideById(id) {
         cancellationReason: data.cancellation_reason || data.cancellationReason || '',
         deleted: data.deleted || false,
         rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
-        publishedGroups: data.published_groups || false
+        publishedGroups: data.published_groups || false,
+        isPersisted: true
     };
 }
 
@@ -481,7 +487,8 @@ async function createRide(rideData) {
         cancellationReason: data.cancellation_reason || data.cancellationReason || '',
         deleted: data.deleted || false,
         rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
-        publishedGroups: data.published_groups || false
+        publishedGroups: data.published_groups || false,
+        isPersisted: true
     };
 }
 
@@ -504,6 +511,7 @@ async function updateRide(id, rideData) {
     if (rideData.location_lng !== undefined) dbData.location_lng = rideData.location_lng != null ? rideData.location_lng : null;
     if (rideData.goals !== undefined) dbData.goals = rideData.goals || '';
     if (rideData.availableCoaches !== undefined) dbData.available_coaches = rideData.availableCoaches;
+    if (rideData.available_coaches !== undefined) dbData.available_coaches = rideData.available_coaches;
     if (rideData.available_riders !== undefined) dbData.available_riders = rideData.available_riders;
     if (rideData.availableRiders !== undefined) dbData.available_riders = rideData.availableRiders;
     if (rideData.assignments !== undefined) dbData.assignments = rideData.assignments;
@@ -550,7 +558,8 @@ async function updateRide(id, rideData) {
                 groups: rideData.groups || [],
                 cancelled: rideData.cancelled || false,
                 deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Include deleted field
-                publishedGroups: rideData.publishedGroups || false
+                publishedGroups: rideData.publishedGroups || false,
+                isPersisted: true
             };
         }
         throw error;
@@ -568,7 +577,8 @@ async function updateRide(id, rideData) {
             groups: updated.groups || [],
             cancelled: updated.cancelled || false,
             deleted: updated.deleted === true ? true : (updated.deleted === false ? false : false), // Explicitly handle true/false
-            publishedGroups: updated.published_groups || false
+            publishedGroups: updated.published_groups || false,
+            isPersisted: true
         };
         console.log('📥 updateRide: Updated ride returned, id:', result.id, 'date:', result.date, 'deleted:', result.deleted, 'deleted from DB:', updated.deleted);
         return result;
@@ -583,7 +593,8 @@ async function updateRide(id, rideData) {
             assignments: rideData.assignments || {},
             groups: rideData.groups || [],
             cancelled: rideData.cancelled || false,
-            deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false) // Include deleted field
+            deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Include deleted field
+            isPersisted: true
         };
     }
 }
