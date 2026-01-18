@@ -178,19 +178,50 @@ async function signOut() {
         throw new Error('Supabase client not initialized');
     }
     
-    const { error } = await client.auth.signOut();
-    if (error) {
-        const message = (error.message || '').toLowerCase();
-        const isMissingSession = error.name === 'AuthSessionMissingError' || message.includes('auth session missing');
-        const isForbidden = error.status === 403 || message.includes('forbidden');
+    // Always clear local state first
+    currentUser = null;
+    currentUserRole = null;
+    
+    // Try to sign out from Supabase, but don't fail if session is already invalid
+    try {
+        const { error } = await client.auth.signOut();
+        if (error) {
+            const message = (error.message || '').toLowerCase();
+            const isMissingSession = error.name === 'AuthSessionMissingError' || message.includes('auth session missing');
+            const isForbidden = error.status === 403 || error.code === '403' || message.includes('forbidden');
+            if (!isMissingSession && !isForbidden) {
+                throw error;
+            }
+            // Session is already invalid or forbidden - this is fine, just clear local storage
+            console.warn('Sign out skipped: no active session or forbidden.');
+        }
+    } catch (err) {
+        // If signOut fails for any reason, still clear local state
+        const message = (err?.message || '').toLowerCase();
+        const isMissingSession = err?.name === 'AuthSessionMissingError' || message.includes('auth session missing');
+        const isForbidden = err?.status === 403 || err?.code === '403' || message.includes('forbidden');
         if (!isMissingSession && !isForbidden) {
-            throw error;
+            throw err;
         }
         console.warn('Sign out skipped: no active session or forbidden.');
     }
     
-    currentUser = null;
-    currentUserRole = null;
+    // Manually clear sessionStorage to ensure session is cleared
+    try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+            // Clear all Supabase-related session storage
+            const keysToRemove = [];
+            for (let i = 0; i < window.sessionStorage.length; i++) {
+                const key = window.sessionStorage.key(i);
+                if (key && (key.includes('supabase') || key.includes('auth'))) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => window.sessionStorage.removeItem(key));
+        }
+    } catch (storageError) {
+        console.warn('Error clearing sessionStorage:', storageError);
+    }
 }
 
 // Check if user is authenticated

@@ -4086,8 +4086,19 @@
                 
                 // Check if we're using Supabase auth
                 if (typeof signOut === 'function') {
-                    await signOut();
-                    // Auth state change handler will update UI
+                    try {
+                        await signOut();
+                    } catch (signOutError) {
+                        // signOut handles 403/forbidden errors internally, but if it throws something else, log it
+                        const message = (signOutError?.message || '').toLowerCase();
+                        const isMissingSession = signOutError?.name === 'AuthSessionMissingError' || message.includes('auth session missing');
+                        const isForbidden = signOutError?.status === 403 || signOutError?.code === '403' || message.includes('forbidden');
+                        if (!isMissingSession && !isForbidden) {
+                            console.error('Unexpected error during sign out:', signOutError);
+                        }
+                    }
+                    // Always update UI state after sign out attempt, regardless of errors
+                    handleAuthStateChange(false);
                 } else {
                     // Fallback: just reload page (localStorage mode)
                     if (confirm('Sign out and reload page?')) {
@@ -4095,16 +4106,9 @@
                     }
                 }
             } catch (error) {
-                const message = (error?.message || '').toLowerCase();
-                const isMissingSession = error?.name === 'AuthSessionMissingError' || message.includes('auth session missing');
-                const isForbidden = error?.status === 403 || message.includes('forbidden');
-                if (isMissingSession || isForbidden) {
-                    console.warn('Sign out skipped:', error);
-                    handleAuthStateChange(false);
-                    return;
-                }
-                console.error('Error signing out:', error);
-                alert('Error signing out: ' + (error.message || 'Unknown error'));
+                // Catch any unexpected errors, but still try to update UI
+                console.error('Error during logout process:', error);
+                handleAuthStateChange(false);
             }
         }
 
