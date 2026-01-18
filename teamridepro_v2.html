@@ -56,7 +56,7 @@
                         <span class="user-role" id="user-role">Coach</span>
                     </div>
                     <div class="user-menu-buttons">
-                        <button class="btn-small secondary" onclick="handleLogout()">Sign Out</button>
+                        <button class="btn-small secondary" onclick="handleLogout()" data-readonly-allow="true">Sign Out</button>
                     </div>
                 </div>
                 <div class="mobile-menu-container">
@@ -66,25 +66,32 @@
                         <button class="mobile-menu-item active" onclick="selectMobileTab('settings')">Team Dashboard</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('roster')">Roster</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('routes')">Routes</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Reporting</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('rides')">Practice Planner</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('assignments')">Rider Assignments</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('coach-assignments')">Coach Assignments</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Practice Reporting</button>
                     </div>
                 </div>
             </div>
         </div>
         
         <div class="tabs" id="desktop-tabs" style="display: flex; justify-content: space-between;">
-            <div style="display: flex;">
+                    <div style="display: flex;">
                 <button class="tab active" onclick="switchTab('settings', this)">Team Dashboard</button>
                 <button class="tab" onclick="switchTab('roster', this)">Roster</button>
                 <button class="tab" onclick="switchTab('routes', this)">Routes</button>
+                <button class="tab" onclick="switchTab('practice-reporting', this)">Reporting</button>
                 <button class="tab" onclick="switchTab('rides', this)">Practice Planner</button>
             </div>
             <div style="display: flex;">
                 <button class="tab" onclick="switchTab('assignments', this)">Rider Assignments</button>
                 <button class="tab" onclick="switchTab('coach-assignments', this)">Coach Assignments</button>
             </div>
+        </div>
+
+        <div id="read-only-banner" style="display: none; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 10px 12px; border-radius: 6px; margin: 12px 0;">
+            Read-only mode enabled.
         </div>
 
         <!-- SEASON CALENDAR TAB -->
@@ -157,6 +164,17 @@
                         <label class="field-label" style="min-width: 200px;">Relative Pace Scale (1 to X):</label>
                         <input type="number" id="fitness-scale" min="3" max="20" style="width: 100px;" onchange="updateScaleSettings()" oninput="updateScaleSettings()" onblur="updateScaleSettings()">
                         <span style="color: #666; margin-left: 8px;">Current: 1-<span id="fitness-scale-display"></span></span>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Pace Scale Sorting</label>
+                        <select id="pace-scale-order" style="width: 220px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings()">
+                            <option value="fastest_to_slowest">Fastest to Slowest</option>
+                            <option value="slowest_to_fastest">Slowest to Fastest</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <button class="btn-small secondary" onclick="flipPaceValuesOnce()">One-time Flip Pace Values</button>
+                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Fixes inverted pace values without changing the sorting setting</span>
                     </div>
                     <div class="form-row" style="margin-bottom: 12px;">
                         <label class="field-label" style="min-width: 200px;">Bike Skills Scale:</label>
@@ -330,11 +348,19 @@
                             <span id="group-assignments-arrow" style="font-size: 18px;">▶</span>
                         </div>
                         <div id="group-assignments-content" style="display: none; margin-top: 12px;">
-                            <div class="action-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                            <div class="action-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
                                 <button class="btn-small" onclick="addGroup()">Add Group</button>
+                                <button class="btn-small" onclick="addGroupsFromLastPractice()" style="background: #1976D2; color: white; border-color: #1976D2;">Add Groups from Last Practice</button>
                                 <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
                                 <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Auto-Assign Settings...</button>
-                                <button class="btn-small secondary" onclick="addGroupsFromLastPractice()">Add Groups from Last Practice</button>
+                                <button id="unassigned-palette-toggle-btn" class="btn-small" onclick="toggleUnassignedPaletteVisibility()" style="background: #fff3cd; color: #856404; border-color: #ffc107;">Show Unassigned Palette</button>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <label for="group-pace-order" style="font-size: 12px; color: #555;">Group Pace Options:</label>
+                                    <select id="group-pace-order" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateGroupPaceOrder(this.value)">
+                                        <option value="fastest_to_slowest">Fastest to Slowest</option>
+                                        <option value="slowest_to_fastest">Slowest to Fastest</option>
+                                    </select>
+                                </div>
                                 <button id="more-groups-btn" class="btn-small secondary" onclick="tryMoreGroups()" style="display: none;">More/Smaller Groups</button>
                                 <button id="fewer-groups-btn" class="btn-small secondary" onclick="tryFewerGroups()" style="display: none;">Fewer/Larger Groups</button>
                                 <button class="btn-small danger" onclick="clearAssignments()" style="margin-left: auto;">Clear Group Assignments</button>
@@ -376,6 +402,36 @@
             <div class="section">
                 <div id="coach-assignments-container">
                     <!-- Coach assignments will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- PRACTICE REPORTING TAB -->
+        <div id="practice-reporting-tab" class="tab-content">
+            <div class="section">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <h2 id="practice-reporting-title" style="margin: 0;">Practice Reporting</h2>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn-small secondary" id="practice-reporting-prev" onclick="navigatePracticeReporting(-1)" title="Previous practice">←</button>
+                        <div id="practice-reporting-date" style="font-size: 14px; font-weight: 600; color: #333;">No practices found</div>
+                        <button class="btn-small secondary" id="practice-reporting-next" onclick="navigatePracticeReporting(1)" title="Next practice">→</button>
+                    </div>
+                </div>
+                <div id="practice-reporting-summary" style="margin-top: 6px; font-size: 12px; color: #666;"></div>
+                <div style="margin-top: 12px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: #f5f5f5;">
+                            <tr>
+                                <th onclick="togglePracticeReportingSort()" data-readonly-allow="true" style="text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; color: #555; cursor: pointer;">
+                                    Rider <span id="practice-reporting-sort-indicator">↑</span>
+                                </th>
+                                <th style="text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; color: #555;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="practice-reporting-table-body">
+                            <tr><td colspan="2" style="padding: 12px; color: #666;">No practice data yet.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -947,7 +1003,7 @@
                             </select>
                         </div>
                         <div class="modal-form-row">
-                            <select id="edit-rider-racing-group" class="modal-field-input" disabled>
+                            <select id="edit-rider-racing-group" class="modal-field-input">
                                 <option value="">Select Gender First</option>
                             </select>
                         </div>
@@ -1522,8 +1578,8 @@
     </div>
 
     <script>
-        // Debug logging control (set true to enable verbose logs)
-        const DEBUG_LOGS = false;
+        // Debug logging control (use ?debug=1 or local file to enable verbose logs)
+        const DEBUG_LOGS = new URLSearchParams(window.location.search).has('debug') || window.location.protocol === 'file:';
         if (!DEBUG_LOGS) {
             const originalLog = console.log;
             const originalInfo = console.info;
@@ -1546,7 +1602,9 @@
                 endDate: '',
                 practices: [],
                 fitnessScale: 5,  // Default: 5 increments (1-5)
-                skillsScale: 3    // Default: 3 increments (1-3)
+                skillsScale: 3,   // Default: 3 increments (1-3)
+                paceScaleOrder: 'fastest_to_slowest',
+                groupPaceOrder: 'fastest_to_slowest'
             },
             coachRoles: [],  // Array of { roleName: string, coachId: number }
             riderRoles: [],  // Array of { roleName: string, riderId: number }
@@ -1568,6 +1626,9 @@
             },
         };
 
+        let practiceReportingRideIndex = null;
+        let practiceReportingSortDirection = 'asc';
+
         let autoAssignDebugLog = '';
         let autoAssignSettingsDraft = null;
         
@@ -1579,6 +1640,14 @@
         };
         let seasonSettingsDraft = null;
 
+        let isReadOnlyMode = false;
+        window.isReadOnlyMode = false;
+        let readOnlyLockInfo = null;
+        let readOnlyNoticeShown = false;
+        let adminEditLockInterval = null;
+        let unassignedPaletteVisibility = 'auto'; // 'auto' | 'show' | 'hide'
+        let unassignedPaletteHeight = 300;
+
         
         // Helper functions to get rating scales
         function getFitnessScale() {
@@ -1589,6 +1658,123 @@
             const scale = (data.seasonSettings && data.seasonSettings.skillsScale) ? data.seasonSettings.skillsScale : 3;
             // Only allow 3 or 5
             return (scale === 3 || scale === 5) ? scale : 3;
+        }
+
+        function normalizePaceScaleOrder(value, fallback = 'fastest_to_slowest') {
+            if (value === 'fastest_to_slowest' || value === 'slowest_to_fastest') {
+                return value;
+            }
+            return fallback;
+        }
+
+        function getPaceScaleOrder() {
+            return normalizePaceScaleOrder(data.seasonSettings && data.seasonSettings.paceScaleOrder);
+        }
+
+        function normalizeGroupPaceOrder(value, fallback = 'fastest_to_slowest') {
+            if (value === 'fastest_to_slowest' || value === 'slowest_to_fastest') {
+                return value;
+            }
+            return fallback;
+        }
+
+        function getGroupPaceOrderForRide(ride) {
+            return normalizeGroupPaceOrder(ride?.groupPaceOrder || data.seasonSettings?.groupPaceOrder);
+        }
+
+        function getGroupPaceComparator(ride) {
+            const groupPaceOrder = getGroupPaceOrderForRide(ride);
+            const sortDescending = groupPaceOrder === 'fastest_to_slowest';
+            return (a, b) => {
+                const fitnessA = getGroupFitnessScore(a);
+                const fitnessB = getGroupFitnessScore(b);
+                if (fitnessB !== fitnessA) return sortDescending ? (fitnessB - fitnessA) : (fitnessA - fitnessB);
+                const sizeDiff = b.riders.length - a.riders.length;
+                if (sizeDiff !== 0) return sizeDiff;
+                return a.id - b.id;
+            };
+        }
+
+        function invertPaceValue(value, scale) {
+            return scale + 1 - value;
+        }
+
+        function getRelativePaceValue(value) {
+            const scale = getFitnessScale();
+            const normalized = normalizePaceScaleOrder(data.seasonSettings && data.seasonSettings.paceScaleOrder);
+            if (!Number.isFinite(value)) return value;
+            return normalized === 'fastest_to_slowest' ? invertPaceValue(value, scale) : value;
+        }
+
+        async function flipPaceValuesOnce() {
+            const fitnessScale = getFitnessScale();
+            const confirmed = confirm(`This will invert all rider and coach pace values across a 1-${fitnessScale} scale.\n\nExample: 1 ↔ ${fitnessScale}, 2 ↔ ${fitnessScale - 1}.\n\nContinue?`);
+            if (!confirmed) return;
+
+            let convertedCount = 0;
+            let savedCount = 0;
+            const applyInversion = (entry) => {
+                const oldValue = parseInt(entry.fitness, 10);
+                if (!isNaN(oldValue) && oldValue >= 1 && oldValue <= fitnessScale) {
+                    entry.fitness = String(invertPaceValue(oldValue, fitnessScale));
+                    convertedCount++;
+                    return true;
+                }
+                return false;
+            };
+
+            if (data.riders) {
+                for (const rider of data.riders) {
+                    if (rider.fitness && applyInversion(rider)) {
+                        await saveRiderToDB(rider);
+                        savedCount++;
+                    }
+                }
+            }
+
+            if (data.coaches) {
+                for (const coach of data.coaches) {
+                    if (coach.fitness && applyInversion(coach)) {
+                        await saveCoachToDB(coach);
+                        savedCount++;
+                    }
+                }
+            }
+
+            alert(`Flipped ${convertedCount} pace value(s) and saved ${savedCount} updates.`);
+        }
+
+        function convertAllPaceRatingsForOrderChange(oldOrder, newOrder, scale) {
+            const normalizedOld = normalizePaceScaleOrder(oldOrder);
+            const normalizedNew = normalizePaceScaleOrder(newOrder);
+            if (normalizedOld === normalizedNew) return 0;
+
+            let convertedCount = 0;
+            const applyInversion = (entry) => {
+                const oldValue = parseInt(entry.fitness, 10);
+                if (!isNaN(oldValue) && oldValue >= 1 && oldValue <= scale) {
+                    entry.fitness = String(invertPaceValue(oldValue, scale));
+                    convertedCount++;
+                }
+            };
+
+            if (data.riders) {
+                data.riders.forEach(rider => {
+                    if (rider.fitness) {
+                        applyInversion(rider);
+                    }
+                });
+            }
+
+            if (data.coaches) {
+                data.coaches.forEach(coach => {
+                    if (coach.fitness) {
+                        applyInversion(coach);
+                    }
+                });
+            }
+
+            return convertedCount;
         }
         
         // Get tooltip text for bike skills level based on scale
@@ -1875,7 +2061,9 @@
                 endDate: '',
                 practices: [],
                 fitnessScale: 5,
-                skillsScale: 3
+                skillsScale: 3,
+                paceScaleOrder: 'fastest_to_slowest',
+                groupPaceOrder: 'fastest_to_slowest'
             };
         }
         
@@ -1935,6 +2123,7 @@
         function updateScaleInputsFromData() {
             const fitnessScaleInput = document.getElementById('fitness-scale');
             const skillsScaleInput = document.getElementById('skills-scale');
+            const paceScaleOrderInput = document.getElementById('pace-scale-order');
             const fitnessScaleDisplay = document.getElementById('fitness-scale-display');
             const skillsScaleDisplay = document.getElementById('skills-scale-display');
             
@@ -1944,6 +2133,7 @@
             if (data.seasonSettings) {
                 const savedFitnessScale = data.seasonSettings.fitnessScale;
                 const savedSkillsScale = data.seasonSettings.skillsScale;
+                const savedPaceScaleOrder = normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder);
                 
                 // Only set values if they exist (don't set defaults here)
                 if (savedFitnessScale !== undefined && savedFitnessScale !== null) {
@@ -1954,6 +2144,9 @@
                 if (savedSkillsScale !== undefined && savedSkillsScale !== null) {
                     skillsScaleInput.value = savedSkillsScale;
                     if (skillsScaleDisplay) skillsScaleDisplay.textContent = savedSkillsScale;
+                }
+                if (paceScaleOrderInput) {
+                    paceScaleOrderInput.value = savedPaceScaleOrder;
                 }
                 updateInputMaxAttributes();
             }
@@ -1966,6 +2159,7 @@
             const skillsScaleInput = document.getElementById('skills-scale');
             const fitnessScaleDisplay = document.getElementById('fitness-scale-display');
             const skillsScaleDisplay = document.getElementById('skills-scale-display');
+            const paceScaleOrderInput = document.getElementById('pace-scale-order');
             
             console.log('Inputs found:', { 
                 fitnessScaleInput: !!fitnessScaleInput, 
@@ -1993,6 +2187,7 @@
             if (fitnessScaleInput && skillsScaleInput) {
                 const fitnessScale = parseInt(fitnessScaleInput.value, 10);
                 const skillsScale = parseInt(skillsScaleInput.value, 10);
+                const nextPaceScaleOrder = normalizePaceScaleOrder(paceScaleOrderInput?.value);
                 
                 console.log('updateScaleSettings - parsed values:', { fitnessScale, skillsScale });
                 
@@ -2009,6 +2204,7 @@
                     // Update seasonSettings
                     const oldFitnessScale = data.seasonSettings.fitnessScale;
                     const oldSkillsScale = data.seasonSettings.skillsScale;
+                    const oldPaceScaleOrder = normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder, nextPaceScaleOrder);
                     
                     console.log('Before update:', { 
                         oldFitness: oldFitnessScale, 
@@ -2018,6 +2214,14 @@
                     
                     data.seasonSettings.fitnessScale = fitnessScale;
                     data.seasonSettings.skillsScale = skillsScale;
+                    data.seasonSettings.paceScaleOrder = nextPaceScaleOrder;
+
+                    if (oldPaceScaleOrder !== nextPaceScaleOrder) {
+                        const convertedCount = convertAllPaceRatingsForOrderChange(oldPaceScaleOrder, nextPaceScaleOrder, fitnessScale);
+                        if (convertedCount > 0) {
+                            alert(`Reassigned ${convertedCount} pace rating(s) due to scale direction change.`);
+                        }
+                    }
                     
                     console.log('After update:', { 
                         newFitness: data.seasonSettings.fitnessScale,
@@ -2040,6 +2244,7 @@
         async function syncScaleSettings() {
             const fitnessScaleInput = document.getElementById('fitness-scale');
             const skillsScaleInput = document.getElementById('skills-scale');
+            const paceScaleOrderInput = document.getElementById('pace-scale-order');
             
             if (!fitnessScaleInput || !skillsScaleInput) {
                 alert('Scale inputs not found. Please refresh the page.');
@@ -2072,6 +2277,9 @@
                 // Update local seasonSettings
                 data.seasonSettings.fitnessScale = fitnessScale;
                 data.seasonSettings.skillsScale = skillsScale;
+                if (paceScaleOrderInput) {
+                    data.seasonSettings.paceScaleOrder = normalizePaceScaleOrder(paceScaleOrderInput.value);
+                }
 
                 // Convert existing data if scales changed
                 if (fitnessScale !== oldFitnessScale || skillsScale !== oldSkillsScale) {
@@ -2099,7 +2307,9 @@
                             end_date: data.seasonSettings.endDate || null,
                             practices: data.seasonSettings.practices || [],
                             fitnessScale: fitnessScale,
-                            skillsScale: skillsScale
+                            skillsScale: skillsScale,
+                            paceScaleOrder: normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder),
+                            groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings.groupPaceOrder)
                         });
                         console.log('Scale settings synced to Supabase');
                     } catch (error) {
@@ -2581,6 +2791,9 @@
             const assignmentNote = showAttendance && assignmentLabel
                 ? `<span class="attendance-note">${assignmentLabel}</span>`
                 : '';
+            const nameHtml = showAttendance
+                ? `<strong class="attendance-name" data-attendance-toggle="true">${safeName}</strong>`
+                : `<strong>${safeName}</strong>`;
             const moveControlsHtml = showMoveControls && groupId !== null
                 ? `<div class="rider-move-controls">
                     <button class="rider-move-btn" onclick="moveRiderBetweenGroups(${groupId}, ${rider.id}, -1)" ${!canMoveUp ? 'disabled' : ''} title="Move to previous group (higher fitness)">▲</button>
@@ -2611,7 +2824,7 @@
             
             // Make unavailable riders in groups clickable to toggle availability (but not the checkbox area)
             const clickHandler = (inGroup && showUnavailableStyle) 
-                ? `onclick="if(event.target.type !== 'checkbox' && !event.target.closest('.attendance-checkbox')) { toggleRiderAvailability(${rider.id}); event.stopPropagation(); }" style="cursor: pointer;"` 
+                ? `onclick="if(event.target.type !== 'checkbox' && !event.target.closest('.attendance-checkbox') && !event.target.closest('.attendance-name')) { toggleRiderAvailability(${rider.id}); event.stopPropagation(); }" style="cursor: pointer;"` 
                 : '';
             
             // Apply unavailable styling to the entire card when in group and unavailable
@@ -2625,7 +2838,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        <strong>${safeName}</strong>
+                        ${nameHtml}
                         ${badgeHtml ? `<span class="badge-single">${badgeHtml}</span>` : ''}
                         ${assignmentNote}
                     </div>
@@ -2718,6 +2931,9 @@
             const assignmentNote = showAttendance && assignmentLabel
                 ? `<span class="attendance-note">${assignmentLabel}</span>`
                 : '';
+            const nameHtml = showAttendance
+                ? `<strong class="attendance-name" data-attendance-toggle="true">${safeName}</strong>`
+                : `<strong>${safeName}</strong>`;
 
             // Show only the badge for the current sort option (or default to pace for non-compact, show both for compact non-sorted)
             // Make pace badge clickable for context menu
@@ -2757,7 +2973,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        <strong>${safeName}</strong>
+                        ${nameHtml}
                         ${badgeHtml ? (compact ? `<span class="badge-single">${badgeHtml}</span>` : badgeHtml) : ''}
                         ${assignmentNote}
                     </div>
@@ -3267,20 +3483,23 @@
         }
 
         function getCoachFitnessValue(coach) {
-            return parseInt(coach?.fitness ?? coach?.level ?? '5', 10) || 5;
+            const raw = parseInt(coach?.fitness ?? coach?.level ?? '5', 10);
+            if (!Number.isFinite(raw)) return 5;
+            return getRelativePaceValue(raw);
         }
 
         function getGroupFitnessScore(group) {
             if (group.fitnessTag != null) {
                 const value = parseInt(group.fitnessTag, 10);
-                if (Number.isFinite(value)) return value;
+                if (Number.isFinite(value)) return getRelativePaceValue(value);
             }
 
             const riderFitnessValues = group.riders
                 .map(id => getRiderById(id))
                 .filter(Boolean)
                 .map(rider => parseInt(rider.fitness || '5', 10))
-                .filter(Number.isFinite);
+                .filter(Number.isFinite)
+                .map(value => getRelativePaceValue(value));
 
             if (riderFitnessValues.length === 0) {
                 return 5;
@@ -3627,11 +3846,14 @@
                                 .filter(id => Number.isFinite(id));
                         }
 
-                        group.riders.forEach(riderId => {
-                            if (!updated.availableRiders.includes(riderId)) {
-                                updated.availableRiders.push(riderId);
-                            }
-                        });
+                        const shouldAutoIncludeGroupRiders = updated.attendanceInitialized !== true && updated.availableRiders.length === 0;
+                        if (shouldAutoIncludeGroupRiders) {
+                            group.riders.forEach(riderId => {
+                                if (!updated.availableRiders.includes(riderId)) {
+                                    updated.availableRiders.push(riderId);
+                                }
+                            });
+                        }
                     }
 
                     updated.groups.push(group);
@@ -3854,6 +4076,8 @@
                     // Don't block logout if backup fails
                 }
                 
+                await releaseAdminEditLock();
+                
                 // Check if we're using Supabase auth
                 if (typeof signOut === 'function') {
                     await signOut();
@@ -3937,6 +4161,7 @@
                         // Add a small delay to ensure RLS policies have the role
                         await new Promise(resolve => setTimeout(resolve, 300));
                         await loadApplicationData();
+                        await initAdminEditLock();
                     } else {
                         // Wait a bit and retry
                         retries++;
@@ -3994,6 +4219,106 @@
             });
         }
 
+        function setReadOnlyMode(enabled, lockInfo = null) {
+            isReadOnlyMode = enabled === true;
+            window.isReadOnlyMode = isReadOnlyMode;
+            readOnlyLockInfo = lockInfo || null;
+            readOnlyNoticeShown = false;
+            const banner = document.getElementById('read-only-banner');
+            if (banner) {
+                if (isReadOnlyMode) {
+                    const name = lockInfo?.user_name || lockInfo?.email || 'another admin';
+                    banner.textContent = `Read-only mode: ${name} is currently logged in with editing access.`;
+                    banner.style.display = 'block';
+                } else {
+                    banner.style.display = 'none';
+                }
+            }
+        }
+
+        function isReadOnlyInteractionAllowed(target) {
+            if (!target) return false;
+            if (target.closest('.tab')) return true;
+            if (target.closest('.mobile-menu-item')) return true;
+            if (target.closest('.mobile-menu-button')) return true;
+            if (target.closest('#practice-reporting-prev, #practice-reporting-next')) return true;
+            if (target.closest('#prior-practice-btn, #next-practice-btn')) return true;
+            if (target.closest('[data-readonly-allow="true"]')) return true;
+            return false;
+        }
+
+        function handleReadOnlyInteraction(event) {
+            if (!isReadOnlyMode) return;
+            const target = event.target;
+            const actionable = target.closest('button, input, select, textarea, a, [onclick], [draggable="true"]');
+            if (!actionable) return;
+            if (isReadOnlyInteractionAllowed(actionable)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (!readOnlyNoticeShown) {
+                const name = readOnlyLockInfo?.user_name || readOnlyLockInfo?.email || 'another admin';
+                alert(`Read-only mode: ${name} is currently logged in with editing access.`);
+                readOnlyNoticeShown = true;
+            }
+        }
+
+        document.addEventListener('click', handleReadOnlyInteraction, true);
+        document.addEventListener('change', handleReadOnlyInteraction, true);
+        document.addEventListener('input', handleReadOnlyInteraction, true);
+        document.addEventListener('dragstart', handleReadOnlyInteraction, true);
+
+        async function initAdminEditLock() {
+            if (!isCoach()) return;
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            if (!currentUser) return;
+            if (typeof getAdminEditLock !== 'function' || typeof upsertAdminEditLock !== 'function') {
+                return;
+            }
+            try {
+                const lock = await getAdminEditLock();
+                const now = new Date();
+                const lockUpdatedAt = lock?.updated_at ? new Date(lock.updated_at) : null;
+                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < 2 * 60 * 1000;
+                if (lockFresh && lock.user_id && lock.user_id !== currentUser.id) {
+                    setReadOnlyMode(true, lock);
+                    const name = lock.user_name || lock.email || 'another admin';
+                    alert(`Read-only mode enabled. ${name} is currently logged in with editing access.`);
+                    return;
+                }
+
+                await upsertAdminEditLock({
+                    user_id: currentUser.id,
+                    email: currentUser.email || null,
+                    user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin'
+                });
+                setReadOnlyMode(false, null);
+
+                if (adminEditLockInterval) {
+                    clearInterval(adminEditLockInterval);
+                }
+                adminEditLockInterval = setInterval(async () => {
+                    if (isReadOnlyMode) return;
+                    await upsertAdminEditLock({
+                        user_id: currentUser.id,
+                        email: currentUser.email || null,
+                        user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin'
+                    });
+                }, 60 * 1000);
+            } catch (error) {
+                console.warn('Failed to initialize admin edit lock:', error);
+            }
+        }
+
+        async function releaseAdminEditLock() {
+            if (adminEditLockInterval) {
+                clearInterval(adminEditLockInterval);
+                adminEditLockInterval = null;
+            }
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            if (!currentUser || typeof clearAdminEditLock !== 'function') return;
+            await clearAdminEditLock(currentUser.id);
+        }
+
         // Old loadApplicationData function removed - use async version below
 
 
@@ -4020,6 +4345,23 @@
                 // Fallback: if auth not available, use localStorage mode
                 await loadApplicationData();
             }
+
+            setupAutoLogoutOnClose();
+        }
+
+        function setupAutoLogoutOnClose() {
+            const handleClose = () => {
+                try {
+                    releaseAdminEditLock();
+                    if (typeof signOut === 'function') {
+                        signOut();
+                    }
+                } catch (error) {
+                    console.warn('Auto-logout on close failed:', error);
+                }
+            };
+            window.addEventListener('beforeunload', handleClose);
+            window.addEventListener('pagehide', handleClose);
         }
         
         function enableRiderViewMode() {
@@ -4497,7 +4839,9 @@
                 practices: normalizedPractices,
                 // Preserve scale settings and other fields
                 fitnessScale: data.seasonSettings.fitnessScale !== undefined ? data.seasonSettings.fitnessScale : 5,
-                skillsScale: data.seasonSettings.skillsScale !== undefined ? data.seasonSettings.skillsScale : 3
+                skillsScale: data.seasonSettings.skillsScale !== undefined ? data.seasonSettings.skillsScale : 3,
+                paceScaleOrder: normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder),
+                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings.groupPaceOrder)
             };
             
             // Preserve any other fields from the original seasonSettings (like Google Sheet URLs, etc.)
@@ -4567,6 +4911,10 @@
         }
 
         async function saveData() {
+            if (isReadOnlyMode) {
+                console.warn('Read-only mode: saveData blocked.');
+                return;
+            }
             // Check if user is authenticated - only save to Supabase for authenticated users
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
@@ -4588,6 +4936,9 @@
                                 practices: data.seasonSettings.practices || [],
                                 fitnessScale: data.seasonSettings.fitnessScale !== undefined ? data.seasonSettings.fitnessScale : 5,
                                 skillsScale: data.seasonSettings.skillsScale !== undefined ? data.seasonSettings.skillsScale : 3,
+                                paceScaleOrder: normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder),
+                                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings.groupPaceOrder),
+                                csvFieldMappings: data.seasonSettings.csvFieldMappings || {},
                                 coachRoles: Array.isArray(data.coachRoles) ? data.coachRoles : [],
                                 riderRoles: Array.isArray(data.riderRoles) ? data.riderRoles : [],
                                 timeEstimationSettings: data.timeEstimationSettings || {
@@ -4599,7 +4950,7 @@
                                     lengthAdjustmentFactor: 0.1
                                 }
                             };
-                            console.log('Saving season settings to Supabase:', { fitnessScale: seasonData.fitnessScale, skillsScale: seasonData.skillsScale });
+                            console.log('Saving season settings to Supabase:', { fitnessScale: seasonData.fitnessScale, skillsScale: seasonData.skillsScale, paceScaleOrder: seasonData.paceScaleOrder, groupPaceOrder: seasonData.groupPaceOrder });
                             const result = await updateSeasonSettings(seasonData);
                             console.log('Season settings saved to Supabase, returned:', { fitnessScale: result.fitnessScale, skillsScale: result.skillsScale });
                         } catch (error) {
@@ -4777,6 +5128,8 @@
                     console.log('Season settings from Supabase:', { 
                         fitnessScale: seasonSettings.fitnessScale, 
                         skillsScale: seasonSettings.skillsScale,
+                        paceScaleOrder: seasonSettings.paceScaleOrder,
+                        groupPaceOrder: seasonSettings.groupPaceOrder,
                         hasFitnessScale: 'fitnessScale' in seasonSettings,
                         hasSkillsScale: 'skillsScale' in seasonSettings
                     });
@@ -4789,7 +5142,10 @@
                         endDate: endDate,
                         practices: seasonSettings.practices || [],
                         fitnessScale: seasonSettings.fitnessScale !== undefined && seasonSettings.fitnessScale !== null ? seasonSettings.fitnessScale : 5,
-                        skillsScale: seasonSettings.skillsScale !== undefined && seasonSettings.skillsScale !== null ? seasonSettings.skillsScale : 3
+                        skillsScale: seasonSettings.skillsScale !== undefined && seasonSettings.skillsScale !== null ? seasonSettings.skillsScale : 3,
+                        paceScaleOrder: seasonSettings.paceScaleOrder || 'fastest_to_slowest',
+                        groupPaceOrder: seasonSettings.groupPaceOrder || 'fastest_to_slowest',
+                        csvFieldMappings: seasonSettings.csvFieldMappings || seasonSettings.csv_field_mappings || {}
                     };
                     
                     // Load coachRoles and riderRoles from season settings
@@ -4803,7 +5159,7 @@
                     } else {
                         data.riderRoles = [];
                     }
-                    console.log('Mapped season settings:', { fitnessScale: data.seasonSettings.fitnessScale, skillsScale: data.seasonSettings.skillsScale });
+                    console.log('Mapped season settings:', { fitnessScale: data.seasonSettings.fitnessScale, skillsScale: data.seasonSettings.skillsScale, paceScaleOrder: data.seasonSettings.paceScaleOrder, groupPaceOrder: data.seasonSettings.groupPaceOrder });
                     
                     // Map timeEstimationSettings from seasonSettings
                     if (seasonSettings.timeEstimationSettings) {
@@ -4827,7 +5183,9 @@
                         endDate: '',
                         practices: [],
                         fitnessScale: 5,  // Default for first-time users
-                        skillsScale: 3    // Default for first-time users
+                        skillsScale: 3,   // Default for first-time users
+                        paceScaleOrder: 'fastest_to_slowest',
+                        groupPaceOrder: 'fastest_to_slowest'
                     };
                     // Initialize timeEstimationSettings with defaults if no season settings
                     data.timeEstimationSettings = {
@@ -5019,6 +5377,10 @@
 
         // Save rider to database or localStorage
         async function saveRiderToDB(riderData) {
+            if (isReadOnlyMode) {
+                console.warn('Read-only mode: saveRiderToDB blocked.');
+                return;
+            }
             // Check if database functions are available and user is authenticated
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
@@ -5050,7 +5412,7 @@
                         }
                     } else {
                         // Create new
-                        const created = await createRider(dbData);
+                        const created = await createRider(riderData);
                         // Merge with local extra fields and add to local data
                         const newRider = { ...riderData, ...created };
                         data.riders.push(newRider);
@@ -5089,6 +5451,10 @@
 
         // Save coach to database or localStorage
         async function saveCoachToDB(coachData) {
+            if (isReadOnlyMode) {
+                console.warn('Read-only mode: saveCoachToDB blocked.');
+                return;
+            }
             // Check if database functions are available and user is authenticated
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
@@ -5110,7 +5476,7 @@
                     
                     if (coachData.id && data.coaches.find(c => c.id === coachData.id)) {
                         // Update existing
-                        const updated = await updateCoach(coachData.id, dbData);
+                        const updated = await updateCoach(coachData.id, coachData);
                         // Update local data
                         const index = data.coaches.findIndex(c => c.id === coachData.id);
                         if (index !== -1) {
@@ -5119,7 +5485,7 @@
                         }
                     } else {
                         // Create new
-                        const created = await createCoach(dbData);
+                        const created = await createCoach(coachData);
                         // Merge with local extra fields and add to local data
                         const newCoach = { ...coachData, ...created };
                         data.coaches.push(newCoach);
@@ -5169,6 +5535,10 @@
 
         // Save ride to database or localStorage
         async function saveRideToDB(rideData) {
+            if (isReadOnlyMode) {
+                console.warn('Read-only mode: saveRideToDB blocked.');
+                return;
+            }
             // STEP 1: Always update local data immediately (synchronous)
             // This ensures data is available even if navigation happens before async save completes
             if (rideData.id && data.rides.find(r => r.id === rideData.id)) {
@@ -5397,6 +5767,8 @@
                 renderRideAssignments();
             } else if (tabName === 'coach-assignments') {
                 renderCoachAssignments();
+            } else if (tabName === 'practice-reporting') {
+                renderPracticeReporting();
             } else if (tabName === 'routes') {
                 // Routes tab doesn't need any special rendering
             }
@@ -5443,6 +5815,7 @@
                 'rides': 'Practice Planner',
                 'assignments': 'Rider Assignments',
                 'coach-assignments': 'Coach Assignments',
+                'practice-reporting': 'Reporting',
                 'routes': 'Routes'
             };
             return labels[tabName] || tabName;
@@ -6146,21 +6519,24 @@
             
             // Clear existing options
             racingGroupSelect.innerHTML = '';
-            
-            if (!gender) {
-                racingGroupSelect.disabled = true;
-                racingGroupSelect.value = '';
-                racingGroupSelect.innerHTML = '<option value="">Select Gender First</option>';
-                return;
-            }
-            
-            // Enable the dropdown
             racingGroupSelect.disabled = false;
             
-            // Set options based on gender
-            const options = gender === 'M' 
-                ? ['Freshman Boys', 'JV2 Boys', 'JV1 Boys', 'Varsity Boys']
-                : ['Freshman Girls', 'JV2 Girls', 'JV1 Girls', 'Varsity Girls'];
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select Racing Group';
+            racingGroupSelect.appendChild(placeholder);
+            
+            // Set options based on gender (or all if gender unknown)
+            const options = gender === 'M'
+                ? ['Varsity Boys', 'JV1 Boys', 'JV2 Boys', 'Freshman Boys']
+                : gender === 'F'
+                    ? ['Varsity Girls', 'JV1 Girls', 'JV2 Girls', 'Freshman Girls']
+                    : [
+                        'Varsity Boys', 'Varsity Girls',
+                        'JV1 Boys', 'JV1 Girls',
+                        'JV2 Boys', 'JV2 Girls',
+                        'Freshman Boys', 'Freshman Girls'
+                    ];
             
             options.forEach(option => {
                 const opt = document.createElement('option');
@@ -6176,6 +6552,37 @@
                 // Clear selection if it's not valid for the new gender
                 racingGroupSelect.value = '';
             }
+        }
+
+        function normalizeGenderValue(raw) {
+            const value = (raw || '').toString().trim().toLowerCase();
+            if (!value) return '';
+            if (value === 'm' || value === 'male' || value === 'man' || value === 'men' || value === 'boy' || value === 'boys') return 'M';
+            if (value === 'f' || value === 'female' || value === 'woman' || value === 'women' || value === 'girl' || value === 'girls') return 'F';
+            if (value === 'nb' || value === 'nonbinary' || value === 'non-binary' || value === 'non binary') return 'NB';
+            return value.toUpperCase();
+        }
+
+        function hasMedicalCondition(value) {
+            const raw = (value || '').toString().trim();
+            if (!raw) return false;
+            const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!normalized) return false;
+            const emptyValues = new Set(['no', 'none', 'na', 'n/a', 'nil', 'false', '0']);
+            return !emptyValues.has(normalized);
+        }
+
+        function getMedicalIconHtml(noteValue) {
+            if (!hasMedicalCondition(noteValue)) return '';
+            const title = escapeHtml(noteValue);
+            return `
+                <span title="${title}" aria-label="Medical or allergy info" style="display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; flex-shrink: 0;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="#1976D2" d="M12 2l7 3v6c0 5.25-3.5 9.92-7 11-3.5-1.08-7-5.75-7-11V5l7-3z"/>
+                        <path fill="#fff" d="M11 7h2v4h4v2h-4v4h-2v-4H7v-2h4z"/>
+                    </svg>
+                </span>
+            `;
         }
 
         function updateDefaultPhoto() {
@@ -6319,10 +6726,18 @@
             } else {
                 maxValue = 10; // fallback
             }
-            
+
+            let increaseDelta = 1;
+            let decreaseDelta = -1;
+            if (badgeType === 'pace') {
+                const paceOrder = getPaceScaleOrder();
+                increaseDelta = paceOrder === 'fastest_to_slowest' ? -1 : 1;
+                decreaseDelta = -increaseDelta;
+            }
+
             // Check if we're at min or max to conditionally show options
-            const canDecrease = currentValue > minValue;
-            const canIncrease = currentValue < maxValue;
+            const canIncrease = currentValue + increaseDelta >= minValue && currentValue + increaseDelta <= maxValue;
+            const canDecrease = currentValue + decreaseDelta >= minValue && currentValue + decreaseDelta <= maxValue;
             
             // Store context menu data
             badgeContextMenuData = {
@@ -6331,7 +6746,9 @@
                 badgeType: badgeType, // 'pace' or 'skills'
                 currentValue: currentValue,
                 minValue: minValue,
-                maxValue: maxValue
+                maxValue: maxValue,
+                increaseDelta: increaseDelta,
+                decreaseDelta: decreaseDelta
             };
             
             const contextMenu = document.getElementById('badge-context-menu');
@@ -6342,9 +6759,11 @@
             const decreaseBtn = document.getElementById('badge-decrease-btn');
             if (increaseBtn) {
                 increaseBtn.style.display = canIncrease ? 'block' : 'none';
+                increaseBtn.textContent = badgeType === 'pace' ? 'Faster' : 'Increase';
             }
             if (decreaseBtn) {
                 decreaseBtn.style.display = canDecrease ? 'block' : 'none';
+                decreaseBtn.textContent = badgeType === 'pace' ? 'Slower' : 'Decrease';
                 // Remove border-bottom from decrease if increase is hidden
                 if (!canIncrease && decreaseBtn) {
                     decreaseBtn.style.borderBottom = 'none';
@@ -6465,8 +6884,8 @@
         async function handleBadgeAdjust(direction) {
             if (!badgeContextMenuData) return;
             
-            const { type, id, badgeType } = badgeContextMenuData;
-            const delta = direction === 'increase' ? 1 : -1;
+            const { type, id, badgeType, increaseDelta, decreaseDelta } = badgeContextMenuData;
+            const delta = direction === 'increase' ? (increaseDelta ?? 1) : (decreaseDelta ?? -1);
             
             // Close the menu
             const contextMenu = document.getElementById('badge-context-menu');
@@ -6994,10 +7413,10 @@
 
         function getRacingGroupSortValue(racingGroup) {
             const groupOrder = {
-                'Freshman Boys': 1, 'Freshman Girls': 1,
-                'JV2 Boys': 2, 'JV2 Girls': 2,
-                'JV1 Boys': 3, 'JV1 Girls': 3,
-                'Varsity Boys': 4, 'Varsity Girls': 4
+                'Varsity Boys': 1, 'Varsity Girls': 2,
+                'JV1 Boys': 3, 'JV1 Girls': 4,
+                'JV2 Boys': 5, 'JV2 Girls': 6,
+                'Freshman Boys': 7, 'Freshman Girls': 8
             };
             return groupOrder[racingGroup] || 99;
         }
@@ -7241,8 +7660,10 @@
                                 const riderNameDisplay = riderRole 
                                     ? `${escapeHtml(rider.name || '')} <span style="font-style: italic; color: #666; margin-left: 8px; font-weight: normal;">${escapeHtml(riderRole)}</span>`
                                     : escapeHtml(rider.name || '');
+                                const medicalIcon = getMedicalIconHtml(rider.allergiesOrMedicalNeeds || rider.medicalNotes || '');
                                 return `<div class="roster-cell roster-name" data-label="Name">
                                     ${riderNameDisplay}
+                                    ${medicalIcon}
                                     ${rider.phone ? `<a href="${formatPhoneForTel(rider.phone)}" class="roster-phone-icon" title="Call ${formatPhoneForDisplay(rider.phone)}" aria-label="Call ${formatPhoneForDisplay(rider.phone)}">📞</a>` : ''}
                                 </div>`;
                             case 'phone':
@@ -8955,6 +9376,7 @@
                     return;
                 }
                 
+                const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
                 const users = await getAllUsersWithLoginInfo();
                 
                 if (!users || users.length === 0) {
@@ -8983,10 +9405,11 @@
                     html += `<td style="padding: 8px;">${escapeHtml(user.role || 'N/A')}</td>`;
                     const regDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
                     html += `<td style="padding: 8px;">${regDate}</td>`;
+                    const isCurrentUser = currentUser && user.id === currentUser.id;
                     const actionButton = user.role === 'coach-admin'
                         ? (isDisabled
                             ? `<button class="btn-small secondary" onclick="enableAdmin('${user.id}')">Enable Admin</button>`
-                            : `<button class="btn-small danger" onclick="disableAdmin('${user.id}', '${escapeHtml(user.email || '')}')">Disable Admin</button>`)
+                            : (isCurrentUser ? '' : `<button class="btn-small danger" onclick="disableAdmin('${user.id}', '${escapeHtml(user.email || '')}')">Disable Admin</button>`))
                         : '';
                     html += `<td style="padding: 8px;">${actionButton}</td>`;
                     html += '</tr>';
@@ -10781,7 +11204,9 @@
                 endDate: endDateValue || '',
                 practices: practicesData,
                 fitnessScale: fitnessScale,
-                skillsScale: skillsScale
+                skillsScale: skillsScale,
+                paceScaleOrder: normalizePaceScaleOrder(paceScaleOrderInput?.value || data.seasonSettings?.paceScaleOrder),
+                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder)
             };
             
             // Convert existing data if scales changed
@@ -12667,12 +13092,14 @@
             console.log('Looking for csvFieldMappings:', data.seasonSettings?.csvFieldMappings);
             console.log('Saved mapping for', type, ':', savedMapping);
             
-            // Set name format radio button if saved (but only if user hasn't already selected one)
+            // Set name format radio button if saved
             const nameFormatRadio = document.getElementById(savedNameFormat === 'single' ? 'name-format-single' : 'name-format-split');
             const otherRadio = document.getElementById(savedNameFormat === 'single' ? 'name-format-split' : 'name-format-single');
-            // Only set if neither is already checked (preserves user's current selection during rebuild)
-            if (nameFormatRadio && !nameFormatRadio.checked && !otherRadio?.checked) {
+            if (savedMapping && nameFormatRadio) {
                 nameFormatRadio.checked = true;
+                if (otherRadio) {
+                    otherRadio.checked = false;
+                }
             }
             
             // Clear container and reset additional fields counter
@@ -13175,11 +13602,7 @@
                     }
 
                     // Get gender and determine default photo
-                    const genderRaw = getValueFromMapping(row, 'gender', mapping).toUpperCase();
-                    let gender = '';
-                    if (genderRaw === 'M' || genderRaw === 'MALE') gender = 'M';
-                    else if (genderRaw === 'F' || genderRaw === 'FEMALE') gender = 'F';
-                    else if (genderRaw === 'NB' || genderRaw === 'NONBINARY' || genderRaw === 'NON-BINARY') gender = 'NB';
+                    const gender = normalizeGenderValue(getValueFromMapping(row, 'gender', mapping));
 
                     let defaultPhoto = '';
                     if (!gender) {
@@ -13321,11 +13744,7 @@
                     }
 
                     // Get gender and determine default photo (same as riders)
-                    const genderRaw = enabledFields.gender ? getValueFromMapping(row, 'gender', mapping).toUpperCase() : '';
-                    let gender = '';
-                    if (genderRaw === 'M' || genderRaw === 'MALE') gender = 'M';
-                    else if (genderRaw === 'F' || genderRaw === 'FEMALE') gender = 'F';
-                    else if (genderRaw === 'NB' || genderRaw === 'NONBINARY' || genderRaw === 'NON-BINARY') gender = 'NB';
+                    const gender = enabledFields.gender ? normalizeGenderValue(getValueFromMapping(row, 'gender', mapping)) : '';
 
                     let defaultPhoto = '';
                     if (!gender) {
@@ -13429,7 +13848,11 @@
                 // Helper function to get value from CSV row using custom mapping
                 const getValue = (row, fieldName) => {
                     if (!enabledFields[fieldName]) return '';
-                    return getValueFromMapping(row, fieldName, mapping);
+                    const value = getValueFromMapping(row, fieldName, mapping);
+                    if (fieldName === 'gender') {
+                        return normalizeGenderValue(value);
+                    }
+                    return value;
                 };
 
                 const getPhoneValue = (row, fieldName) => {
@@ -13496,8 +13919,11 @@
                 // Fields that should NOT be updated from CSV (preserve existing values)
                 const preserveFields = ['fitness', 'skills', 'notes', 'photo', 'id', 'racingGroup'];
 
+                const originalRiders = Array.isArray(data.riders) ? [...data.riders] : [];
+                
                 // Update existing riders and track which ones were found in CSV
                 const updatedRiders = [];
+                const addedRiders = [];
                 const csvKeysFound = new Set();
                 let removedCount = 0;
                 let updatedCount = 0;
@@ -13529,6 +13955,8 @@
                                     newValue = getPhoneValue(csvRow, fieldKey);
                                 } else if (fieldKey === 'grade') {
                                     newValue = normalizeGradeValue(getValue(csvRow, fieldKey));
+                                } else if (fieldKey === 'gender') {
+                                    newValue = normalizeGenderValue(getValue(csvRow, fieldKey));
                                 } else {
                                     newValue = getValue(csvRow, fieldKey);
                                 }
@@ -13565,11 +13993,7 @@
                         const name = `${firstName} ${lastName}`.trim();
 
                         // Get gender and determine default photo
-                        const genderRaw = getValue(csvRow, 'gender').toUpperCase();
-                        let gender = '';
-                        if (genderRaw === 'M' || genderRaw === 'MALE') gender = 'M';
-                        else if (genderRaw === 'F' || genderRaw === 'FEMALE') gender = 'F';
-                        else if (genderRaw === 'NB' || genderRaw === 'NONBINARY' || genderRaw === 'NON-BINARY') gender = 'NB';
+                        const gender = normalizeGenderValue(getValue(csvRow, 'gender'));
 
                         let defaultPhoto = '';
                         if (!gender) {
@@ -13627,6 +14051,7 @@
                         });
                         
                         updatedRiders.push(newRider);
+                        addedRiders.push(newRider);
                     }
                 }
                 
@@ -13655,6 +14080,8 @@
                 // Update data
                 data.riders = updatedRiders;
                 saveData();
+                
+                await syncRidersToSupabase(originalRiders, updatedRiders, addedRiders);
                 renderRiders();
 
                 // Build alert message
@@ -13769,8 +14196,11 @@
                 // Fields that should NOT be updated from CSV (preserve existing values)
                 const preserveFields = ['fitness', 'notes', 'photo', 'id'];
 
+                const originalCoaches = Array.isArray(data.coaches) ? [...data.coaches] : [];
+                
                 // Update existing coaches and track which ones were found in CSV
                 const updatedCoaches = [];
+                const addedCoaches = [];
                 const csvKeysFound = new Set();
                 let removedCount = 0;
                 let updatedCount = 0;
@@ -13855,11 +14285,7 @@
                         }
 
                         // Get gender and determine default photo (same as riders)
-                        const genderRaw = getValue(csvRow, 'gender').toUpperCase();
-                        let gender = '';
-                        if (genderRaw === 'M' || genderRaw === 'MALE') gender = 'M';
-                        else if (genderRaw === 'F' || genderRaw === 'FEMALE') gender = 'F';
-                        else if (genderRaw === 'NB' || genderRaw === 'NONBINARY' || genderRaw === 'NON-BINARY') gender = 'NB';
+                        const gender = normalizeGenderValue(getValue(csvRow, 'gender'));
 
                         let defaultPhoto = '';
                         if (!gender) {
@@ -13914,6 +14340,7 @@
                         });
                         
                         updatedCoaches.push(newCoach);
+                        addedCoaches.push(newCoach);
                     }
                 }
                 
@@ -13942,6 +14369,8 @@
                 // Update data
                 data.coaches = updatedCoaches;
                 saveData();
+                
+                await syncCoachesToSupabase(originalCoaches, updatedCoaches, addedCoaches);
                 renderCoaches();
 
                 // Build alert message
@@ -13963,6 +14392,217 @@
             } catch (error) {
                 console.error('CSV update error:', error);
                 alert('Error updating from CSV file: ' + (error.message || 'Unknown error'));
+            }
+        }
+
+        async function syncRidersToSupabase(originalRiders, updatedRiders, addedRiders) {
+            const client = getSupabaseClient();
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            const debugEnabled = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
+            if (!client || !currentUser || typeof updateRider === 'undefined' || typeof createRider === 'undefined') {
+                if (debugEnabled) {
+                    console.warn('CSV sync riders skipped - missing auth or database helpers', {
+                        hasClient: !!client,
+                        hasUser: !!currentUser,
+                        hasUpdate: typeof updateRider !== 'undefined',
+                        hasCreate: typeof createRider !== 'undefined'
+                    });
+                }
+                return;
+            }
+            
+            const updatedIdSet = new Set(updatedRiders.map(r => r.id));
+            const addedIdSet = new Set(addedRiders.map(r => r.id));
+            const removedIds = originalRiders
+                .map(r => r.id)
+                .filter(id => !updatedIdSet.has(id));
+            
+            if (debugEnabled) {
+                console.log('CSV sync riders starting', {
+                    total: updatedRiders.length,
+                    added: addedRiders.length,
+                    removed: removedIds.length
+                });
+            }
+            
+            for (const rider of updatedRiders) {
+                const isNew = addedIdSet.has(rider.id);
+                try {
+                    if (isNew) {
+                        const created = await createRider(rider);
+                        const oldId = rider.id;
+                        const index = data.riders.findIndex(r => r.id === oldId);
+                        if (index !== -1) {
+                            data.riders[index] = { ...rider, ...created };
+                        } else {
+                            data.riders.push({ ...rider, ...created });
+                        }
+                        
+                        if (created?.id && created.id !== oldId) {
+                            data.rides.forEach(ride => {
+                                if (Array.isArray(ride.availableRiders)) {
+                                    ride.availableRiders = ride.availableRiders.map(id => (id === oldId ? created.id : id));
+                                }
+                                if (Array.isArray(ride.groups)) {
+                                    ride.groups.forEach(group => {
+                                        if (Array.isArray(group.riders)) {
+                                            group.riders = group.riders.map(id => (id === oldId ? created.id : id));
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    } else {
+                        try {
+                            const updated = await updateRider(rider.id, { ...rider, extra_data: rider });
+                            const index = data.riders.findIndex(r => r.id === rider.id);
+                            if (index !== -1) {
+                                data.riders[index] = { ...rider, ...updated };
+                            }
+                        } catch (error) {
+                            const missingRow = error?.code === 'PGRST116' || (error?.message || '').includes('No rows');
+                            if (missingRow) {
+                                const created = await createRider(rider);
+                                const index = data.riders.findIndex(r => r.id === rider.id);
+                                if (index !== -1) {
+                                    data.riders[index] = { ...rider, ...created };
+                                } else {
+                                    data.riders.push({ ...rider, ...created });
+                                }
+                            } else {
+                                throw error;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    showSaveError(
+                        'Failed to Save Rider',
+                        `An error occurred while saving ${rider.name || 'a rider'}.`,
+                        error
+                    );
+                }
+            }
+            
+            if (typeof deleteRiderFromDB === 'function') {
+                for (const id of removedIds) {
+                    try {
+                        await deleteRiderFromDB(id);
+                    } catch (error) {
+                        showSaveError(
+                            'Failed to Delete Rider',
+                            `An error occurred while deleting rider ID ${id}.`,
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        async function syncCoachesToSupabase(originalCoaches, updatedCoaches, addedCoaches) {
+            const client = getSupabaseClient();
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            const debugEnabled = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
+            if (!client || !currentUser || typeof updateCoach === 'undefined' || typeof createCoach === 'undefined') {
+                if (debugEnabled) {
+                    console.warn('CSV sync coaches skipped - missing auth or database helpers', {
+                        hasClient: !!client,
+                        hasUser: !!currentUser,
+                        hasUpdate: typeof updateCoach !== 'undefined',
+                        hasCreate: typeof createCoach !== 'undefined'
+                    });
+                }
+                return;
+            }
+            
+            const updatedIdSet = new Set(updatedCoaches.map(c => c.id));
+            const addedIdSet = new Set(addedCoaches.map(c => c.id));
+            const removedIds = originalCoaches
+                .map(c => c.id)
+                .filter(id => !updatedIdSet.has(id));
+            
+            if (debugEnabled) {
+                console.log('CSV sync coaches starting', {
+                    total: updatedCoaches.length,
+                    added: addedCoaches.length,
+                    removed: removedIds.length
+                });
+            }
+            
+            for (const coach of updatedCoaches) {
+                const isNew = addedIdSet.has(coach.id);
+                try {
+                    if (isNew) {
+                        const created = await createCoach(coach);
+                        const oldId = coach.id;
+                        const index = data.coaches.findIndex(c => c.id === oldId);
+                        if (index !== -1) {
+                            data.coaches[index] = { ...coach, ...created };
+                        } else {
+                            data.coaches.push({ ...coach, ...created });
+                        }
+                        
+                        if (created?.id && created.id !== oldId) {
+                            data.rides.forEach(ride => {
+                                if (Array.isArray(ride.availableCoaches)) {
+                                    ride.availableCoaches = ride.availableCoaches.map(id => (id === oldId ? created.id : id));
+                                }
+                                if (Array.isArray(ride.groups)) {
+                                    ride.groups.forEach(group => {
+                                        if (group.coaches) {
+                                            if (group.coaches.leader === oldId) group.coaches.leader = created.id;
+                                            if (group.coaches.sweep === oldId) group.coaches.sweep = created.id;
+                                            if (group.coaches.roam === oldId) group.coaches.roam = created.id;
+                                            if (Array.isArray(group.coaches.extraRoam)) {
+                                                group.coaches.extraRoam = group.coaches.extraRoam.map(id => (id === oldId ? created.id : id));
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    } else {
+                        try {
+                            const updated = await updateCoach(coach.id, { ...coach, extra_data: coach });
+                            const index = data.coaches.findIndex(c => c.id === coach.id);
+                            if (index !== -1) {
+                                data.coaches[index] = { ...coach, ...updated };
+                            }
+                        } catch (error) {
+                            const missingRow = error?.code === 'PGRST116' || (error?.message || '').includes('No rows');
+                            if (missingRow) {
+                                const created = await createCoach(coach);
+                                const index = data.coaches.findIndex(c => c.id === coach.id);
+                                if (index !== -1) {
+                                    data.coaches[index] = { ...coach, ...created };
+                                } else {
+                                    data.coaches.push({ ...coach, ...created });
+                                }
+                            } else {
+                                throw error;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    showSaveError(
+                        'Failed to Save Coach',
+                        `An error occurred while saving ${coach.name || 'a coach'}.`,
+                        error
+                    );
+                }
+            }
+            
+            if (typeof deleteCoachFromDB === 'function') {
+                for (const id of removedIds) {
+                    try {
+                        await deleteCoachFromDB(id);
+                    } catch (error) {
+                        showSaveError(
+                            'Failed to Delete Coach',
+                            `An error occurred while deleting coach ID ${id}.`,
+                            error
+                        );
+                    }
+                }
             }
         }
 
@@ -17093,6 +17733,9 @@
                 return;
             }
             
+            // Ensure default attendance selection for this practice
+            ensureRideAttendanceDefaults(ride);
+            
             document.getElementById('current-ride').style.display = 'block';
             const rideDate = parseISODate(ride.date);
             const dateDisplay = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ride.date;
@@ -17869,7 +18512,9 @@
                 const sortedRiders = [...availableRiders].sort((a, b) => {
                     const aFitness = parseInt(a.fitness || '5', 10);
                     const bFitness = parseInt(b.fitness || '5', 10);
-                    return bFitness - aFitness; // Fastest first
+                    const aRelative = getRelativePaceValue(aFitness);
+                    const bRelative = getRelativePaceValue(bFitness);
+                    return bRelative - aRelative; // Fastest first (relative to pace sorting)
                 });
 
                 debugLines.push('Riders ranked by pace (fastest to slowest):');
@@ -20019,17 +20664,15 @@
             // Update publish/unpublish button visibility
             updatePublishButtons();
 
-            // Sort groups by fitness (descending) so Group 1 is fastest
-            ride.groups.sort((a, b) => {
-                const fitnessA = getGroupFitnessScore(a);
-                const fitnessB = getGroupFitnessScore(b);
-                if (fitnessB !== fitnessA) return fitnessB - fitnessA;
-                // If fitness is equal, sort by size (larger first)
-                const sizeDiff = b.riders.length - a.riders.length;
-                if (sizeDiff !== 0) return sizeDiff;
-                // If size is also equal, maintain original order (stable sort by ID)
-                return a.id - b.id;
-            });
+            const groupPaceOrder = getGroupPaceOrderForRide(ride);
+            ride.groupPaceOrder = groupPaceOrder;
+            const groupPaceSelect = document.getElementById('group-pace-order');
+            if (groupPaceSelect) {
+                groupPaceSelect.value = groupPaceOrder;
+            }
+
+            // Sort groups by fitness based on pace order setting
+            ride.groups.sort(getGroupPaceComparator(ride));
             
             renumberGroups(ride);
 
@@ -20077,7 +20720,9 @@
                     if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1;
                     
                     if (unassignedRidersSort === 'pace') {
-                        if (b.fitness !== a.fitness) return b.fitness - a.fitness;
+                        const aPace = getRelativePaceValue(a.fitness);
+                        const bPace = getRelativePaceValue(b.fitness);
+                        if (bPace !== aPace) return bPace - aPace;
                         return a.lastName.localeCompare(b.lastName);
                     } else if (unassignedRidersSort === 'skills') {
                         if (b.skills !== a.skills) return b.skills - a.skills;
@@ -20198,8 +20843,8 @@
                     .filter(Boolean)
                     .sort((a, b) => {
                         if (sortBy === 'pace') {
-                            const aPace = parseInt(a.fitness || '5', 10);
-                            const bPace = parseInt(b.fitness || '5', 10);
+                            const aPace = getRelativePaceValue(parseInt(a.fitness || '5', 10));
+                            const bPace = getRelativePaceValue(parseInt(b.fitness || '5', 10));
                             if (bPace !== aPace) return bPace - aPace; // Descending (fastest first)
                             // If pace is equal, sort by name
                             return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || ''));
@@ -20241,12 +20886,7 @@
                     });
 
                 // Get groups sorted by fitness to determine if we can move up/down
-                const sortedGroups = ride.groups.slice().sort((a, b) => {
-                    const fitnessA = getGroupFitnessScore(a);
-                    const fitnessB = getGroupFitnessScore(b);
-                    if (fitnessB !== fitnessA) return fitnessB - fitnessA;
-                    return b.riders.length - a.riders.length;
-                });
+                const sortedGroups = ride.groups.slice().sort(getGroupPaceComparator(ride));
                 const currentGroupIndex = sortedGroups.findIndex(g => g.id === group.id);
                 const canMoveUp = currentGroupIndex > 0;
                 const canMoveDown = currentGroupIndex >= 0 && currentGroupIndex < sortedGroups.length - 1;
@@ -20395,59 +21035,81 @@
                 }).map(renderGroupCard).join('')
                 : renderEmptyGroupCard();
 
-            // Render unassigned new attendees if they exist
+            // Render unassigned attendees (available but not assigned)
             let newAttendeesHtml = '';
-            if (ride.newAttendees && (ride.newAttendees.coaches.length > 0 || ride.newAttendees.riders.length > 0)) {
-                const newCoaches = ride.newAttendees.coaches.map(id => getCoachById(id)).filter(Boolean);
-                const newRiders = ride.newAttendees.riders.map(id => getRiderById(id)).filter(Boolean);
+            const assignedRiderIds = new Set(Object.keys(riderAssignmentMap).map(id => parseInt(id, 10)).filter(id => Number.isFinite(id)));
+            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            const availableRiderIds = new Set((ride.availableRiders || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            
+            const unassignedAvailableCoaches = (data.coaches || [])
+                .filter(coach => {
+                    const coachId = typeof coach.id === 'string' ? parseInt(coach.id, 10) : coach.id;
+                    return Number.isFinite(coachId) && availableCoachIds.has(coachId);
+                })
+                .filter(coach => {
+                    const coachId = typeof coach.id === 'string' ? parseInt(coach.id, 10) : coach.id;
+                    return Number.isFinite(coachId) && !assignedCoachIds.has(coachId);
+                })
+                .filter(coach => {
+                    const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
+                    const levelVal = String(levelRaw).toUpperCase();
+                    return levelVal !== 'N/A' && levelVal !== 'NA' && levelVal !== 'NULL' && levelVal !== 'UNDEFINED';
+                });
+            const unassignedAvailableRiders = (data.riders || [])
+                .filter(rider => {
+                    const riderId = typeof rider.id === 'string' ? parseInt(rider.id, 10) : rider.id;
+                    return Number.isFinite(riderId) && availableRiderIds.has(riderId);
+                })
+                .filter(rider => {
+                    const riderId = typeof rider.id === 'string' ? parseInt(rider.id, 10) : rider.id;
+                    return Number.isFinite(riderId) && !assignedRiderIds.has(riderId);
+                });
+            
+            const hasUnassigned = unassignedAvailableCoaches.length > 0 || unassignedAvailableRiders.length > 0;
+            const shouldShowUnassignedPalette = ride.groups.length > 0 && (
+                unassignedPaletteVisibility === 'show' ||
+                (unassignedPaletteVisibility !== 'hide' && hasUnassigned)
+            );
+            if (shouldShowUnassignedPalette) {
+                const coachesHtml = unassignedAvailableCoaches.map(coach => 
+                    renderCoachCardHtml(coach, null, 'unassigned', {
+                        draggable: true,
+                        showAttendance: true,
+                        isAvailable: true,
+                        compact: true
+                    })
+                ).join('');
                 
-                // Filter out coaches/riders that are already assigned
-                const assignedCoachIds = new Set(Object.keys(coachAssignmentMap).map(id => parseInt(id, 10)));
-                const assignedRiderIds = new Set(Object.keys(riderAssignmentMap).map(id => parseInt(id, 10)));
+                const ridersHtml = unassignedAvailableRiders.map(rider => 
+                    renderRiderCardHtml(rider, {
+                        draggable: true,
+                        showAttendance: true,
+                        isAvailable: true,
+                        compact: true,
+                        noPhoto: false // Show photos to match coach styling
+                    })
+                ).join('');
                 
-                const unassignedNewCoaches = newCoaches.filter(c => !assignedCoachIds.has(c.id));
-                const unassignedNewRiders = newRiders.filter(r => !assignedRiderIds.has(r.id));
-                
-                if (unassignedNewCoaches.length > 0 || unassignedNewRiders.length > 0) {
-                    const coachesHtml = unassignedNewCoaches.map(coach => 
-                        renderCoachCardHtml(coach, null, 'unassigned', {
-                            draggable: true,
-                            showAttendance: true,
-                            isAvailable: true,
-                            compact: true
-                        })
-                    ).join('');
-                    
-                    const ridersHtml = unassignedNewRiders.map(rider => 
-                        renderRiderCardHtml(rider, {
-                            draggable: true,
-                            showAttendance: true,
-                            isAvailable: true,
-                            compact: true,
-                            noPhoto: false // Show photos to match coach styling
-                        })
-                    ).join('');
-                    
-                    newAttendeesHtml = `
-                        <div id="new-attendees-sticky" style="margin-bottom: 20px; padding: 16px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #856404;">New Attendees - Drag to Assign</h3>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                                <div>
-                                    <strong style="display: block; margin-bottom: 8px; color: #856404;">Coaches (${unassignedNewCoaches.length})</strong>
-                                    <div class="rider-drop-list" data-drop-type="coach" data-group-id="unassigned" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; max-height: 300px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
-                                        ${coachesHtml || '<div class="empty-message">No new coaches</div>'}
-                                    </div>
+                newAttendeesHtml = `
+                    <div id="new-attendees-sticky" style="margin-bottom: 20px; padding: 16px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #856404;">Unassigned Attendees - Drag to Assign</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div>
+                                <strong style="display: block; margin-bottom: 8px; color: #856404;">Riders (${unassignedAvailableRiders.length})</strong>
+                                <div class="rider-drop-list" data-drop-type="rider" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                                    ${ridersHtml || '<div class="empty-message">No unassigned riders</div>'}
                                 </div>
-                                <div>
-                                    <strong style="display: block; margin-bottom: 8px; color: #856404;">Riders (${unassignedNewRiders.length})</strong>
-                                    <div class="rider-drop-list" data-drop-type="rider" data-group-id="unassigned" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; max-height: 300px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
-                                        ${ridersHtml || '<div class="empty-message">No new riders</div>'}
-                                    </div>
+                            </div>
+                            <div>
+                                <strong style="display: block; margin-bottom: 8px; color: #856404;">Coaches (${unassignedAvailableCoaches.length})</strong>
+                                <div class="rider-drop-list" data-drop-type="coach" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                                    ${coachesHtml || '<div class="empty-message">No unassigned coaches</div>'}
                                 </div>
                             </div>
                         </div>
-                    `;
-                }
+                        <div class="unassigned-resize-handle" onmousedown="startUnassignedPaletteResize(event)" style="margin-top: 10px; height: 8px; cursor: ns-resize; background: #ffe8a1; border-radius: 4px;"></div>
+                    </div>
+                `;
             }
             
             // Add "Clone Entire Practice" button at bottom if no groups assigned
@@ -20468,6 +21130,7 @@
             `;
 
             container.innerHTML = centerColumnHtml;
+            updateUnassignedPaletteToggleButton(shouldShowUnassignedPalette);
             updateDebugOutput();
             
             // Add event delegation for checkboxes in group riders containers
@@ -20552,6 +21215,30 @@
                 console.log('🔵 Attached event delegation listener to assignments container for group checkboxes');
             }
             
+            // Allow clicking names in assignment cards to toggle attendance checkboxes
+            if (assignmentsContainer) {
+                const existingNameHandler = assignmentsContainer._attendanceNameHandler;
+                if (existingNameHandler) {
+                    assignmentsContainer.removeEventListener('click', existingNameHandler);
+                }
+                
+                const attendanceNameHandler = function handleAssignmentNameClick(e) {
+                    const nameTarget = e.target.closest('.attendance-name');
+                    if (!nameTarget) return;
+                    
+                    const card = nameTarget.closest('.rider-card, .coach-card');
+                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
+                    if (!checkbox) return;
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    checkbox.click();
+                };
+                
+                assignmentsContainer._attendanceNameHandler = attendanceNameHandler;
+                assignmentsContainer.addEventListener('click', attendanceNameHandler);
+            }
+            
             // Update route previews after rendering
             updateRoutePreviews();
             
@@ -20609,6 +21296,35 @@
             }
         }
         
+        function ensureRideAttendanceDefaults(ride) {
+            if (!ride) return;
+            
+            const hasArray = Array.isArray(ride.availableRiders);
+            const hasValues = hasArray && ride.availableRiders.length > 0;
+            const isInitialized = ride.attendanceInitialized === true;
+            
+            if (hasValues) {
+                ride.attendanceInitialized = true;
+                return;
+            }
+            
+            if (isInitialized && hasArray) {
+                return;
+            }
+            
+            const isRefined = isRideRefined(ride);
+            let defaultAvailableRiders = [];
+            if (isRefined) {
+                defaultAvailableRiders = getFilteredRiderIdsForRide(ride);
+            } else {
+                defaultAvailableRiders = (data.riders || []).map(r => r.id);
+            }
+            
+            ride.availableRiders = defaultAvailableRiders;
+            ride.attendanceInitialized = true;
+            saveRideToDB(ride);
+        }
+        
         function renderPracticeAttendanceLists() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) {
@@ -20624,41 +21340,9 @@
                 first10: ride.availableRiders?.slice(0, 10)
             });
             
-            // STEP 1 & 2: For refined rides, select only riders that qualify under the filter
-            // For regular rides, default to all riders selected
+            // Ensure default attendance is set (all riders for regular practices, filtered for refined)
             const isRefined = isRideRefined(ride);
-            const totalRiders = data.riders ? data.riders.length : 0;
-            
-            if (!Array.isArray(ride.availableRiders)) {
-                // Not an array (null, undefined, or invalid) - initialize based on whether refined
-                if (isRefined) {
-                    // STEP 2: For refined rides, select all riders that qualify under the filter
-                    const filteredRiderIds = getFilteredRiderIdsForRide(ride);
-                    console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders is not an array on REFINED ride - initializing with', filteredRiderIds.length, 'filtered riders');
-                    ride.availableRiders = filteredRiderIds;
-                    saveRideToDB(ride);
-                } else if (totalRiders > 0) {
-                    console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders is not an array on regular ride - initializing with all', totalRiders, 'riders');
-                    ride.availableRiders = data.riders.map(r => r.id);
-                    saveRideToDB(ride);
-            } else {
-                    ride.availableRiders = [];
-                }
-            } else if (ride.availableRiders.length === 0) {
-                // Empty array - initialize based on whether refined
-                if (isRefined) {
-                    // STEP 2: For refined rides, select all riders that qualify under the filter
-                    const filteredRiderIds = getFilteredRiderIdsForRide(ride);
-                    console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders is empty on REFINED ride - initializing with', filteredRiderIds.length, 'filtered riders');
-                    ride.availableRiders = filteredRiderIds;
-                    saveRideToDB(ride);
-                } else if (totalRiders > 0) {
-                    // Empty array on NON-refined ride - initialize with all riders
-                    console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders is empty on regular ride - initializing with all', totalRiders, 'riders');
-                    ride.availableRiders = data.riders.map(r => r.id);
-                    saveRideToDB(ride);
-                }
-            }
+            ensureRideAttendanceDefaults(ride);
             
             console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders BEFORE normalization:', {
                 length: ride.availableRiders.length,
@@ -20704,6 +21388,8 @@
             // Get sort preferences
             const ridersSort = ride.practiceRidersSort || 'pace';
             const coachesSort = ride.practiceCoachesSort || 'pace';
+            const ridersSortDirection = ride.practiceRidersSortDirection || 'asc';
+            const coachesSortDirection = ride.practiceCoachesSortDirection || 'asc';
             
             // Process and sort riders (show all riders)
             // Normalize availableRiders IDs for comparison
@@ -20780,52 +21466,49 @@
             
             // Helper function to sort riders by the selected criteria
             const sortRidersByCriteria = (a, b) => {
+                let compare = 0;
                 if (ridersSort === 'assignedGroup') {
                     // Sort by assigned group - unassigned first, then by group label
                     if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
-                        return a.assignedGroupId !== null ? 1 : -1; // Unassigned first
+                        compare = a.assignedGroupId !== null ? 1 : -1; // Unassigned first
+                    } else if (a.assignedGroupId && b.assignedGroupId) {
+                        compare = (a.assignedGroupLabel || '').localeCompare(b.assignedGroupLabel || '');
+                        if (compare === 0) {
+                            compare = a.lastName.localeCompare(b.lastName);
+                        }
+                    } else {
+                        compare = a.lastName.localeCompare(b.lastName);
                     }
-                    if (a.assignedGroupId && b.assignedGroupId) {
-                        const groupCompare = (a.assignedGroupLabel || '').localeCompare(b.assignedGroupLabel || '');
-                        if (groupCompare !== 0) return groupCompare;
-                    }
-                    return a.lastName.localeCompare(b.lastName);
                 } else if (ridersSort === 'availability') {
                     // Sort by availability - available first
                     if (a.isAvailable !== b.isAvailable) {
-                        return a.isAvailable ? -1 : 1;
+                        compare = a.isAvailable ? -1 : 1;
+                    } else if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
+                        compare = a.assignedGroupId !== null ? 1 : -1;
+                    } else {
+                        compare = a.lastName.localeCompare(b.lastName);
                     }
-                    // Then by assigned group
-                    if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
-                        return a.assignedGroupId !== null ? 1 : -1;
-                    }
-                    return a.lastName.localeCompare(b.lastName);
                 } else {
                     // For other sorts, keep existing logic but apply to all riders
                     if (ridersSort === 'pace') {
-                        if (b.fitness !== a.fitness) return b.fitness - a.fitness;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = b.fitness !== a.fitness ? b.fitness - a.fitness : a.lastName.localeCompare(b.lastName);
                     } else if (ridersSort === 'skills') {
-                        if (b.skills !== a.skills) return b.skills - a.skills;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = b.skills !== a.skills ? b.skills - a.skills : a.lastName.localeCompare(b.lastName);
                     } else if (ridersSort === 'grade') {
-                        if (b.grade !== a.grade) return b.grade - a.grade;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = b.grade !== a.grade ? b.grade - a.grade : a.lastName.localeCompare(b.lastName);
                     } else if (ridersSort === 'gender') {
-                        if (a.gender !== b.gender) return a.gender.localeCompare(b.gender);
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = a.gender !== b.gender ? a.gender.localeCompare(b.gender) : a.lastName.localeCompare(b.lastName);
                     } else if (ridersSort === 'firstName') {
                         const firstNameCompare = a.firstName.localeCompare(b.firstName);
-                        if (firstNameCompare !== 0) return firstNameCompare;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = firstNameCompare !== 0 ? firstNameCompare : a.lastName.localeCompare(b.lastName);
                     } else if (ridersSort === 'lastName') {
                         const lastNameCompare = a.lastName.localeCompare(b.lastName);
-                        if (lastNameCompare !== 0) return lastNameCompare;
-                        return a.firstName.localeCompare(b.firstName);
+                        compare = lastNameCompare !== 0 ? lastNameCompare : a.firstName.localeCompare(b.firstName);
                     } else { // fallback
-                        return a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+                        compare = a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
                     }
                 }
+                return ridersSortDirection === 'asc' ? compare : -compare;
             };
             
             // NEW SORTING STRUCTURE:
@@ -20906,6 +21589,9 @@
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between;">
                         <h3 style="margin: 0;">Riders <span style="font-weight: normal; font-size: 14px; color: #666;">(${attendingRidersCount} of ${totalRiders}${isRefined ? ' qualifying' : ''})</span></h3>
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn-small" onclick="togglePracticeRidersSortDirection()" title="Reverse sort order" aria-label="Reverse sort order" style="padding: 4px 6px; min-width: 28px;">
+                                ${ridersSortDirection === 'asc' ? '↑' : '↓'}
+                            </button>
                             <select class="group-sort-select" onchange="changePracticeRidersSort(this.value)" title="Sort by" style="font-size: 12px; padding: 4px 8px;">
                                 <option value="pace" ${ridersSort === 'pace' ? 'selected' : ''}>Sort by: Pace</option>
                                 <option value="skills" ${ridersSort === 'skills' ? 'selected' : ''}>Sort by: Bike Skills</option>
@@ -20959,6 +21645,20 @@
                             console.error('🔴 Invalid riderId:', e.target.dataset.riderId);
                         }
                     }, 0);
+                });
+                
+                // Allow clicking rider names to toggle their attendance checkbox
+                ridersContent.addEventListener('click', function handleRiderNameClick(e) {
+                    const nameTarget = e.target.closest('.attendance-name');
+                    if (!nameTarget) return;
+                    
+                    const card = nameTarget.closest('.rider-card');
+                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
+                    if (!checkbox) return;
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    checkbox.click();
                 });
                 
                 // Restore scroll position after re-rendering
@@ -21045,48 +21745,47 @@
             
             // Helper function to sort coaches by the selected criteria
             const sortCoachesByCriteria = (a, b) => {
+                let compare = 0;
                 if (coachesSort === 'assignedGroup') {
                     // Sort by assigned group - unassigned first, then by group label
                     if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
-                        return a.assignedGroupId !== null ? 1 : -1; // Unassigned first
+                        compare = a.assignedGroupId !== null ? 1 : -1; // Unassigned first
+                    } else if (a.assignedGroupId && b.assignedGroupId) {
+                        compare = (a.assignedGroupLabel || '').localeCompare(b.assignedGroupLabel || '');
+                        if (compare === 0) {
+                            compare = a.lastName.localeCompare(b.lastName);
+                        }
+                    } else {
+                        compare = a.lastName.localeCompare(b.lastName);
                     }
-                    if (a.assignedGroupId && b.assignedGroupId) {
-                        const groupCompare = (a.assignedGroupLabel || '').localeCompare(b.assignedGroupLabel || '');
-                        if (groupCompare !== 0) return groupCompare;
-                    }
-                    return a.lastName.localeCompare(b.lastName);
                 } else if (coachesSort === 'availability') {
                     // Sort by availability - available first
                     if (a.isAvailable !== b.isAvailable) {
-                        return a.isAvailable ? -1 : 1;
+                        compare = a.isAvailable ? -1 : 1;
+                    } else if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
+                        compare = a.assignedGroupId !== null ? 1 : -1;
+                    } else {
+                        compare = a.lastName.localeCompare(b.lastName);
                     }
-                    // Then by assigned group
-                    if ((a.assignedGroupId !== null) !== (b.assignedGroupId !== null)) {
-                        return a.assignedGroupId !== null ? 1 : -1;
-                    }
-                    return a.lastName.localeCompare(b.lastName);
                 } else {
                     // For other sorts, apply to all coaches
                     if (coachesSort === 'pace') {
                         const fitnessDiff = b.fitness - a.fitness;
-                        if (fitnessDiff !== 0) return fitnessDiff;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = fitnessDiff !== 0 ? fitnessDiff : a.lastName.localeCompare(b.lastName);
                     } else if (coachesSort === 'level') {
                         const levelDiff = b.level - a.level;
-                        if (levelDiff !== 0) return levelDiff;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = levelDiff !== 0 ? levelDiff : a.lastName.localeCompare(b.lastName);
                     } else if (coachesSort === 'firstName') {
                         const firstNameCompare = a.firstName.localeCompare(b.firstName);
-                        if (firstNameCompare !== 0) return firstNameCompare;
-                        return a.lastName.localeCompare(b.lastName);
+                        compare = firstNameCompare !== 0 ? firstNameCompare : a.lastName.localeCompare(b.lastName);
                     } else if (coachesSort === 'lastName') {
                         const lastNameCompare = a.lastName.localeCompare(b.lastName);
-                        if (lastNameCompare !== 0) return lastNameCompare;
-                        return a.firstName.localeCompare(b.firstName);
+                        compare = lastNameCompare !== 0 ? lastNameCompare : a.firstName.localeCompare(b.firstName);
                     } else { // fallback
-                        return a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+                        compare = a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
                     }
                 }
+                return coachesSortDirection === 'asc' ? compare : -compare;
             };
             
             // Sort each group by the selected criteria
@@ -21156,6 +21855,9 @@
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between;">
                         <h3 style="margin: 0;">Coaches <span style="font-weight: normal; font-size: 14px; color: #666;">(${attendingCoachesCount} of ${totalCoaches})</span></h3>
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn-small" onclick="togglePracticeCoachesSortDirection()" title="Reverse sort order" aria-label="Reverse sort order" style="padding: 4px 6px; min-width: 28px;">
+                                ${coachesSortDirection === 'asc' ? '↑' : '↓'}
+                            </button>
                             <select class="group-sort-select" onchange="changePracticeCoachesSort(this.value)" title="Sort by" style="font-size: 12px; padding: 4px 8px;">
                                 <option value="pace" ${coachesSort === 'pace' ? 'selected' : ''}>Sort by: Pace</option>
                                 <option value="level" ${coachesSort === 'level' ? 'selected' : ''}>Sort by: Level</option>
@@ -21208,6 +21910,20 @@
                             console.error('🔴 Invalid coachId:', e.target.dataset.coachId);
                         }
                     }, 0);
+                });
+                
+                // Allow clicking coach names to toggle their attendance checkbox
+                coachesContent.addEventListener('click', function handleCoachNameClick(e) {
+                    const nameTarget = e.target.closest('.attendance-name');
+                    if (!nameTarget) return;
+                    
+                    const card = nameTarget.closest('.coach-card');
+                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
+                    if (!checkbox) return;
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    checkbox.click();
                 });
                 
                 // Restore scroll position after re-rendering
@@ -21281,6 +21997,7 @@
                 
                 // Update ride.availableRiders with the normalized array
                 ride.availableRiders = normalizedAvailableRiders;
+                ride.attendanceInitialized = true;
                 
                 console.log('🔵 toggleRiderAvailability: ride.availableRiders AFTER update:', {
                     length: ride.availableRiders.length,
@@ -21304,6 +22021,8 @@
                 console.error('❌ No ride found');
                 return;
             }
+            
+            ride.attendanceInitialized = true;
             
             // Debug: Check riders before modifying coaches
             if (!Array.isArray(ride.availableCoaches)) {
@@ -21389,6 +22108,181 @@
             saveRideToDB(ride);
             renderPracticeAttendanceLists();
         }
+
+        function togglePracticeRidersSortDirection() {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            const current = ride.practiceRidersSortDirection || 'asc';
+            ride.practiceRidersSortDirection = current === 'asc' ? 'desc' : 'asc';
+            saveRideToDB(ride);
+            renderPracticeAttendanceLists();
+        }
+
+        function getPracticeReportingRides() {
+            const rides = Array.isArray(data.rides) ? data.rides.filter(r => r && !r.deleted && r.date) : [];
+            const mapped = rides.map(ride => {
+                const dateObj = parseISODate(ride.date);
+                return Number.isNaN(dateObj?.getTime?.()) ? null : { ride, dateObj };
+            }).filter(Boolean);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const completed = mapped.filter(entry => entry.dateObj <= today);
+            const list = (completed.length > 0 ? completed : mapped).sort((a, b) => a.dateObj - b.dateObj);
+            return list.map(entry => entry.ride);
+        }
+
+        function renderPracticeReporting() {
+            const dateEl = document.getElementById('practice-reporting-date');
+            const summaryEl = document.getElementById('practice-reporting-summary');
+            const prevBtn = document.getElementById('practice-reporting-prev');
+            const nextBtn = document.getElementById('practice-reporting-next');
+            const titleEl = document.getElementById('practice-reporting-title');
+            const sortIndicator = document.getElementById('practice-reporting-sort-indicator');
+            const tableBody = document.getElementById('practice-reporting-table-body');
+            if (!tableBody || !dateEl || !summaryEl || !prevBtn || !nextBtn || !titleEl || !sortIndicator) return;
+
+            const rides = getPracticeReportingRides();
+            if (rides.length === 0) {
+                practiceReportingRideIndex = null;
+                dateEl.textContent = 'No practices found';
+                summaryEl.textContent = '';
+                titleEl.textContent = 'Practice Reporting';
+                sortIndicator.textContent = practiceReportingSortDirection === 'asc' ? '↑' : '↓';
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+                tableBody.innerHTML = '<tr><td colspan="2" style="padding: 12px; color: #666;">No practice data yet.</td></tr>';
+                return;
+            }
+
+            if (practiceReportingRideIndex === null || practiceReportingRideIndex < 0 || practiceReportingRideIndex >= rides.length) {
+                practiceReportingRideIndex = rides.length - 1;
+            }
+
+            const ride = rides[practiceReportingRideIndex];
+            const rideDate = ride?.date ? parseISODate(ride.date) : null;
+            const dateLabel = rideDate ? rideDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown Date';
+            dateEl.textContent = dateLabel;
+            titleEl.textContent = `Practice Reporting: ${dateLabel}`;
+            sortIndicator.textContent = practiceReportingSortDirection === 'asc' ? '↑' : '↓';
+
+            prevBtn.disabled = practiceReportingRideIndex <= 0;
+            nextBtn.disabled = practiceReportingRideIndex >= rides.length - 1;
+
+            const availableIds = Array.isArray(ride.availableRiders) ? ride.availableRiders : [];
+            const availableSet = new Set(availableIds.map(id => {
+                const normalized = typeof id === 'string' ? parseInt(id, 10) : id;
+                return Number.isFinite(normalized) ? normalized : id;
+            }));
+
+            const sortedRiders = [...(data.riders || [])].sort((a, b) => {
+                const aLast = getSortableLastName(a.name || '');
+                const bLast = getSortableLastName(b.name || '');
+                if (aLast !== bLast) return aLast.localeCompare(bLast);
+                const aFirst = (a.name || '').toLowerCase();
+                const bFirst = (b.name || '').toLowerCase();
+                return aFirst.localeCompare(bFirst);
+            });
+            if (practiceReportingSortDirection === 'desc') {
+                sortedRiders.reverse();
+            }
+
+            let attendedCount = 0;
+            let absentCount = 0;
+            const rows = sortedRiders.map(rider => {
+                const riderId = typeof rider.id === 'string' ? parseInt(rider.id, 10) : rider.id;
+                const attended = availableSet.has(riderId);
+                if (attended) attendedCount++;
+                else absentCount++;
+                const status = attended ? 'Attended' : 'Absent';
+                const statusColor = attended ? '#2e7d32' : '#c62828';
+                const nameColor = attended ? '#333' : '#c62828';
+                return `
+                    <tr>
+                        <td style="padding: 10px; border-top: 1px solid #eee; color: ${nameColor};">${escapeHtml(rider.name || 'Unnamed Rider')}</td>
+                        <td onclick="togglePracticeReportingStatus(${ride.id}, ${riderId})" style="padding: 10px; border-top: 1px solid #eee; color: ${statusColor}; font-weight: 600; cursor: pointer;">${status}</td>
+                    </tr>
+                `;
+            });
+
+            summaryEl.textContent = `${attendedCount} attended, ${absentCount} absent`;
+            tableBody.innerHTML = rows.join('') || '<tr><td colspan="2" style="padding: 12px; color: #666;">No riders found.</td></tr>';
+        }
+
+        function navigatePracticeReporting(offset) {
+            const rides = getPracticeReportingRides();
+            if (rides.length === 0) return;
+            if (practiceReportingRideIndex === null) {
+                practiceReportingRideIndex = rides.length - 1;
+            } else {
+                practiceReportingRideIndex = Math.max(0, Math.min(rides.length - 1, practiceReportingRideIndex + offset));
+            }
+            renderPracticeReporting();
+        }
+
+        function togglePracticeReportingSort() {
+            practiceReportingSortDirection = practiceReportingSortDirection === 'asc' ? 'desc' : 'asc';
+            renderPracticeReporting();
+        }
+
+        function togglePracticeReportingStatus(rideId, riderId) {
+            const ride = data.rides.find(r => r.id === rideId);
+            if (!ride) return;
+            if (!Array.isArray(ride.availableRiders)) {
+                ride.availableRiders = [];
+            }
+            const normalizedId = typeof riderId === 'string' ? parseInt(riderId, 10) : riderId;
+            const idToUse = Number.isFinite(normalizedId) ? normalizedId : riderId;
+            const existingIndex = ride.availableRiders.findIndex(id => {
+                const normalized = typeof id === 'string' ? parseInt(id, 10) : id;
+                return (Number.isFinite(normalized) ? normalized : id) === idToUse;
+            });
+            if (existingIndex >= 0) {
+                ride.availableRiders.splice(existingIndex, 1);
+            } else {
+                ride.availableRiders.push(idToUse);
+            }
+            ride.attendanceInitialized = true;
+            saveRideToDB(ride);
+            renderPracticeReporting();
+        }
+
+        function toggleUnassignedPaletteVisibility() {
+            const palette = document.getElementById('new-attendees-sticky');
+            const isVisible = !!palette;
+            if (isVisible) {
+                unassignedPaletteVisibility = 'hide';
+            } else {
+                unassignedPaletteVisibility = 'show';
+            }
+            renderAssignments(data.rides.find(r => r.id === data.currentRide));
+        }
+
+        function updateUnassignedPaletteToggleButton(isVisible) {
+            const toggleBtn = document.getElementById('unassigned-palette-toggle-btn');
+            if (!toggleBtn) return;
+            toggleBtn.textContent = isVisible ? 'Hide Unassigned Palette' : 'Show Unassigned Palette';
+        }
+
+        function startUnassignedPaletteResize(event) {
+            event.preventDefault();
+            const startY = event.clientY;
+            const startHeight = unassignedPaletteHeight;
+            const onMove = (moveEvent) => {
+                const delta = moveEvent.clientY - startY;
+                const nextHeight = Math.max(140, Math.min(600, startHeight + delta));
+                unassignedPaletteHeight = nextHeight;
+                document.querySelectorAll('[data-unassigned-list="true"]').forEach(list => {
+                    list.style.height = `${nextHeight}px`;
+                    list.style.maxHeight = `${nextHeight}px`;
+                });
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }
         
         function changePracticeCoachesSort(sortBy) {
             const ride = data.rides.find(r => r.id === data.currentRide);
@@ -21400,6 +22294,15 @@
             }
             
             ride.practiceCoachesSort = sortBy;
+            saveRideToDB(ride);
+            renderPracticeAttendanceLists();
+        }
+
+        function togglePracticeCoachesSortDirection() {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            const current = ride.practiceCoachesSortDirection || 'asc';
+            ride.practiceCoachesSortDirection = current === 'asc' ? 'desc' : 'asc';
             saveRideToDB(ride);
             renderPracticeAttendanceLists();
         }
@@ -21428,6 +22331,8 @@
                     group.riders = [];
                 });
             }
+            
+            ride.attendanceInitialized = true;
             
             console.log('🔵 setAllPracticeRiders: ride.availableRiders AFTER:', {
                 length: ride.availableRiders.length,
@@ -21806,6 +22711,19 @@
             }
             
             return true;
+        }
+
+        function updateGroupPaceOrder(value) {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            const normalized = normalizeGroupPaceOrder(value);
+            ride.groupPaceOrder = normalized;
+            if (!data.seasonSettings) {
+                data.seasonSettings = buildDefaultSeasonSettings();
+            }
+            data.seasonSettings.groupPaceOrder = normalized;
+            saveData();
+            renderAssignments(ride);
         }
 
         function switchUnassignedView(view) {
@@ -23076,12 +23994,7 @@
             // direction 1 = move to next group (slower/lower fitness) - DOWN arrow
             
             // Get groups sorted by fitness (same order as displayed)
-            const sortedGroups = ride.groups.slice().sort((a, b) => {
-                const fitnessA = getGroupFitnessScore(a);
-                const fitnessB = getGroupFitnessScore(b);
-                if (fitnessB !== fitnessA) return fitnessB - fitnessA;
-                return b.riders.length - a.riders.length;
-            });
+            const sortedGroups = ride.groups.slice().sort(getGroupPaceComparator(ride));
 
             // Find current group's index in sorted array
             const currentGroupIndex = sortedGroups.findIndex(g => g.id === currentGroupId);
@@ -23252,7 +24165,9 @@
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
                         <div id="practice-weather" style="margin-top: ${timeDisplay || practiceLocation ? '6px' : '0'};">
-                            <strong>Weather:</strong> <span id="weather-loading">Loading...</span>
+                            <div><strong>Weather:</strong> <span id="weather-loading">Loading...</span></div>
+                            <div><strong>Precip:</strong> <span id="weather-precip">--</span></div>
+                            <div id="weather-alerts" style="margin-top: 4px; color: #b00020;"></div>
                         </div>
                     </div>
                     ${goals ? `<div style="padding: 12px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px; margin-bottom: 16px;">
@@ -23407,17 +24322,27 @@
             
             // Load weather data if location is available
             if (locationLat && locationLng && rideDate && practiceTime) {
-                loadWeatherForPractice(locationLat, locationLng, rideDate, practiceTime);
+                loadWeatherForPractice(locationLat, locationLng, rideDate, practiceTime, 'weather');
             } else {
                 const weatherEl = document.getElementById('weather-loading');
                 if (weatherEl) {
                     weatherEl.textContent = 'Weather unavailable (location or time not set)';
                 }
+                const precipEl = document.getElementById('weather-precip');
+                if (precipEl) {
+                    precipEl.textContent = '--';
+                }
+                const alertsEl = document.getElementById('weather-alerts');
+                if (alertsEl) {
+                    alertsEl.textContent = '';
+                }
             }
         }
         
-        async function loadWeatherForPractice(lat, lng, date, time) {
-            const weatherEl = document.getElementById('weather-loading');
+        async function loadWeatherForPractice(lat, lng, date, time, targetPrefix = 'weather') {
+            const weatherEl = document.getElementById(`${targetPrefix}-loading`);
+            const precipEl = document.getElementById(`${targetPrefix}-precip`);
+            const alertsEl = document.getElementById(`${targetPrefix}-alerts`);
             if (!weatherEl) return;
             
             try {
@@ -23434,17 +24359,21 @@
                 
                 if (daysUntilPractice < 0) {
                     weatherEl.textContent = 'Practice date has passed';
+                    if (precipEl) precipEl.textContent = '--';
+                    if (alertsEl) alertsEl.textContent = '';
                     return;
                 }
                 
                 if (daysUntilPractice > 7) {
                     weatherEl.textContent = 'Weather forecast available up to 7 days ahead';
+                    if (precipEl) precipEl.textContent = '--';
+                    if (alertsEl) alertsEl.textContent = '';
                     return;
                 }
                 
                 // Use Open-Meteo API (free, no API key required)
                 // Request temperature in Fahrenheit and use practice location coordinates
-                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode&forecast_days=7&timezone=auto&temperature_unit=fahrenheit`;
+                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,precipitation_probability&forecast_days=7&timezone=auto&temperature_unit=fahrenheit&alerts=all`;
                 
                 // Debug: Log the location being used for weather lookup
                 const ride = getNextUpcomingRide();
@@ -23480,6 +24409,9 @@
                     if (closestIndex >= 0) {
                         const temp = Math.round(data.hourly.temperature_2m[closestIndex]);
                         const weatherCode = data.hourly.weathercode[closestIndex];
+                        const precipChance = data.hourly.precipitation_probability
+                            ? Math.round(data.hourly.precipitation_probability[closestIndex])
+                            : null;
                         
                         // Convert weather code to description
                         const weatherDescriptions = {
@@ -23497,18 +24429,37 @@
                         
                         const description = weatherDescriptions[weatherCode] || 'Unknown';
                         weatherEl.textContent = `${temp}°F, ${description}`;
+                        if (precipEl) {
+                            precipEl.textContent = Number.isFinite(precipChance) ? `${precipChance}% chance` : 'N/A';
+                        }
+                        if (alertsEl) {
+                            const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+                            if (alerts.length > 0) {
+                                const alertTitles = alerts
+                                    .map(alert => alert.event || alert.title || alert.description)
+                                    .filter(Boolean);
+                                alertsEl.textContent = alertTitles.length > 0
+                                    ? `Alerts: ${alertTitles.join(' • ')}`
+                                    : 'Weather alerts issued for this area';
+                            } else {
+                                alertsEl.textContent = '';
+                            }
+                        }
                     } else {
                         weatherEl.textContent = 'Weather forecast not available for this time';
+                        if (precipEl) precipEl.textContent = '--';
+                        if (alertsEl) alertsEl.textContent = '';
                     }
                 } else {
                     weatherEl.textContent = 'Weather data unavailable';
+                    if (precipEl) precipEl.textContent = '--';
+                    if (alertsEl) alertsEl.textContent = '';
                 }
             } catch (error) {
                 console.error('Error loading weather:', error);
-                const weatherEl = document.getElementById('weather-loading');
-                if (weatherEl) {
-                    weatherEl.textContent = 'Weather unavailable';
-                }
+                if (weatherEl) weatherEl.textContent = 'Weather unavailable';
+                if (precipEl) precipEl.textContent = '--';
+                if (alertsEl) alertsEl.textContent = '';
             }
         }
 
@@ -23579,7 +24530,9 @@
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
                         <div id="coach-practice-weather" style="margin-top: ${timeDisplay || practiceLocation ? '6px' : '0'};">
-                            <strong>Weather:</strong> <span id="coach-weather-loading">Loading...</span>
+                            <div><strong>Weather:</strong> <span id="coach-weather-loading">Loading...</span></div>
+                            <div><strong>Precip:</strong> <span id="coach-weather-precip">--</span></div>
+                            <div id="coach-weather-alerts" style="margin-top: 4px; color: #b00020;"></div>
                         </div>
                     </div>
                     ${goals ? `<div style="padding: 12px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px; margin-bottom: 16px;">
@@ -23733,12 +24686,13 @@
                                                 const phone = rider.phone || rider.mobile || '';
                                                 const phoneLink = phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : '';
                                                 
+                                                const medicalIcon = getMedicalIconHtml(rider.allergiesOrMedicalNeeds || rider.medicalNotes || '');
                                                 return `
                                                     <div class="rider-card compact" style="border: none !important; border-style: none !important; display: flex; align-items: center; gap: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px; position: relative;">
                                                         <div class="avatar-circle">
                                                             ${photo ? `<img class="avatar-image" src="${escapeHtml(photo)}" alt="${safeName} photo">` : `<span class="avatar-placeholder">${initial}</span>`}
                                                         </div>
-                                                        <strong style="flex: 1; min-width: 0;">${safeName}</strong>
+                                                        <strong style="flex: 1; min-width: 0;">${safeName}${medicalIcon}</strong>
                                                         <div style="display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin-left: auto; margin-right: 4px;">
                                                             <span class="badge badge-pace-${fitness}">Pace ${fitness}</span>
                                                             <span class="badge badge-skills-${skills}" title="${getBikeSkillsTooltip(skills, getSkillsScale()).replace(/\n/g, '&#10;')}" style="cursor: help;">Skills ${skills}</span>
@@ -23815,98 +24769,19 @@
             
             // Load weather data if location is available
             if (locationLat && locationLng && rideDate && practiceTime) {
-                loadWeatherForCoachPractice(locationLat, locationLng, rideDate, practiceTime);
+                loadWeatherForPractice(locationLat, locationLng, rideDate, practiceTime, 'coach-weather');
             } else {
                 const weatherEl = document.getElementById('coach-weather-loading');
                 if (weatherEl) {
                     weatherEl.textContent = 'Weather unavailable (location or time not set)';
                 }
-            }
-        }
-        
-        async function loadWeatherForCoachPractice(lat, lng, date, time) {
-            const weatherEl = document.getElementById('coach-weather-loading');
-            if (!weatherEl) return;
-            
-            try {
-                // Calculate the practice date/time
-                const practiceDateTime = new Date(date);
-                const [hours, minutes] = time.split(':').map(Number);
-                practiceDateTime.setHours(hours || 15, minutes || 30, 0, 0);
-                
-                // Use a free weather API - OpenWeatherMap requires API key
-                // For now, we'll use a simple approach with Open-Meteo (free, no API key needed)
-                // This provides basic weather forecasts
-                const now = new Date();
-                const daysUntilPractice = Math.ceil((practiceDateTime - now) / (1000 * 60 * 60 * 24));
-                
-                if (daysUntilPractice < 0) {
-                    weatherEl.textContent = 'Practice date has passed';
-                    return;
+                const precipEl = document.getElementById('coach-weather-precip');
+                if (precipEl) {
+                    precipEl.textContent = '--';
                 }
-                
-                if (daysUntilPractice > 7) {
-                    weatherEl.textContent = 'Weather forecast available up to 7 days ahead';
-                    return;
-                }
-                
-                // Use Open-Meteo API (free, no API key required)
-                const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode&forecast_days=7&timezone=auto`;
-                
-                const response = await fetch(forecastUrl);
-                const data = await response.json();
-                
-                if (data.hourly && data.hourly.time && data.hourly.temperature_2m) {
-                    // Find the closest hour to practice time
-                    const practiceHour = practiceDateTime.getHours();
-                    const practiceDateStr = practiceDateTime.toISOString().split('T')[0];
-                    
-                    // Find matching time slot
-                    let closestIndex = -1;
-                    let minDiff = Infinity;
-                    
-                    data.hourly.time.forEach((timeStr, index) => {
-                        if (timeStr.startsWith(practiceDateStr)) {
-                            const hour = new Date(timeStr).getHours();
-                            const diff = Math.abs(hour - practiceHour);
-                            if (diff < minDiff) {
-                                minDiff = diff;
-                                closestIndex = index;
-                            }
-                        }
-                    });
-                    
-                    if (closestIndex >= 0) {
-                        const temp = Math.round(data.hourly.temperature_2m[closestIndex]);
-                        const weatherCode = data.hourly.weathercode[closestIndex];
-                        
-                        // Convert weather code to description
-                        const weatherDescriptions = {
-                            0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast',
-                            45: 'Foggy', 48: 'Depositing rime fog',
-                            51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
-                            56: 'Light freezing drizzle', 57: 'Dense freezing drizzle',
-                            61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
-                            66: 'Light freezing rain', 67: 'Heavy freezing rain',
-                            71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
-                            77: 'Snow grains', 80: 'Slight rain showers', 81: 'Moderate rain showers',
-                            82: 'Violent rain showers', 85: 'Slight snow showers', 86: 'Heavy snow showers',
-                            95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail'
-                        };
-                        
-                        const description = weatherDescriptions[weatherCode] || 'Unknown';
-                        weatherEl.textContent = `${temp}°F, ${description}`;
-                    } else {
-                        weatherEl.textContent = 'Weather forecast not available for this time';
-                    }
-                } else {
-                    weatherEl.textContent = 'Weather data unavailable';
-                }
-            } catch (error) {
-                console.error('Error loading weather:', error);
-                const weatherEl = document.getElementById('coach-weather-loading');
-                if (weatherEl) {
-                    weatherEl.textContent = 'Weather unavailable';
+                const alertsEl = document.getElementById('coach-weather-alerts');
+                if (alertsEl) {
+                    alertsEl.textContent = '';
                 }
             }
         }

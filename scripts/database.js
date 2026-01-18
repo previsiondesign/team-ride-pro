@@ -19,6 +19,7 @@ async function getAllRiders() {
     
     // Map database structure to app structure
     return (data || []).map(rider => ({
+        ...(rider.extra_data || {}),
         id: rider.id,
         name: rider.name,
         phone: rider.phone,
@@ -50,6 +51,7 @@ async function getRiderById(id) {
     
     // Map database structure to app structure
     return {
+        ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
         phone: data.phone,
@@ -79,7 +81,11 @@ async function createRider(riderData) {
         fitness: riderData.fitness,
         skills: riderData.skills,
         photo: riderData.photo || null,
-        notes: riderData.notes || null
+        notes: riderData.notes || null,
+        extra_data: (() => {
+            const { id, ...rest } = riderData || {};
+            return rest;
+        })()
     };
     
     const { data, error } = await client
@@ -92,6 +98,7 @@ async function createRider(riderData) {
     
     // Map back to app structure
     return {
+        ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
         phone: data.phone,
@@ -122,6 +129,8 @@ async function updateRider(id, riderData) {
     if (riderData.skills !== undefined) dbData.skills = riderData.skills;
     if (riderData.photo !== undefined) dbData.photo = riderData.photo;
     if (riderData.notes !== undefined) dbData.notes = riderData.notes;
+    if (riderData.extra_data !== undefined) dbData.extra_data = riderData.extra_data;
+    if (riderData.extraData !== undefined) dbData.extra_data = riderData.extraData;
     
     const { data, error } = await client
         .from('riders')
@@ -134,6 +143,7 @@ async function updateRider(id, riderData) {
     
     // Map back to app structure
     return {
+        ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
         phone: data.phone,
@@ -182,6 +192,7 @@ async function getAllCoaches() {
     
     // Map database structure to app structure
     return (data || []).map(coach => ({
+        ...(coach.extra_data || {}),
         id: coach.id,
         name: coach.name,
         phone: coach.phone,
@@ -212,6 +223,7 @@ async function getCoachById(id) {
     
     // Map database structure to app structure
     return {
+        ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
         phone: data.phone,
@@ -228,30 +240,82 @@ async function getCoachById(id) {
 async function createCoach(coachData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
+
+    const dbData = {
+        name: coachData.name,
+        phone: coachData.phone || null,
+        email: coachData.email || null,
+        level: coachData.coachingLicenseLevel || coachData.level || '1',
+        fitness: coachData.fitness || '5',
+        skills: coachData.skills || null,
+        photo: coachData.photo || null,
+        notes: coachData.notes || null,
+        extra_data: (() => {
+            const { id, ...rest } = coachData || {};
+            return rest;
+        })()
+    };
     
     const { data, error } = await client
         .from('coaches')
-        .insert([coachData])
+        .insert([dbData])
         .select()
         .single();
     
     if (error) throw error;
-    return data;
+    return {
+        ...(data.extra_data || {}),
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        level: data.level,
+        fitness: data.fitness,
+        skills: data.skills,
+        photo: data.photo,
+        notes: data.notes,
+        user_id: data.user_id
+    };
 }
 
 async function updateCoach(id, coachData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
+    const dbData = {};
+    if (coachData.name !== undefined) dbData.name = coachData.name;
+    if (coachData.phone !== undefined) dbData.phone = coachData.phone;
+    if (coachData.email !== undefined) dbData.email = coachData.email;
+    if (coachData.level !== undefined) dbData.level = coachData.level;
+    if (coachData.coachingLicenseLevel !== undefined) dbData.level = coachData.coachingLicenseLevel;
+    if (coachData.fitness !== undefined) dbData.fitness = coachData.fitness;
+    if (coachData.skills !== undefined) dbData.skills = coachData.skills;
+    if (coachData.photo !== undefined) dbData.photo = coachData.photo;
+    if (coachData.notes !== undefined) dbData.notes = coachData.notes;
+    if (coachData.extra_data !== undefined) dbData.extra_data = coachData.extra_data;
+    if (coachData.extraData !== undefined) dbData.extra_data = coachData.extraData;
+    
     const { data, error } = await client
         .from('coaches')
-        .update(coachData)
+        .update(dbData)
         .eq('id', id)
         .select()
         .single();
     
     if (error) throw error;
-    return data;
+    return {
+        ...(data.extra_data || {}),
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        level: data.level,
+        fitness: data.fitness,
+        skills: data.skills,
+        photo: data.photo,
+        notes: data.notes,
+        user_id: data.user_id
+    };
 }
 
 async function deleteCoach(id) {
@@ -712,8 +776,11 @@ async function getSeasonSettings() {
         practices: data.practices || [],
         fitnessScale: data.fitness_scale !== null && data.fitness_scale !== undefined ? data.fitness_scale : 5,
         skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3,
+        paceScaleOrder: data.pace_scale_order || 'fastest_to_slowest',
+        groupPaceOrder: data.group_pace_order || 'fastest_to_slowest',
         coachRoles: Array.isArray(data.coach_roles) ? data.coach_roles : [],
-        riderRoles: Array.isArray(data.rider_roles) ? data.rider_roles : []
+        riderRoles: Array.isArray(data.rider_roles) ? data.rider_roles : [],
+        csvFieldMappings: data.csv_field_mappings || {}
     };
     
     // Map time_estimation_settings from database to app format
@@ -753,6 +820,15 @@ async function updateSeasonSettings(settings) {
     if (settings.skillsScale !== undefined) {
         dbData.skills_scale = settings.skillsScale;
     }
+    if (settings.paceScaleOrder !== undefined) {
+        dbData.pace_scale_order = settings.paceScaleOrder;
+    }
+    if (settings.groupPaceOrder !== undefined) {
+        dbData.group_pace_order = settings.groupPaceOrder;
+    }
+    if (settings.csvFieldMappings !== undefined) {
+        dbData.csv_field_mappings = settings.csvFieldMappings;
+    }
     
     // Map timeEstimationSettings to time_estimation_settings
     if (settings.timeEstimationSettings !== undefined) {
@@ -784,7 +860,9 @@ async function updateSeasonSettings(settings) {
         endDate: data.end_date,
         practices: data.practices || [],
         fitnessScale: data.fitness_scale !== null && data.fitness_scale !== undefined ? data.fitness_scale : 5,
-        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3
+        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3,
+        paceScaleOrder: data.pace_scale_order || 'fastest_to_slowest',
+        groupPaceOrder: data.group_pace_order || 'fastest_to_slowest'
     };
     
     // Map time_estimation_settings back to app format
@@ -1509,11 +1587,61 @@ async function enableAdminUser(userId) {
         .eq('user_id', userId);
     if (deleteError) throw deleteError;
 
-    const { error: insertError } = await client
+    const { error: upsertError } = await client
         .from('user_roles')
-        .insert([{
+        .upsert([{
             user_id: userId,
             role: 'coach-admin'
-        }]);
-    if (insertError) throw insertError;
+        }], { onConflict: 'user_id' });
+    if (upsertError) throw upsertError;
+}
+
+// ============ ADMIN EDIT LOCK ============
+
+async function getAdminEditLock() {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    const { data, error } = await client
+        .from('admin_edit_locks')
+        .select('*')
+        .eq('id', 'current')
+        .maybeSingle();
+    if (error) {
+        console.warn('Error fetching admin edit lock:', error);
+        return null;
+    }
+    return data || null;
+}
+
+async function upsertAdminEditLock(lockInfo) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    const { error } = await client
+        .from('admin_edit_locks')
+        .upsert([{
+            id: 'current',
+            user_id: lockInfo.user_id,
+            email: lockInfo.email || null,
+            user_name: lockInfo.user_name || null,
+            updated_at: new Date().toISOString()
+        }], { onConflict: 'id' });
+    if (error) throw error;
+}
+
+async function clearAdminEditLock(userId) {
+    const client = getSupabaseClient();
+    if (!client) return;
+    // Only clear if the lock is owned by the current user
+    const { data, error } = await client
+        .from('admin_edit_locks')
+        .select('user_id')
+        .eq('id', 'current')
+        .maybeSingle();
+    if (error) {
+        console.warn('Error checking admin edit lock owner:', error);
+        return;
+    }
+    if (data && data.user_id === userId) {
+        await client.from('admin_edit_locks').delete().eq('id', 'current');
+    }
 }
