@@ -25271,11 +25271,13 @@
                 const allRoutes = sortRoutes(data.routes);
                 const rows = allRoutes.map(route => {
                     const name = escapeHtml(route.name || 'Untitled Route');
+                    const isStrava = route.stravaEmbedCode ? true : false;
+                    const stravaIcon = isStrava ? '<img src="assets/strava_logo.png" alt="Strava" style="height: 16px; width: auto; vertical-align: middle; margin-right: 8px;">' : '';
                     const distance = escapeHtml(route.distance || 'N/A');
                     const elevation = escapeHtml(route.elevation || 'N/A');
                     const duration = escapeHtml(route.estimatedTime || 'N/A');
                     return `<tr>
-                        <td>${name}</td>
+                        <td>${stravaIcon}${name}</td>
                         <td>${distance}</td>
                         <td>${elevation}</td>
                         <td>${duration}</td>
