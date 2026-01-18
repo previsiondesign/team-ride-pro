@@ -179,7 +179,14 @@ async function signOut() {
     }
     
     const { error } = await client.auth.signOut();
-    if (error) throw error;
+    if (error) {
+        const message = (error.message || '').toLowerCase();
+        const isMissingSession = error.name === 'AuthSessionMissingError' || message.includes('auth session missing');
+        if (!isMissingSession) {
+            throw error;
+        }
+        console.warn('Sign out skipped: no active session.');
+    }
     
     currentUser = null;
     currentUserRole = null;
