@@ -1656,3 +1656,96 @@ async function clearAdminEditLock(userId) {
         await client.from('admin_edit_locks').delete().eq('id', 'current');
     }
 }
+
+// ============ SIMPLIFIED LOGIN LOOKUP ============
+
+// Normalize phone number by removing all non-digit characters
+function normalizePhoneForLookup(phone) {
+    if (!phone) return null;
+    return phone.replace(/\D/g, '');
+}
+
+// Look up rider or coach by phone number or email
+// Returns: { type: 'rider' | 'coach', id: number, name: string } or null
+async function lookupUserByPhoneOrEmail(phoneOrEmail) {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    
+    if (!phoneOrEmail || !phoneOrEmail.trim()) return null;
+    
+    const searchValue = phoneOrEmail.trim();
+    const normalizedPhone = normalizePhoneForLookup(searchValue);
+    const isEmail = searchValue.includes('@');
+    
+    try {
+        // Search by email first if it looks like an email
+        if (isEmail) {
+            // Search riders
+            const { data: riderData, error: riderError } = await client
+                .from('riders')
+                .select('id, name, email')
+                .eq('email', searchValue)
+                .maybeSingle();
+            
+            if (!riderError && riderData) {
+                return { type: 'rider', id: riderData.id, name: riderData.name };
+            }
+            
+            // Search coaches
+            const { data: coachData, error: coachError } = await client
+                .from('coaches')
+                .select('id, name, email')
+                .eq('email', searchValue)
+                .maybeSingle();
+            
+            if (!coachError && coachData) {
+                return { type: 'coach', id: coachData.id, name: coachData.name };
+            }
+        }
+        
+        // Search by phone (try normalized and original formats)
+        if (normalizedPhone && normalizedPhone.length >= 10) {
+            // Get all riders and coaches, then filter by normalized phone
+            // This approach handles various phone formats better
+            const [ridersResult, coachesResult] = await Promise.all([
+                client.from('riders').select('id, name, phone'),
+                client.from('coaches').select('id, name, phone')
+            ]);
+            
+            // Check riders
+            if (ridersResult.data) {
+                for (const rider of ridersResult.data) {
+                    if (rider.phone) {
+                        const riderPhoneNormalized = normalizePhoneForLookup(rider.phone);
+                        // Match if last 10 digits match (handles country codes, formatting)
+                        const inputLast10 = normalizedPhone.slice(-10);
+                        const riderLast10 = riderPhoneNormalized.slice(-10);
+                        if (inputLast10 === riderLast10 && riderLast10.length === 10) {
+                            return { type: 'rider', id: rider.id, name: rider.name };
+                        }
+                    }
+                }
+            }
+            
+            // Check coaches
+            if (coachesResult.data) {
+                for (const coach of coachesResult.data) {
+                    if (coach.phone) {
+                        const coachPhoneNormalized = normalizePhoneForLookup(coach.phone);
+                        // Match if last 10 digits match (handles country codes, formatting)
+                        const inputLast10 = normalizedPhone.slice(-10);
+                        const coachLast10 = coachPhoneNormalized.slice(-10);
+                        if (inputLast10 === coachLast10 && coachLast10.length === 10) {
+                            return { type: 'coach', id: coach.id, name: coach.name };
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error looking up user:', error);
+        return null;
+    }
+}

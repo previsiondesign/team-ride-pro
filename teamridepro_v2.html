@@ -1096,10 +1096,25 @@
     <div id="auth-overlay" class="auth-overlay hidden">
         <div class="login-container">
             <h2 class="login-title">Tam High MTB Team</h2>
-            <p class="login-subtitle">Sign in to access the practice manager</p>
+            <p id="login-subtitle" class="login-subtitle">Sign in to access the practice manager</p>
             
             <div id="auth-error" class="error-message" style="display: none;"></div>
             
+            <!-- Simplified Login Form (for riders/coaches) -->
+            <div id="simplified-login-form" style="display: none;">
+                <form onsubmit="event.preventDefault(); handleSimplifiedLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                        <label class="field-label" for="simplified-login-input">Phone or Email</label>
+                        <input type="text" id="simplified-login-input" class="modal-field-input" placeholder="Enter phone number or email address" autocomplete="tel email" required>
+                    </div>
+                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;" id="simplified-login-button">Continue</button>
+                    <div style="text-align: center; margin-top: 16px;">
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); showAdminLogin();">Admin Login</a>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Admin Login Form -->
             <div id="login-form">
                 <form onsubmit="event.preventDefault(); handleLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
                     <div>
@@ -1149,10 +1164,6 @@
                 <div style="text-align: center; margin-top: 20px;">
                     <a href="#" class="auth-link" onclick="event.preventDefault(); showLogin();">Back to sign in</a>
                 </div>
-            </div>
-            
-            <div id="public-access-link" style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-                <a href="teamridepro_v2.html?view=rider" class="auth-link" style="font-size: 14px; text-decoration: none;">Continue as rider (public access)</a>
             </div>
         </div>
     </div>
@@ -3965,7 +3976,84 @@
             document.getElementById('login-form').style.display = 'none';
             document.getElementById('admin-request-form').style.display = 'none';
             document.getElementById('password-reset-form').style.display = 'block';
+            document.getElementById('simplified-login-form').style.display = 'none';
             hideAuthError();
+        }
+
+        function showSimplifiedLogin() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('admin-request-form').style.display = 'none';
+            document.getElementById('password-reset-form').style.display = 'none';
+            document.getElementById('simplified-login-form').style.display = 'block';
+            const subtitle = document.getElementById('login-subtitle');
+            if (subtitle) {
+                subtitle.textContent = 'Enter your phone or email to access your assignments';
+            }
+            hideAuthError();
+        }
+
+        function showAdminLogin() {
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('admin-request-form').style.display = 'none';
+            document.getElementById('password-reset-form').style.display = 'none';
+            document.getElementById('simplified-login-form').style.display = 'none';
+            const subtitle = document.getElementById('login-subtitle');
+            if (subtitle) {
+                subtitle.textContent = 'Sign in to access the practice manager';
+            }
+            hideAuthError();
+        }
+
+        // Simplified login handler for riders/coaches
+        async function handleSimplifiedLogin() {
+            hideAuthError();
+            const input = document.getElementById('simplified-login-input');
+            const button = document.getElementById('simplified-login-button');
+            
+            if (!input || !input.value.trim()) {
+                showAuthError('Please enter your phone number or email address');
+                return;
+            }
+
+            const phoneOrEmail = input.value.trim();
+            
+            // Disable button and show loading
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Looking up...';
+            }
+
+            try {
+                const lookupResult = await lookupUserByPhoneOrEmail(phoneOrEmail);
+                
+                if (!lookupResult) {
+                    showAuthError('No matching rider or coach found. Please check your phone number or email address.');
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = 'Continue';
+                    }
+                    return;
+                }
+
+                // Store simplified login info in sessionStorage
+                window.sessionStorage.setItem('simplifiedLogin', JSON.stringify({
+                    type: lookupResult.type,
+                    id: lookupResult.id,
+                    name: lookupResult.name,
+                    timestamp: Date.now()
+                }));
+
+                // Route to assignments view (view will be determined automatically from lookup result)
+                window.location.href = 'teamridepro_v2.html?view=assignments';
+                
+            } catch (error) {
+                console.error('Error during simplified login:', error);
+                showAuthError('An error occurred. Please try again.');
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = 'Continue';
+                }
+            }
         }
 
         async function handleLogin() {
@@ -4071,9 +4159,28 @@
             }
         }
 
-        // Handle logout (Supabase authentication)
+        // Handle logout (Supabase authentication or simplified login)
         async function handleLogout() {
             try {
+                // Check if this is simplified login mode
+                if (simplifiedLoginInfo) {
+                // Clear simplified login info
+                window.sessionStorage.removeItem('simplifiedLogin');
+                simplifiedLoginInfo = null;
+                simplifiedLoginMode = null;
+                
+                // Redirect to simplified login page
+                const urlParams = new URLSearchParams(window.location.search);
+                const viewParam = urlParams.get('view');
+                if (viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach') {
+                    window.location.href = 'teamridepro_v2.html?view=assignments';
+                } else {
+                    window.location.href = 'teamridepro_v2.html';
+                }
+                return;
+                }
+                
+                // Regular admin logout
                 // Create automatic backup before logout
                 try {
                     await createAutomaticBackup('auto_logout');
@@ -4119,8 +4226,48 @@
             const userMenu = document.getElementById('user-menu');
             const mainContainer = document.querySelector('.container');
 
-            if (isAuthenticated) {
+            // Check if we're in simplified login mode (any view param triggers simplified login)
+            const urlParams = new URLSearchParams(window.location.search);
+            const viewParam = urlParams.get('view');
+            const needsSimplifiedLogin = (viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach') && !simplifiedLoginInfo;
+
+            if (needsSimplifiedLogin && !isAuthenticated) {
+                // Show simplified login form
+                if (authOverlay) {
+                    authOverlay.classList.remove('hidden');
+                    authOverlay.style.display = 'flex';
+                }
+                if (mainContainer) mainContainer.style.display = 'none';
+                if (userMenu) userMenu.style.display = 'none';
+                showSimplifiedLogin();
+                return;
+            }
+
+            if (isAuthenticated || simplifiedLoginInfo) {
                 console.log('Hiding auth overlay, showing main app');
+                
+                // For simplified login, hide auth overlay and show main app
+                if (simplifiedLoginInfo && !isAuthenticated) {
+                    // Simplified login mode - show main app without full auth
+                    if (authOverlay) {
+                        authOverlay.classList.add('hidden');
+                        authOverlay.style.display = 'none';
+                    }
+                    if (mainContainer) mainContainer.style.display = 'block';
+                    
+                    // Apply simplified view mode based on stored login info
+                    if (simplifiedLoginInfo.type === 'rider') {
+                        simplifiedLoginMode = 'rider';
+                        enableSimplifiedViewMode('rider');
+                    } else if (simplifiedLoginInfo.type === 'coach') {
+                        simplifiedLoginMode = 'coach';
+                        enableSimplifiedViewMode('coach');
+                    }
+                    
+                    // Load application data
+                    await loadApplicationData();
+                    return;
+                }
                 
                 // Create automatic backup on login (only if this is a new login, not initial page load)
                 // Check if this is a new login by checking if auth overlay was visible
@@ -4340,15 +4487,47 @@
         // Old loadApplicationData function removed - use async version below
 
 
+        // Global variables for simplified login
+        let simplifiedLoginMode = null; // 'rider' or 'coach'
+        let simplifiedLoginInfo = null;
+
         // Initialize
         async function init() {
-            // Check for rider view mode
+            // Check for simplified login view mode (any view param triggers simplified login)
             const urlParams = new URLSearchParams(window.location.search);
-            const isRiderView = urlParams.get('view') === 'rider';
+            const viewParam = urlParams.get('view');
+            const isSimplifiedView = viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach'; // Support old URLs too
             
-            if (isRiderView) {
-                // Rider view mode - restrict navigation
-                enableRiderViewMode();
+            // Check for existing simplified login in sessionStorage
+            try {
+                const stored = window.sessionStorage.getItem('simplifiedLogin');
+                if (stored) {
+                    simplifiedLoginInfo = JSON.parse(stored);
+                    // Check if stored info is still valid (within 24 hours)
+                    const age = Date.now() - (simplifiedLoginInfo.timestamp || 0);
+                    if (age < 24 * 60 * 60 * 1000) {
+                        simplifiedLoginMode = simplifiedLoginInfo.type;
+                    } else {
+                        // Expired, clear it
+                        window.sessionStorage.removeItem('simplifiedLogin');
+                        simplifiedLoginInfo = null;
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading simplified login info:', e);
+            }
+            
+            // If URL param indicates simplified view but no stored login, they need to log in
+            if (isSimplifiedView && !simplifiedLoginInfo) {
+                // Will show simplified login form in handleAuthStateChange
+            } else if (simplifiedLoginInfo) {
+                // Use stored login info and apply appropriate view
+                simplifiedLoginMode = simplifiedLoginInfo.type;
+                if (simplifiedLoginMode === 'rider') {
+                    enableSimplifiedViewMode('rider');
+                } else if (simplifiedLoginMode === 'coach') {
+                    enableSimplifiedViewMode('coach');
+                }
             }
             
             // Initialize Supabase client
@@ -4383,37 +4562,61 @@
         }
         
         function enableRiderViewMode() {
-            // Hide all tabs except Rider Assignments
+            // Legacy function - redirect to new generic function
+            enableSimplifiedViewMode('rider');
+        }
+
+        function enableSimplifiedViewMode(type) {
+            // Hide all tabs except the appropriate assignment tab
             const allTabs = document.querySelectorAll('.tab, .mobile-menu-item');
+            const targetTabName = type === 'rider' ? 'Rider Assignments' : 'Coach Assignments';
+            const targetTabId = type === 'rider' ? 'assignments' : 'coach-assignments';
+            
             allTabs.forEach(tab => {
                 const tabText = tab.textContent.trim();
-                if (tabText !== 'Rider Assignments' && !tabText.includes('Rider Assignments')) {
+                const onClickAttr = tab.getAttribute('onclick') || '';
+                const isTargetTab = tabText.includes(targetTabName) || onClickAttr.includes(targetTabId);
+                
+                if (!isTargetTab) {
                     tab.style.display = 'none';
+                } else {
+                    tab.style.display = '';
                 }
             });
             
-            // Hide header actions (user menu, etc.)
-            const headerActions = document.querySelector('.header-actions');
-            if (headerActions) {
-                headerActions.style.display = 'none';
+            // Hide header actions (user menu, etc.) except sign out
+            const userMenu = document.getElementById('user-menu');
+            if (userMenu) {
+                // Keep user menu but show simplified user info
+                const userNameEl = document.getElementById('user-name');
+                if (userNameEl && simplifiedLoginInfo) {
+                    userNameEl.textContent = simplifiedLoginInfo.name || (type === 'rider' ? 'Rider' : 'Coach');
+                }
+                const userRoleEl = document.getElementById('user-role');
+                if (userRoleEl) {
+                    userRoleEl.textContent = type === 'rider' ? 'Rider' : 'Coach';
+                }
             }
             
-            // Switch to Rider Assignments tab
+            // Switch to the appropriate assignments tab
             setTimeout(() => {
-                const assignmentsTab = document.querySelector('.tab[onclick*="assignments"]');
-                if (assignmentsTab) {
-                    assignmentsTab.click();
+                const targetTab = type === 'rider' 
+                    ? document.querySelector('.tab[onclick*="assignments"]:not([onclick*="coach-assignments"])')
+                    : document.querySelector('.tab[onclick*="coach-assignments"]');
+                    
+                if (targetTab) {
+                    targetTab.click();
                 } else {
                     // Fallback: switch programmatically
-                    switchTab('assignments', null);
+                    switchTab(targetTabId, null);
                 }
             }, 100);
             
-            // Prevent tab switching (override switchTab function for rider view)
+            // Prevent tab switching (override switchTab function for simplified view)
             const originalSwitchTab = window.switchTab;
             window.switchTab = function(tabName, element) {
-                if (tabName !== 'assignments') {
-                    // Only allow switching to assignments tab
+                if (tabName !== targetTabId) {
+                    // Only allow switching to the target assignment tab
                     return;
                 }
                 // Call original function
