@@ -4567,6 +4567,15 @@
         }
 
         function enableSimplifiedViewMode(type) {
+            // Hide the desktop tab bar entirely in simplified view (desktop + mobile)
+            const desktopTabs = document.getElementById('desktop-tabs');
+            if (desktopTabs) {
+                if (!desktopTabs.dataset.originalDisplay) {
+                    desktopTabs.dataset.originalDisplay = desktopTabs.style.display || 'flex';
+                }
+                desktopTabs.style.display = 'none';
+            }
+
             // Hide all tabs except the appropriate assignment tab
             const allTabs = document.querySelectorAll('.tab, .mobile-menu-item');
             const targetTabName = type === 'rider' ? 'Rider Assignments' : 'Coach Assignments';
@@ -6121,6 +6130,13 @@
             const headerBar = document.querySelector('.header-bar');
             const desktopTabs = document.getElementById('desktop-tabs');
             const isMobile = window.innerWidth <= 768;
+
+            // In simplified rider/coach mode we always hide the desktop tab bar,
+            // regardless of viewport size, and we don't auto-toggle it on resize.
+            if (typeof simplifiedLoginInfo !== 'undefined' && simplifiedLoginInfo) {
+                if (desktopTabs) desktopTabs.style.display = 'none';
+                return;
+            }
             
             if (isMobile && (tabName === 'assignments' || tabName === 'coach-assignments')) {
                 // Hide header and tabs in mobile view for assignments tabs
@@ -6129,7 +6145,11 @@
             } else {
                 // Show header and tabs for other tabs or desktop view
                 if (headerBar) headerBar.style.display = '';
-                if (desktopTabs) desktopTabs.style.display = '';
+                if (desktopTabs) {
+                    // Restore to the original display if we have it
+                    const original = desktopTabs.dataset?.originalDisplay || '';
+                    desktopTabs.style.display = original;
+                }
             }
         }
 
