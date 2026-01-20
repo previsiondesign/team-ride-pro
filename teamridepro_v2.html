@@ -22649,10 +22649,31 @@
                         normalizedAvailableRiders.push(normalizedRiderId);
                 }
             } else {
-                    // When unchecked, remove from availableRiders but KEEP them in groups
-                    // This allows them to remain visible in groups with unavailable styling
+                    // When unchecked, remove from availableRiders
                     normalizedAvailableRiders = normalizedAvailableRiders.filter(id => id !== normalizedRiderId);
-                    // DO NOT remove rider from groups - they should stay in groups and show as unavailable
+                    
+                    // Check if practice is in the future or past
+                    const practiceDate = parseISODate(ride.date);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+                    
+                    if (practiceDate) {
+                        practiceDate.setHours(0, 0, 0, 0);
+                        const isFuturePractice = practiceDate >= today;
+                        
+                        if (isFuturePractice) {
+                            // For future practices: Remove rider completely from all groups
+                            ride.groups.forEach(group => {
+                                group.riders = group.riders.filter(id => {
+                                    const normalized = typeof id === 'string' ? parseInt(id, 10) : id;
+                                    return Number.isFinite(normalized) ? normalized !== normalizedRiderId : id !== normalizedRiderId;
+                                });
+                            });
+                        } else {
+                            // For past practices: KEEP rider in groups (they will show as greyed/unavailable)
+                            // This preserves historical assignment data
+                        }
+                    }
                 }
                 
                 // Update ride.availableRiders with the normalized array
