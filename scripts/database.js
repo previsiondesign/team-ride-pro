@@ -1749,3 +1749,121 @@ async function lookupUserByPhoneOrEmail(phoneOrEmail) {
         return null;
     }
 }
+
+// ============ VERIFICATION CODE FUNCTIONS ============
+
+// Generate a random 6-digit code
+function generateVerificationCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Create a verification code in the database
+// Returns: { code: string, id: uuid }
+async function createVerificationCode(phoneOrEmail, userType, userId) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not available');
+    
+    const code = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    
+    const { data, error } = await client
+        .from('verification_codes')
+        .insert({
+            phone_or_email: phoneOrEmail.trim(),
+            code: code,
+            user_type: userType,
+            user_id: userId,
+            expires_at: expiresAt.toISOString(),
+            verified: false
+        })
+        .select()
+        .single();
+    
+    if (error) {
+        console.error('Error creating verification code:', error);
+        throw error;
+    }
+    
+    return { code, id: data.id };
+}
+
+// Verify a code
+// Returns: { valid: boolean, userType?: string, userId?: number, message?: string }
+async function verifyCode(phoneOrEmail, code) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not available');
+    
+    const { data, error } = await client
+        .from('verification_codes')
+        .select('*')
+        .eq('phone_or_email', phoneOrEmail.trim())
+        .eq('code', code.trim())
+        .eq('verified', false)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    
+    if (error) {
+        console.error('Error verifying code:', error);
+        throw error;
+    }
+    
+    if (!data) {
+        return { valid: false, message: 'Invalid or expired code. Please request a new code.' };
+    }
+    
+    // Mark code as verified
+    const { error: updateError } = await client
+        .from('verification_codes')
+        .update({ verified: true })
+        .eq('id', data.id);
+    
+    if (updateError) {
+        console.error('Error marking code as verified:', updateError);
+        // Don't fail verification if update fails
+    }
+    
+    return {
+        valid: true,
+        userType: data.user_type,
+        userId: data.user_id
+    };
+}
+
+// Send verification code via SMS or Email
+// Returns: { success: boolean, method: 'sms' | 'email', error?: string }
+async function sendVerificationCode(phoneOrEmail, code, isEmail = false) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not available');
+    
+    try {
+        if (isEmail) {
+            // Send email via Supabase Edge Function or email service
+            // For now, we'll use an Edge Function
+            const { data, error } = await client.functions.invoke('send-verification-code', {
+                body: { phoneOrEmail, code, isEmail: true }
+            });
+            
+            if (error) throw error;
+            return { success: true, method: 'email' };
+        } else {
+            // Send SMS via Supabase Edge Function (which uses Twilio)
+            const { data, error } = await client.functions.invoke('send-verification-code', {
+                body: { phoneOrEmail, code, isEmail: false }
+            });
+            
+            if (error) throw error;
+            return { success: true, method: 'sms' };
+        }
+    } catch (error) {
+        console.error('Error sending verification code:', error);
+        // If Edge Function doesn't exist, log the code (for development)
+        if (error.message && error.message.includes('not found')) {
+            console.warn('Edge Function not found - code would be:', code);
+            // In development, you might want to show the code in an alert
+            return { success: false, method: isEmail ? 'email' : 'sms', error: 'Sending service not configured' };
+        }
+        throw error;
+    }
+}

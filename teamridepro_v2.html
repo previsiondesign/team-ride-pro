@@ -1107,11 +1107,30 @@
                         <label class="field-label" for="simplified-login-input">Phone or Email</label>
                         <input type="text" id="simplified-login-input" class="modal-field-input" placeholder="Enter phone number or email address" autocomplete="tel email" required>
                     </div>
-                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;" id="simplified-login-button">Continue</button>
+                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;" id="simplified-login-button">Send Verification Code</button>
                     <div style="text-align: center; margin-top: 16px;">
                         <a href="#" class="auth-link" onclick="event.preventDefault(); showAdminLogin();">Admin Login</a>
                     </div>
                 </form>
+            </div>
+            
+            <!-- Verification Code Form (appears after code is sent) -->
+            <div id="verification-code-form" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;" id="verification-code-message">
+                        We've sent a verification code to <strong id="verification-phone-email"></strong>. Please enter it below.
+                    </p>
+                    <div>
+                        <label class="field-label" for="verification-code-input">Verification Code</label>
+                        <input type="text" id="verification-code-input" class="modal-field-input" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: bold;" onkeypress="if(event.key === 'Enter') handleVerifyCode()">
+                    </div>
+                    <button type="button" class="btn-small" style="width: 100%; margin-top: 8px;" id="verify-code-button" onclick="handleVerifyCode()">Verify Code</button>
+                    <div style="text-align: center; margin-top: 12px;">
+                        <a href="#" class="auth-link" id="resend-code-link" onclick="event.preventDefault(); handleResendVerificationCode();">Resend Code</a>
+                        <span style="margin: 0 8px;">|</span>
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); showSimplifiedLogin();">Change Phone/Email</a>
+                    </div>
+                </div>
             </div>
             
             <!-- Admin Login Form -->
@@ -3943,11 +3962,20 @@
         }
 
         // Authentication handlers
-        function showAuthError(message) {
+        function showAuthError(message, type = 'error') {
             const errorDiv = document.getElementById('auth-error');
             if (errorDiv) {
                 errorDiv.textContent = message;
                 errorDiv.style.display = 'block';
+                if (type === 'success') {
+                    errorDiv.style.backgroundColor = '#d4edda';
+                    errorDiv.style.color = '#155724';
+                    errorDiv.style.borderColor = '#c3e6cb';
+                } else {
+                    errorDiv.style.backgroundColor = '#f8d7da';
+                    errorDiv.style.color = '#721c24';
+                    errorDiv.style.borderColor = '#f5c6cb';
+                }
             }
         }
 
@@ -3985,6 +4013,8 @@
             document.getElementById('admin-request-form').style.display = 'none';
             document.getElementById('password-reset-form').style.display = 'none';
             document.getElementById('simplified-login-form').style.display = 'block';
+            document.getElementById('verification-code-form').style.display = 'none';
+            pendingVerification = null; // Clear pending verification
             const subtitle = document.getElementById('login-subtitle');
             if (subtitle) {
                 subtitle.textContent = 'Enter your phone or email to access your assignments';
@@ -4004,6 +4034,9 @@
             hideAuthError();
         }
 
+        // Store pending verification info temporarily
+        let pendingVerification = null;
+
         // Simplified login handler for riders/coaches
         async function handleSimplifiedLogin() {
             hideAuthError();
@@ -4016,6 +4049,7 @@
             }
 
             const phoneOrEmail = input.value.trim();
+            const isEmail = phoneOrEmail.includes('@');
             
             // Disable button and show loading
             if (button) {
@@ -4024,34 +4058,209 @@
             }
 
             try {
+                // Step 1: Lookup user
                 const lookupResult = await lookupUserByPhoneOrEmail(phoneOrEmail);
                 
                 if (!lookupResult) {
                     showAuthError('No matching rider or coach found. Please check your phone number or email address.');
                     if (button) {
                         button.disabled = false;
-                        button.textContent = 'Continue';
+                        button.textContent = 'Send Verification Code';
                     }
                     return;
                 }
 
-                // Store simplified login info in sessionStorage
-                window.sessionStorage.setItem('simplifiedLogin', JSON.stringify({
-                    type: lookupResult.type,
-                    id: lookupResult.id,
-                    name: lookupResult.name,
-                    timestamp: Date.now()
-                }));
-
-                // Route to assignments view (view will be determined automatically from lookup result)
-                window.location.href = 'teamridepro_v2.html?view=assignments';
+                // Step 2: Generate verification code
+                if (button) {
+                    button.textContent = 'Generating code...';
+                }
+                
+                const { code, id: codeId } = await createVerificationCode(
+                    phoneOrEmail,
+                    lookupResult.type,
+                    lookupResult.id
+                );
+                
+                // Step 3: Send verification code
+                if (button) {
+                    button.textContent = isEmail ? 'Sending email...' : 'Sending SMS...';
+                }
+                
+                const sendResult = await sendVerificationCode(phoneOrEmail, code, isEmail);
+                
+                if (!sendResult.success) {
+                    // If sending fails but we're in development, show the code
+                    if (sendResult.error && sendResult.error.includes('not configured')) {
+                        alert(`Development mode: Your verification code is ${code}. The sending service is not configured yet.`);
+                    } else {
+                        throw new Error(sendResult.error || 'Failed to send verification code');
+                    }
+                }
+                
+                // Step 4: Store pending verification and show code input form
+                pendingVerification = {
+                    phoneOrEmail: phoneOrEmail,
+                    userType: lookupResult.type,
+                    userId: lookupResult.id,
+                    userName: lookupResult.name,
+                    codeId: codeId,
+                    isEmail: isEmail
+                };
+                
+                // Show verification code form
+                showVerificationCodeForm(phoneOrEmail, isEmail);
                 
             } catch (error) {
                 console.error('Error during simplified login:', error);
-                showAuthError('An error occurred. Please try again.');
+                showAuthError(error.message || 'An error occurred. Please try again.');
                 if (button) {
                     button.disabled = false;
-                    button.textContent = 'Continue';
+                    button.textContent = 'Send Verification Code';
+                }
+            }
+        }
+
+        // Show verification code input form
+        function showVerificationCodeForm(phoneOrEmail, isEmail) {
+            document.getElementById('simplified-login-form').style.display = 'none';
+            document.getElementById('verification-code-form').style.display = 'block';
+            
+            const messageEl = document.getElementById('verification-code-message');
+            const phoneEmailEl = document.getElementById('verification-phone-email');
+            
+            if (messageEl) {
+                const method = isEmail ? 'email' : 'SMS';
+                messageEl.textContent = `We've sent a verification code via ${method} to `;
+            }
+            
+            if (phoneEmailEl) {
+                phoneEmailEl.textContent = phoneOrEmail;
+            }
+            
+            // Focus on code input
+            setTimeout(() => {
+                const codeInput = document.getElementById('verification-code-input');
+                if (codeInput) {
+                    codeInput.focus();
+                }
+            }, 100);
+        }
+
+        // Verify the code entered by user
+        async function handleVerifyCode() {
+            hideAuthError();
+            const codeInput = document.getElementById('verification-code-input');
+            const verifyButton = document.getElementById('verify-code-button');
+            
+            if (!codeInput || !codeInput.value.trim()) {
+                showAuthError('Please enter the verification code');
+                return;
+            }
+            
+            if (!pendingVerification) {
+                showAuthError('Session expired. Please start over.');
+                showSimplifiedLogin();
+                return;
+            }
+            
+            const code = codeInput.value.trim();
+            
+            if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+                showAuthError('Please enter a valid 6-digit code');
+                return;
+            }
+            
+            // Disable button and show loading
+            if (verifyButton) {
+                verifyButton.disabled = true;
+                verifyButton.textContent = 'Verifying...';
+            }
+            
+            try {
+                const verifyResult = await verifyCode(pendingVerification.phoneOrEmail, code);
+                
+                if (!verifyResult.valid) {
+                    showAuthError(verifyResult.message || 'Invalid or expired code. Please try again or request a new code.');
+                    if (verifyButton) {
+                        verifyButton.disabled = false;
+                        verifyButton.textContent = 'Verify Code';
+                    }
+                    // Clear the input
+                    if (codeInput) {
+                        codeInput.value = '';
+                        codeInput.focus();
+                    }
+                    return;
+                }
+                
+                // Verification successful - store login info and redirect
+                window.sessionStorage.setItem('simplifiedLogin', JSON.stringify({
+                    type: pendingVerification.userType,
+                    id: pendingVerification.userId,
+                    name: pendingVerification.userName,
+                    timestamp: Date.now()
+                }));
+                
+                // Route to assignments view
+                window.location.href = 'teamridepro_v2.html?view=assignments';
+                
+            } catch (error) {
+                console.error('Error verifying code:', error);
+                showAuthError('An error occurred while verifying the code. Please try again.');
+                if (verifyButton) {
+                    verifyButton.disabled = false;
+                    verifyButton.textContent = 'Verify Code';
+                }
+            }
+        }
+
+        // Resend verification code
+        async function handleResendVerificationCode() {
+            if (!pendingVerification) {
+                showAuthError('Session expired. Please start over.');
+                showSimplifiedLogin();
+                return;
+            }
+            
+            hideAuthError();
+            const resendLink = document.getElementById('resend-code-link');
+            
+            if (resendLink) {
+                resendLink.style.pointerEvents = 'none';
+                resendLink.textContent = 'Sending...';
+            }
+            
+            try {
+                // Generate new code
+                const { code, id: codeId } = await createVerificationCode(
+                    pendingVerification.phoneOrEmail,
+                    pendingVerification.userType,
+                    pendingVerification.userId
+                );
+                
+                // Send new code
+                await sendVerificationCode(pendingVerification.phoneOrEmail, code, pendingVerification.isEmail);
+                
+                // Update pending verification
+                pendingVerification.codeId = codeId;
+                
+                // Show success message
+                showAuthError('New verification code sent!', 'success');
+                
+                // Clear code input
+                const codeInput = document.getElementById('verification-code-input');
+                if (codeInput) {
+                    codeInput.value = '';
+                    codeInput.focus();
+                }
+                
+            } catch (error) {
+                console.error('Error resending code:', error);
+                showAuthError('Failed to resend code. Please try again.');
+            } finally {
+                if (resendLink) {
+                    resendLink.style.pointerEvents = '';
+                    resendLink.textContent = 'Resend Code';
                 }
             }
         }
