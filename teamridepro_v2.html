@@ -4649,9 +4649,17 @@
                 // Try to load from Supabase (works for both authenticated and simplified login users)
                 try {
                     await loadDataFromSupabase();
+                    // Successfully loaded from Supabase - don't fall back to localStorage
                 } catch (error) {
-                    console.warn('Error loading from Supabase, falling back to localStorage:', error);
-                    loadData();
+                    // Only fall back if it's a critical error, not just missing settings
+                    const isSettingsError = error?.message?.includes('season') || error?.message?.includes('auto-assign') || error?.status === 406;
+                    if (isSettingsError && hasSimplifiedLogin) {
+                        // For simplified login, settings errors are expected - continue with loaded data
+                        console.log('Settings not available for simplified login (expected)');
+                    } else {
+                        console.warn('Error loading from Supabase, falling back to localStorage:', error);
+                        loadData();
+                    }
                 }
             } else {
                 // Not authenticated and no simplified login - load from localStorage (edge case)
@@ -5336,16 +5344,51 @@
             }
             
             try {
-                // Load all data from Supabase
-                const [riders, coaches, rides, routes, seasonSettings, autoAssignSettings, races] = await Promise.all([
+                // For simplified login users, skip settings that require authentication
+                // They only need riders, coaches, rides, and routes for the assignments view
+                const loadPromises = [
                     getAllRiders().catch(err => { console.error('Error loading riders:', err); return []; }),
                     getAllCoaches().catch(err => { console.error('Error loading coaches:', err); return []; }),
                     getAllRides().catch(err => { console.error('Error loading rides:', err); return []; }),
-                    getAllRoutes().catch(err => { console.error('Error loading routes:', err); return []; }),
-                    getSeasonSettings().catch(err => { console.error('Error loading season settings:', err); return null; }),
-                    getAutoAssignSettings().catch(err => { console.error('Error loading auto-assign settings:', err); return null; }),
-                    (typeof getAllRaces === 'function' ? getAllRaces().catch(err => { console.error('Error loading races in Promise.all:', err); return []; }) : (console.warn('getAllRaces function not available'), Promise.resolve([])))
-                ]);
+                    getAllRoutes().catch(err => { console.error('Error loading routes:', err); return []; })
+                ];
+                
+                // Only load settings if user is fully authenticated (not simplified login)
+                let seasonSettings = null;
+                let autoAssignSettings = null;
+                if (currentUser) {
+                    // Fully authenticated user - load settings
+                    loadPromises.push(
+                        getSeasonSettings().catch(err => { 
+                            // Silently handle 406 errors for simplified login users
+                            if (err?.code !== 'PGRST301' && err?.status !== 406) {
+                                console.error('Error loading season settings:', err); 
+                            }
+                            return null; 
+                        }),
+                        getAutoAssignSettings().catch(err => { 
+                            // Silently handle 406 errors for simplified login users
+                            if (err?.code !== 'PGRST301' && err?.status !== 406) {
+                                console.error('Error loading auto-assign settings:', err); 
+                            }
+                            return null; 
+                        })
+                    );
+                } else {
+                    // Simplified login user - skip settings (not needed for assignments view)
+                    loadPromises.push(Promise.resolve(null), Promise.resolve(null));
+                }
+                
+                // Load races if function is available
+                loadPromises.push(
+                    typeof getAllRaces === 'function' 
+                        ? getAllRaces().catch(err => { console.error('Error loading races in Promise.all:', err); return []; }) 
+                        : Promise.resolve([])
+                );
+                
+                const [riders, coaches, rides, routes, seasonSettingsResult, autoAssignSettingsResult, races] = await Promise.all(loadPromises);
+                seasonSettings = seasonSettingsResult;
+                autoAssignSettings = autoAssignSettingsResult;
                 
                 // Map data to app structure
                 data.riders = riders || [];
