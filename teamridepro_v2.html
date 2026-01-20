@@ -4640,12 +4640,21 @@
             // Check if we should load from Supabase
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            const hasSimplifiedLogin = simplifiedLoginInfo !== null;
             
-            if (client && currentUser && typeof loadDataFromSupabase === 'function') {
-                // Authenticated user - ONLY load from Supabase (no localStorage fallback)
-                await loadDataFromSupabase();
+            // Load from Supabase if:
+            // 1. User is fully authenticated (has Supabase auth user), OR
+            // 2. User has simplified login (rider/coach login via phone/email)
+            if (client && (currentUser || hasSimplifiedLogin) && typeof loadDataFromSupabase === 'function') {
+                // Try to load from Supabase (works for both authenticated and simplified login users)
+                try {
+                    await loadDataFromSupabase();
+                } catch (error) {
+                    console.warn('Error loading from Supabase, falling back to localStorage:', error);
+                    loadData();
+                }
             } else {
-                // Not authenticated - load from localStorage (edge case, should rarely happen)
+                // Not authenticated and no simplified login - load from localStorage (edge case)
                 console.warn('Not authenticated - loading from localStorage (fallback mode)');
                 loadData();
             }
@@ -5310,8 +5319,15 @@
         async function loadDataFromSupabase() {
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            const hasSimplifiedLogin = simplifiedLoginInfo !== null;
             
-            if (!client || !currentUser) {
+            if (!client) {
+                throw new Error('Supabase client not available');
+            }
+            
+            // Allow loading for authenticated users OR simplified login users
+            // Simplified login users can read data if RLS policies allow
+            if (!currentUser && !hasSimplifiedLogin) {
                 throw new Error('Not authenticated - cannot load from Supabase');
             }
             
@@ -18240,7 +18256,13 @@
             if (!ride) return;
 
             if (selectAll) {
-                ride.availableRiders = data.riders ? data.riders.map(r => r.id) : [];
+                // For refined rides, only select filtered riders; for regular rides, select all
+                const isRefined = isRideRefined(ride);
+                if (isRefined) {
+                    ride.availableRiders = getFilteredRiderIdsForRide(ride);
+                } else {
+                    ride.availableRiders = data.riders ? data.riders.map(r => r.id) : [];
+                }
             } else {
                 ride.availableRiders = [];
                 if (!Array.isArray(ride.groups)) {
