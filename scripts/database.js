@@ -1839,16 +1839,37 @@ async function sendVerificationCode(phoneOrEmail, code, isEmail = false) {
     
     // Get the anon key and URL for anonymous access (needed for unauthenticated users)
     // The credentials should be exposed on window by supabase-config.js
-    const anonKey = window.SUPABASE_ANON_KEY || '';
-    const supabaseUrl = window.SUPABASE_URL || '';
+    // If not on window, try to get from the client's internal config
+    let anonKey = window.SUPABASE_ANON_KEY || '';
+    let supabaseUrl = window.SUPABASE_URL || '';
+    
+    // Fallback: Try to get from client if available
+    if (!anonKey && client) {
+        // The Supabase client stores the key internally, but we can't access it directly
+        // So we rely on window.SUPABASE_ANON_KEY being set by supabase-config.js
+        console.warn('⚠️ SUPABASE_ANON_KEY not found on window. Make sure supabase-config.js is loaded before database.js');
+    }
     
     if (!anonKey || !supabaseUrl) {
+        console.error('❌ Missing Supabase credentials:', {
+            hasAnonKey: !!anonKey,
+            hasUrl: !!supabaseUrl,
+            windowKeys: Object.keys(window).filter(k => k.includes('SUPABASE'))
+        });
         throw new Error('Supabase credentials not available. Make sure supabase-config.js is loaded.');
     }
     
     try {
         // Use direct fetch to Edge Function with explicit headers for anonymous access
         const edgeFunctionUrl = `${supabaseUrl}/functions/v1/send-verification-code`;
+        
+        // Debug: Log what we're sending (without exposing the full key)
+        console.log('🔐 Calling Edge Function:', {
+            url: edgeFunctionUrl,
+            hasAnonKey: !!anonKey,
+            anonKeyPrefix: anonKey ? anonKey.substring(0, 20) + '...' : 'missing',
+            isEmail: isEmail
+        });
         
         const response = await fetch(edgeFunctionUrl, {
             method: 'POST',
@@ -1860,8 +1881,16 @@ async function sendVerificationCode(phoneOrEmail, code, isEmail = false) {
             body: JSON.stringify({ phoneOrEmail, code, isEmail })
         });
         
+        // Debug: Log response details
+        console.log('📡 Edge Function Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok
+        });
+        
         if (!response.ok) {
             const errorText = await response.text();
+            console.error('❌ Edge Function Error Response:', errorText);
             let errorData;
             try {
                 errorData = JSON.parse(errorText);

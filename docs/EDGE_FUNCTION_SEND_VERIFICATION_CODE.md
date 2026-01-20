@@ -14,14 +14,31 @@ const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID')
 const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')
 const TWILIO_PHONE_NUMBER = Deno.env.get('TWILIO_PHONE_NUMBER')
 
+// CORS headers for cross-origin requests
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   try {
     const { phoneOrEmail, code, isEmail } = await req.json()
     
     if (!phoneOrEmail || !code) {
       return new Response(
         JSON.stringify({ error: 'phoneOrEmail and code are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { 
+          status: 400, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
       )
     }
     
@@ -41,7 +58,10 @@ serve(async (req) => {
           method: 'email',
           message: 'Code sent via email (check console for development)' 
         }),
-        { headers: { 'Content-Type': 'application/json' } }
+        { headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        } }
       )
     } else {
       // Send SMS via Twilio
@@ -51,7 +71,13 @@ serve(async (req) => {
             error: 'Twilio credentials not configured',
             message: 'Please configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in Supabase secrets'
           }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
+          { 
+            status: 500, 
+            headers: { 
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            } 
+          }
         )
       }
       
@@ -78,7 +104,13 @@ serve(async (req) => {
         console.error('Twilio error:', errorText)
         return new Response(
           JSON.stringify({ error: `Failed to send SMS: ${errorText}` }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
+          { 
+            status: 500, 
+            headers: { 
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            } 
+          }
         )
       }
       
@@ -89,14 +121,23 @@ serve(async (req) => {
           method: 'sms',
           message: 'Code sent via SMS'
         }),
-        { headers: { 'Content-Type': 'application/json' } }
+        { headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        } }
       )
     }
   } catch (error) {
     console.error('Error in send-verification-code:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { 
+        status: 500, 
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        } 
+      }
     )
   }
 })
@@ -109,7 +150,22 @@ serve(async (req) => {
 1. In Supabase Dashboard → Edge Functions → Create a new function
 2. Name it: `send-verification-code`
 3. Paste the code above
-4. Deploy
+4. **Important**: Make sure the function allows anonymous access:
+   - After creating the function, check the function settings
+   - Ensure "Require authentication" is **OFF** or unchecked
+   - Edge Functions should accept requests with the `anon` key in headers
+5. Deploy
+
+### 1a. Verify Anonymous Access (If Getting 401 Errors)
+
+If you're getting 401 Unauthorized errors, the Edge Function might be configured to require authentication. To fix:
+
+1. Go to Supabase Dashboard → Edge Functions → `send-verification-code`
+2. Check the function settings/permissions
+3. Ensure the function accepts requests with the `anon` key
+4. Some Supabase projects require explicit configuration - check if there's a "Public" or "Allow anonymous" setting
+
+**Alternative**: If anonymous access isn't available, you may need to use the Supabase client's `functions.invoke()` method which handles authentication automatically, but this requires the user to be authenticated first (which defeats the purpose for simplified login).
 
 ### 2. Set Environment Variables (Secrets)
 
