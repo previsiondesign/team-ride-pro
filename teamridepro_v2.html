@@ -349,6 +349,9 @@
                         </div>
                         <div id="group-assignments-content" style="display: none; margin-top: 12px;">
                             <div class="action-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                                <button id="undo-btn" class="btn-small" onclick="undoAssignmentChange()" title="Undo last change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↶</button>
+                                <button id="redo-btn" class="btn-small" onclick="redoAssignmentChange()" title="Redo last undone change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↷</button>
+                                <div style="width: 1px; height: 20px; background: #ddd; margin: 0 4px;"></div>
                                 <button class="btn-small" onclick="addGroup()">Add Group</button>
                                 <button class="btn-small" onclick="addGroupsFromLastPractice()" style="background: #1976D2; color: white; border-color: #1976D2;">Add Groups from Last Practice</button>
                                 <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
@@ -18327,8 +18330,16 @@
                 document.getElementById('current-ride').style.display = 'none';
                 const navSection = document.getElementById('practice-navigation');
                 if (navSection) navSection.style.display = 'none';
+                // Clear history when no ride is selected
+                clearAssignmentHistory();
                 return;
             }
+            
+            // Clear undo/redo history when loading a new ride
+            clearAssignmentHistory();
+            
+            // Save initial state so first undo works
+            saveAssignmentState(ride);
             
             // Ensure default attendance selection for this practice
             ensureRideAttendanceDefaults(ride);
@@ -18645,6 +18656,12 @@
                     alert('Cannot assign riders and coaches to a cancelled practice.');
                     return;
                 }
+
+                // Save state before autofill (allows undo of autofill)
+                saveAssignmentState(ride);
+                
+                // Clear history after autofill (autofill is a major operation, start fresh history)
+                // But first save the state above so autofill itself can be undone
 
                 const debugLines = [];
                 debugLines.push(`=== AUTO-ASSIGN RUN AT ${new Date().toLocaleString()} ===`);
@@ -19501,6 +19518,9 @@
                 return;
             }
 
+            // Save state before change
+            saveAssignmentState(ride);
+
             // Find the most recent practice before this one
             const currentDate = parseISODate(ride.date);
             if (!currentDate) {
@@ -19812,6 +19832,9 @@
             
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            
+            // Clear undo/redo history when clearing assignments
+            clearAssignmentHistory();
             
             // Delete all groups
             ride.groups = [];
@@ -21282,6 +21305,9 @@
             
             // Update publish/unpublish button visibility
             updatePublishButtons();
+            
+            // Update undo/redo button states
+            updateUndoRedoButtons();
 
             const groupPaceOrder = getGroupPaceOrderForRide(ride);
             ride.groupPaceOrder = groupPaceOrder;
@@ -22578,6 +22604,9 @@
                     return;
                 }
                 
+                // Save state before change
+                saveAssignmentState(ride);
+                
                 console.log('🔵 toggleRiderAvailability called:', { riderId, isAvailable, rideId: ride.id });
                 console.log('🔵 toggleRiderAvailability: ride.availableRiders BEFORE:', {
                     length: ride.availableRiders?.length,
@@ -23406,6 +23435,10 @@
         function addGroup() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            
+            // Save state before change
+            saveAssignmentState(ride);
+            
             // Find next available group number
             const existingLabels = ride.groups.map(g => g.label).filter(Boolean);
             let nextNumber = 1;
@@ -23482,6 +23515,9 @@
             if (!confirm('Delete this group? Riders will move back to the unassigned list.')) {
                 return;
             }
+            
+            // Save state before change
+            saveAssignmentState(ride);
 
             ride.groups = ride.groups.filter(g => g.id !== numericId);
             // Don't renumber - keep other group names persistent
@@ -23792,6 +23828,151 @@
         
         let pendingCoachMove = null;
         
+        // Undo/Redo history for group assignments
+        let assignmentHistory = [];
+        let assignmentHistoryIndex = -1;
+        const MAX_HISTORY = 50; // Limit history to prevent memory issues
+        let isUndoRedoInProgress = false; // Flag to prevent saving state during undo/redo
+        
+        // Save current state of group assignments for undo/redo
+        function saveAssignmentState(ride) {
+            if (!ride || isUndoRedoInProgress) return; // Don't save during undo/redo
+            
+            // Deep clone the groups and available riders/coaches
+            const state = {
+                rideId: ride.id,
+                groups: JSON.parse(JSON.stringify(ride.groups || [])),
+                availableRiders: [...(ride.availableRiders || [])],
+                availableCoaches: [...(ride.availableCoaches || [])]
+            };
+            
+            // Remove any history after current index (when doing a new action after undo)
+            if (assignmentHistoryIndex < assignmentHistory.length - 1) {
+                assignmentHistory = assignmentHistory.slice(0, assignmentHistoryIndex + 1);
+            }
+            
+            // Add new state to history
+            assignmentHistory.push(state);
+            
+            // Limit history size
+            if (assignmentHistory.length > MAX_HISTORY) {
+                assignmentHistory.shift();
+            } else {
+                assignmentHistoryIndex++;
+            }
+            
+            // Update button states
+            updateUndoRedoButtons();
+        }
+        
+        // Undo last assignment change
+        function undoAssignmentChange() {
+            if (assignmentHistoryIndex < 0) return;
+            
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            
+            // Set flag to prevent saving state during undo
+            isUndoRedoInProgress = true;
+            
+            // Check if current state matches the last saved state (don't undo if already at this state)
+            if (assignmentHistoryIndex === assignmentHistory.length - 1) {
+                // Move back one step
+                assignmentHistoryIndex--;
+            }
+            
+            if (assignmentHistoryIndex < 0) {
+                isUndoRedoInProgress = false;
+                updateUndoRedoButtons();
+                return;
+            }
+            
+            // Restore previous state
+            const previousState = assignmentHistory[assignmentHistoryIndex];
+            if (!previousState || previousState.rideId !== ride.id) {
+                isUndoRedoInProgress = false;
+                updateUndoRedoButtons();
+                return;
+            }
+            
+            // Restore groups and available lists
+            ride.groups = JSON.parse(JSON.stringify(previousState.groups));
+            ride.availableRiders = [...previousState.availableRiders];
+            ride.availableCoaches = [...previousState.availableCoaches];
+            
+            // Save and render
+            saveRideToDB(ride);
+            renderAssignments(ride);
+            renderPracticeAttendanceLists();
+            
+            // Clear flag and update button states
+            isUndoRedoInProgress = false;
+            updateUndoRedoButtons();
+        }
+        
+        // Redo last undone change
+        function redoAssignmentChange() {
+            if (assignmentHistoryIndex >= assignmentHistory.length - 1) return;
+            
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            
+            // Set flag to prevent saving state during redo
+            isUndoRedoInProgress = true;
+            
+            // Move forward one step
+            assignmentHistoryIndex++;
+            
+            const nextState = assignmentHistory[assignmentHistoryIndex];
+            if (!nextState || nextState.rideId !== ride.id) {
+                assignmentHistoryIndex--; // Revert if state doesn't match
+                isUndoRedoInProgress = false;
+                updateUndoRedoButtons();
+                return;
+            }
+            
+            // Restore next state
+            ride.groups = JSON.parse(JSON.stringify(nextState.groups));
+            ride.availableRiders = [...nextState.availableRiders];
+            ride.availableCoaches = [...nextState.availableCoaches];
+            
+            // Save and render
+            saveRideToDB(ride);
+            renderAssignments(ride);
+            renderPracticeAttendanceLists();
+            
+            // Clear flag and update button states
+            isUndoRedoInProgress = false;
+            updateUndoRedoButtons();
+        }
+        
+        // Update undo/redo button states
+        function updateUndoRedoButtons() {
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+            
+            if (undoBtn) {
+                const canUndo = assignmentHistoryIndex >= 0;
+                undoBtn.disabled = !canUndo;
+                undoBtn.style.opacity = canUndo ? '1' : '0.5';
+                undoBtn.style.cursor = canUndo ? 'pointer' : 'not-allowed';
+            }
+            
+            if (redoBtn) {
+                const canRedo = assignmentHistoryIndex < assignmentHistory.length - 1;
+                redoBtn.disabled = !canRedo;
+                redoBtn.style.opacity = canRedo ? '1' : '0.5';
+                redoBtn.style.cursor = canRedo ? 'pointer' : 'not-allowed';
+            }
+        }
+        
+        // Clear history when switching rides or clearing assignments
+        function clearAssignmentHistory() {
+            assignmentHistory = [];
+            assignmentHistoryIndex = -1;
+            updateUndoRedoButtons();
+        }
+        
         function showCoachMoveMenu(event, coachId, groupId, rideId) {
             const menu = document.getElementById('coach-move-context-menu');
             if (!menu) return;
@@ -23879,6 +24060,9 @@
         }
         
         function moveCoachToRole(ride, coachId, groupId, targetRole) {
+            // Save state before change
+            saveAssignmentState(ride);
+            
             const group = findGroupById(ride, groupId);
             if (!group) return;
             
@@ -23950,6 +24134,9 @@
         }
         
         function moveCoachToGroup(ride, coachId, sourceGroupId, targetGroupId) {
+            // Save state before change
+            saveAssignmentState(ride);
+            
             const sourceGroup = findGroupById(ride, sourceGroupId);
             const targetGroup = findGroupById(ride, targetGroupId);
             if (!sourceGroup || !targetGroup) return;
@@ -24058,6 +24245,9 @@
                 return;
             }
             
+            // Save state before change
+            saveAssignmentState(ride);
+            
             if (!ride.availableCoaches.includes(coachId)) {
                 ride.availableCoaches.push(coachId);
             }
@@ -24075,6 +24265,9 @@
             const { ride, coachId, groupId, targetCoachId } = pendingCoachDrop;
             const menu = document.getElementById('coach-drop-context-menu');
             if (menu) menu.style.display = 'none';
+            
+            // Save state before change
+            saveAssignmentState(ride);
             
             if (targetCoachId) {
                 // Direct swap with specific coach
@@ -24158,6 +24351,9 @@
         }
         
         function swapCoachWithTarget(ride, coachId, groupId, targetCoachId) {
+            // Save state before change
+            saveAssignmentState(ride);
+            
             const group = findGroupById(ride, groupId);
             if (!group) return;
             
@@ -24265,6 +24461,9 @@
 
             const dropType = dropTarget.dataset.dropType;
             if (dropType && dropType !== 'coach') return;
+
+            // Save state before change
+            saveAssignmentState(ride);
 
             const targetRole = dropTarget.dataset.role || null;
             const targetGroupIdAttr = dropTarget.dataset.groupId;
@@ -24492,6 +24691,9 @@
         }
         
         function swapCoachInGroup(ride, coachId, groupId) {
+            // Save state before change
+            saveAssignmentState(ride);
+            
             const group = findGroupById(ride, groupId);
             if (!group) return;
             
