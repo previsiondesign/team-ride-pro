@@ -5295,10 +5295,17 @@
                 }
             } else {
                 // Not authenticated - use localStorage (edge case, should rarely happen)
-                if (!client || !currentUser) {
-                    console.warn('User not authenticated - saving to localStorage as fallback');
+                // For simplified login users, this is expected (they can read from Supabase but save to localStorage)
+                const hasSimplifiedLogin = simplifiedLoginInfo !== null;
+                if (!hasSimplifiedLogin) {
+                    if (!client || !currentUser) {
+                        console.warn('User not authenticated - saving to localStorage as fallback');
+                    } else {
+                        console.warn('Database functions not available - saving to localStorage as fallback');
+                    }
                 } else {
-                    console.warn('Database functions not available - saving to localStorage as fallback');
+                    // Simplified login user - silently save to localStorage (expected behavior)
+                    console.log('Simplified login user - saving to localStorage (read-only mode)');
                 }
                 
                 try {
