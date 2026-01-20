@@ -18513,9 +18513,24 @@
                 });
                 debugLines.push(`ride.availableRiders after normalization: ${JSON.stringify(ride.availableRiders?.slice(0, 10))} (showing first 10)`);
                 
-                // Use all available riders
+                // For refined practices, use filtered riders instead of all availableRiders
+                // This ensures autofill only considers the riders that qualify under the refinement filter
+                // Note: isRefined was already checked earlier, so we check again here
+                let ridersToUse = ride.availableRiders;
+                if (isRefined) {
+                    const filteredRiderIds = getFilteredRiderIdsForRide(ride);
+                    console.log('🔴 AUTO-ASSIGN: Refined practice detected - using filtered riders:', {
+                        filteredCount: filteredRiderIds.length,
+                        availableRidersCount: ride.availableRiders.length,
+                        filteredIds: filteredRiderIds.slice(0, 10)
+                    });
+                    debugLines.push(`⚠️ Refined practice: Using ${filteredRiderIds.length} filtered riders instead of ${ride.availableRiders.length} available riders`);
+                    ridersToUse = filteredRiderIds;
+                }
+                
+                // Use filtered riders for refined practices, or all available riders for regular practices
                 console.log('🔴 AUTO-ASSIGN: Looking up riders...');
-                const availableRiders = ride.availableRiders
+                const availableRiders = ridersToUse
                     .map(id => {
                         const rider = getRiderById(id);
                         if (!rider) {
@@ -18538,7 +18553,8 @@
                 debugLines.push(`Available Coaches (before filtering): ${allAvailableCoaches.length}`);
                 debugLines.push(`Available Coaches (after filtering out N/A level): ${availableCoaches.length}`);
                 debugLines.push(`Available Riders (ride.availableRiders.length): ${ride.availableRiders.length}`);
-                debugLines.push(`Available Riders (after filtering): ${availableRiders.length}`);
+                debugLines.push(`Riders to use for autofill${isRefined ? ' (refined practice - filtered)' : ''}: ${ridersToUse.length}`);
+                debugLines.push(`Available Riders (after lookup): ${availableRiders.length}`);
                 debugLines.push(`Total Riders in Roster: ${data.riders ? data.riders.length : 0}`);
                 
                 // List all eligible available coaches with their details
