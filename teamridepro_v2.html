@@ -21099,10 +21099,14 @@
             // Get sort preference for unassigned riders (default to 'pace')
             const unassignedRidersSort = ride.unassignedRidersSort || 'pace';
             
+            // For refined practices, use filtered riders instead of all availableRiders
+            const isRefined = isRideRefined(ride);
+            const ridersToCheck = isRefined ? getFilteredRiderIdsForRide(ride) : ride.availableRiders;
+            
             const unassignedRiders = data.riders
                 .filter(rider => !riderAssignmentMap[rider.id])
                 .map(rider => {
-                    const isAvailable = ride.availableRiders.includes(rider.id);
+                    const isAvailable = ridersToCheck.includes(rider.id);
                     return {
                         rider,
                         isAvailable,
@@ -21442,7 +21446,11 @@
             let newAttendeesHtml = '';
             const assignedRiderIds = new Set(Object.keys(riderAssignmentMap).map(id => parseInt(id, 10)).filter(id => Number.isFinite(id)));
             const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
-            const availableRiderIds = new Set((ride.availableRiders || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            
+            // For refined practices, use filtered riders instead of all availableRiders
+            const isRefinedForUnassigned = isRideRefined(ride);
+            const ridersToCheckForUnassigned = isRefinedForUnassigned ? getFilteredRiderIdsForRide(ride) : (ride.availableRiders || []);
+            const availableRiderIds = new Set(ridersToCheckForUnassigned.map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
             
             const unassignedAvailableCoaches = (data.coaches || [])
                 .filter(coach => {
