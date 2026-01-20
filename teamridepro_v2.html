@@ -4028,6 +4028,16 @@
             hideAuthError();
         }
 
+        function resetLoginButtonState() {
+            const loginButton = document.querySelector('#login-form button[type="submit"]');
+            if (loginButton) {
+                loginButton.disabled = false;
+                loginButton.textContent = 'Sign In';
+                loginButton.style.opacity = '1';
+                loginButton.style.cursor = 'pointer';
+            }
+        }
+
         function showAdminLogin() {
             document.getElementById('login-form').style.display = 'block';
             document.getElementById('admin-request-form').style.display = 'none';
@@ -4038,6 +4048,7 @@
                 subtitle.textContent = 'Sign in to access the practice manager';
             }
             hideAuthError();
+            resetLoginButtonState(); // Reset button state when showing login form
         }
 
         // Store pending verification info temporarily
@@ -4559,6 +4570,13 @@
                 }
                 if (mainContainer) mainContainer.style.display = 'none';
                 if (userMenu) userMenu.style.display = 'none';
+                
+                // Reset login button state when showing login form (e.g., after logout)
+                resetLoginButtonState();
+                // Show admin login form by default (not simplified login)
+                if (!needsSimplifiedLogin) {
+                    showAdminLogin();
+                }
             }
         }
 
