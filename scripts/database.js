@@ -1837,29 +1837,50 @@ async function sendVerificationCode(phoneOrEmail, code, isEmail = false) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not available');
     
+    // Get the anon key and URL for anonymous access (needed for unauthenticated users)
+    // The credentials should be exposed on window by supabase-config.js
+    const anonKey = window.SUPABASE_ANON_KEY || '';
+    const supabaseUrl = window.SUPABASE_URL || '';
+    
+    if (!anonKey || !supabaseUrl) {
+        throw new Error('Supabase credentials not available. Make sure supabase-config.js is loaded.');
+    }
+    
     try {
-        if (isEmail) {
-            // Send email via Supabase Edge Function or email service
-            // For now, we'll use an Edge Function
-            const { data, error } = await client.functions.invoke('send-verification-code', {
-                body: { phoneOrEmail, code, isEmail: true }
-            });
-            
-            if (error) throw error;
-            return { success: true, method: 'email' };
-        } else {
-            // Send SMS via Supabase Edge Function (which uses Twilio)
-            const { data, error } = await client.functions.invoke('send-verification-code', {
-                body: { phoneOrEmail, code, isEmail: false }
-            });
-            
-            if (error) throw error;
-            return { success: true, method: 'sms' };
+        // Use direct fetch to Edge Function with explicit headers for anonymous access
+        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/send-verification-code`;
+        
+        const response = await fetch(edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': anonKey,
+                'Authorization': `Bearer ${anonKey}`
+            },
+            body: JSON.stringify({ phoneOrEmail, code, isEmail })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch {
+                errorData = { error: errorText };
+            }
+            throw new Error(errorData.error || `Edge Function returned ${response.status}: ${response.statusText}`);
         }
+        
+        const data = await response.json();
+        return { 
+            success: true, 
+            method: isEmail ? 'email' : 'sms',
+            data: data 
+        };
     } catch (error) {
         console.error('Error sending verification code:', error);
         // If Edge Function doesn't exist, log the code (for development)
-        if (error.message && error.message.includes('not found')) {
+        if (error.message && (error.message.includes('not found') || error.message.includes('404'))) {
             console.warn('Edge Function not found - code would be:', code);
             // In development, you might want to show the code in an alert
             return { success: false, method: isEmail ? 'email' : 'sms', error: 'Sending service not configured' };

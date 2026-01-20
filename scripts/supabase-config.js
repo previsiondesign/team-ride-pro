@@ -12,6 +12,14 @@ function initSupabase() {
     const url = window.SUPABASE_URL || SUPABASE_URL || '';
     const key = window.SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || '';
     
+    // Expose credentials on window for use by other scripts (e.g., database.js for Edge Functions)
+    if (key && !window.SUPABASE_ANON_KEY) {
+        window.SUPABASE_ANON_KEY = key;
+    }
+    if (url && !window.SUPABASE_URL) {
+        window.SUPABASE_URL = url;
+    }
+    
     if (!url || !key) {
         console.error('Supabase credentials not configured.');
         console.error('Please add your credentials to supabase-config.js:');
