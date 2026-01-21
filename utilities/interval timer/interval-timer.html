@@ -799,48 +799,66 @@
         
         // Play a loud bell chime using Web Audio API
         function playDing() {
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const now = audioContext.currentTime;
-                
-                // Create multiple oscillators for a rich bell-like sound
-                // Bell tones typically have multiple harmonics
-                const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 - pleasant bell chord
-                const oscillators = [];
-                const gainNodes = [];
-                
-                frequencies.forEach((freq, index) => {
-                    const osc = audioContext.createOscillator();
-                    const gain = audioContext.createGain();
-                    
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, now);
-                    
-                    // Each harmonic decays at slightly different rates for bell-like effect
-                    const delay = index * 0.02; // Slight stagger
-                    const attackTime = 0.01;
-                    const decayTime = 0.3 + (index * 0.1);
-                    const sustainLevel = 0.1;
-                    const releaseTime = 0.5;
-                    
-                    gain.gain.setValueAtTime(0, now + delay);
-                    gain.gain.linearRampToValueAtTime(1.0, now + delay + attackTime); // Maximum volume
-                    gain.gain.exponentialRampToValueAtTime(sustainLevel, now + delay + attackTime + decayTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + delay + attackTime + decayTime + releaseTime);
-                    
-                    osc.connect(gain);
-                    gain.connect(audioContext.destination);
-                    
-                    osc.start(now + delay);
-                    osc.stop(now + delay + attackTime + decayTime + releaseTime);
-                    
-                    oscillators.push(osc);
-                    gainNodes.push(gain);
-                });
-                
-            } catch (error) {
-                console.log('Audio not supported:', error);
+            // Ensure audio context is initialized and resumed (critical for iOS)
+            initAudioContext();
+            
+            if (!audioContext || audioContext.state === 'closed') {
+                return;
             }
+            
+            try {
+                // Resume if suspended (iOS Safari requirement)
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                        playDingSound();
+                    }).catch(() => {});
+                } else {
+                    playDingSound();
+                }
+            } catch (error) {
+                console.log('Audio error:', error);
+            }
+        }
+        
+        function playDingSound() {
+            if (!audioContext) return;
+            
+            const now = audioContext.currentTime;
+            
+            // Create multiple oscillators for a rich bell-like sound
+            // Bell tones typically have multiple harmonics
+            const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 - pleasant bell chord
+            const oscillators = [];
+            const gainNodes = [];
+            
+            frequencies.forEach((freq, index) => {
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now);
+                
+                // Each harmonic decays at slightly different rates for bell-like effect
+                const delay = index * 0.02; // Slight stagger
+                const attackTime = 0.01;
+                const decayTime = 0.3 + (index * 0.1);
+                const sustainLevel = 0.1;
+                const releaseTime = 0.5;
+                
+                gain.gain.setValueAtTime(0, now + delay);
+                gain.gain.linearRampToValueAtTime(1.0, now + delay + attackTime); // Maximum volume
+                gain.gain.exponentialRampToValueAtTime(sustainLevel, now + delay + attackTime + decayTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + delay + attackTime + decayTime + releaseTime);
+                
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                osc.start(now + delay);
+                osc.stop(now + delay + attackTime + decayTime + releaseTime);
+                
+                oscillators.push(osc);
+                gainNodes.push(gain);
+            });
         }
         
         function autoResizePhaseText(element) {
@@ -914,6 +932,9 @@
             document.getElementById('timeDisplay').classList.remove('complete');
             document.getElementById('phaseDisplay').classList.remove('complete');
             document.getElementById('intervalDisplay').classList.remove('complete');
+            
+            // Initialize audio context (must be from user interaction on iOS)
+            initAudioContext();
             
             // Activate speech API on mobile (iOS Safari requires immediate activation after user interaction)
             if ('speechSynthesis' in window) {
