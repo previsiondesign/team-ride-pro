@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Interval Timer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Allerta+Stencil&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+        
+        body.fullscreen {
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        body.fullscreen .container {
+            max-width: 100%;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh; /* Use dynamic viewport height for mobile */
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+            background: transparent;
+            display: block;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 24px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .setup-screen, .timer-screen, .countdown-screen {
+            display: none;
+        }
+        
+        .setup-screen.active, .timer-screen.active, .countdown-screen.active {
+            display: block;
+        }
+        
+        body.fullscreen .setup-screen.active {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+        
+        body.fullscreen .countdown-screen.active {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+        
+        body.fullscreen .countdown-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        body.fullscreen .timer-screen.active {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+        
+        body.fullscreen h1 {
+            display: block;
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            margin: 0;
+            font-size: 18px;
+            z-index: 10;
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen h1 {
+                font-size: 20px;
+                top: 15px;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen h1 {
+                font-size: 14px;
+                top: 12px;
+            }
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #777;
+            font-weight: 500;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            color: #333;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        
+        .button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+        
+        .button:hover {
+            background: #1976D2;
+        }
+        
+        .button-primary {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .button-secondary {
+            background: #757575;
+            color: white;
+        }
+        
+        .button-secondary:hover {
+            background: #616161;
+        }
+        
+        .timer-display {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        body.fullscreen .timer-display {
+            position: absolute;
+            top: 38%;
+            left: 50%;
+            transform: translate(-50%, -50%) scaleY(1.5);
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .time {
+            font-size: 72px;
+            font-weight: 600;
+            line-height: 1;
+            color: #333;
+            margin-bottom: 15px;
+            font-family: 'Allerta Stencil', sans-serif;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        body.fullscreen .time {
+            font-size: 42vw;
+            margin: 0;
+            line-height: 1;
+            letter-spacing: 0;
+            color: #333;
+            text-align: center;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Allerta Stencil', sans-serif;
+            font-variant-numeric: tabular-nums;
+            display: block;
+            width: 4ch;
+        }
+        
+        /* Completion state - smaller text to prevent overlap */
+        body.fullscreen .time.complete,
+        body.fullscreen #timeDisplay.complete {
+            font-size: 28vw;
+            margin-bottom: 20px;
+            width: auto;
+        }
+        
+        body.fullscreen .phase.complete,
+        body.fullscreen #phaseDisplay.complete {
+            margin-bottom: 15px;
+        }
+        
+        body.fullscreen .interval-count.complete,
+        body.fullscreen #intervalDisplay.complete {
+            margin-top: 15px;
+        }
+        
+        @media (orientation: portrait) {
+            body.fullscreen .time {
+                font-size: 38vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .time {
+                font-size: 36vw;
+            }
+            
+            body.fullscreen .time.complete,
+            body.fullscreen #timeDisplay.complete {
+                font-size: 24vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .time {
+                font-size: 33vw;
+            }
+            
+            body.fullscreen .time.complete,
+            body.fullscreen #timeDisplay.complete {
+                font-size: 22vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .time {
+                font-size: 30vw;
+            }
+            
+            body.fullscreen .time.complete,
+            body.fullscreen #timeDisplay.complete {
+                font-size: 20vw;
+            }
+        }
+        
+        .phase {
+            font-size: 18px;
+            margin-top: 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        body.fullscreen .phase {
+            font-size: 5vw;
+            margin: 0;
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, calc(-50% - 25vw));
+            z-index: 10;
+            font-weight: 700;
+            margin-bottom: 10px;
+            white-space: nowrap;
+            max-width: 90vw;
+            overflow: hidden;
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .phase {
+                font-size: 10vw;
+                transform: translate(-50%, calc(-50% - 22vw));
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .phase {
+                font-size: 7vw;
+                transform: translate(-50%, calc(-50% - 20vw));
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .phase {
+                font-size: 8vw;
+                transform: translate(-50%, calc(-50% - 18vw));
+            }
+        }
+        
+        .phase.work {
+            color: #4CAF50;
+        }
+        
+        .phase.rest {
+            color: #FF9800;
+        }
+        
+        .interval-count {
+            font-size: 14px;
+            margin-top: 10px;
+            color: #666;
+        }
+        
+        body.fullscreen .interval-count {
+            font-size: 5vw;
+            margin: 0;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, calc(-50% + 25vw));
+            color: #333;
+            z-index: 10;
+            font-weight: 500;
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .interval-count {
+                font-size: 7.5vw;
+                transform: translate(-50%, calc(-50% + 22vw));
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .interval-count {
+                font-size: 6vw;
+                transform: translate(-50%, calc(-50% + 20vw));
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .interval-count {
+                font-size: 6.5vw;
+                transform: translate(-50%, calc(-50% + 18vw));
+            }
+        }
+        
+        .countdown-display {
+            text-align: center;
+        }
+        
+        .countdown-number {
+            font-size: 200px;
+            font-weight: 400;
+            line-height: 1;
+            color: #2196F3;
+            font-family: 'Allerta Stencil', sans-serif;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0;
+            display: inline-block;
+            width: 1em;
+            text-align: center;
+        }
+        
+        body.fullscreen .countdown-number {
+            font-size: 42vw;
+            line-height: 1;
+            letter-spacing: 0;
+            color: #2196F3;
+            font-weight: 400;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Allerta Stencil', sans-serif;
+            font-variant-numeric: tabular-nums;
+            display: block;
+            width: 1ch;
+            margin: 0;
+            text-align: center;
+        }
+        
+        @media (orientation: portrait) {
+            body.fullscreen .countdown-number {
+                font-size: 38vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .countdown-number {
+                font-size: 36vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .countdown-number {
+                font-size: 33vw;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .countdown-number {
+                font-size: 30vw;
+            }
+        }
+        
+        .countdown-label {
+            font-size: 32px;
+            margin-top: 20px;
+            color: #666;
+        }
+        
+        body.fullscreen .countdown-label {
+            font-size: 5vw;
+            margin-top: 30px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .countdown-label {
+                font-size: 6vw;
+                margin-top: 25px;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .countdown-label {
+                font-size: 7vw;
+                margin-top: 20px;
+            }
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        body.fullscreen .controls {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 40px);
+            gap: 10px;
+            margin: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        body.fullscreen .controls .button {
+            padding: 16px 24px;
+            font-size: 18px;
+            width: 100%;
+            font-weight: 600;
+        }
+        
+        body.fullscreen .controls .button.stop-button {
+            background: #f44336;
+            color: white;
+        }
+        
+        body.fullscreen .controls .button.stop-button:hover {
+            background: #d32f2f;
+        }
+        
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .controls {
+                bottom: 20px;
+                width: calc(100% - 30px);
+                gap: 8px;
+            }
+            
+            body.fullscreen .controls .button {
+                padding: 20px 20px;
+                font-size: 50px;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .controls {
+                bottom: 20px;
+                width: calc(100% - 30px);
+                gap: 8px;
+            }
+            
+            body.fullscreen .controls .button {
+                padding: 18px 18px;
+                font-size: 45px;
+            }
+        }
+        
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .controls {
+                bottom: 20px;
+                width: calc(100% - 30px);
+                gap: 8px;
+            }
+            
+            body.fullscreen .controls .button {
+                padding: 16px 16px;
+                font-size: 40px;
+            }
+        }
+        
+        .controls .button {
+            margin-top: 0;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .timer-screen.work .container {
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .timer-screen.rest .container {
+            border-left: 4px solid #FF9800;
+        }
+        
+        body.fullscreen .timer-screen.work .container,
+        body.fullscreen .timer-screen.rest .container {
+            border-left: none;
+        }
+        
+        body.work {
+            background: #f1f8e9;
+        }
+        
+        body.rest {
+            background: #fff3e0;
+        }
+        
+        body.fullscreen.work {
+            background: #f1f8e9;
+        }
+        
+        body.fullscreen.rest {
+            background: #fff3e0;
+        }
+        
+        body.fullscreen .timer-screen.work {
+            background: #f1f8e9;
+        }
+        
+        body.fullscreen .timer-screen.rest {
+            background: #fff3e0;
+        }
+        
+        body.fullscreen .countdown-screen {
+            background: #f5f5f5;
+        }
+        
+        .pulsing {
+            animation: pulse 1s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interval Timer</h1>
+        
+        <!-- Setup Screen -->
+        <div class="setup-screen active">
+            <div class="input-group">
+                <label>Work Time</label>
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label for="workMinutes" style="font-size: 10px; margin-bottom: 4px; display: block;">Minutes</label>
+                        <input type="number" id="workMinutes" value="0" min="0" max="60">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="workSeconds" style="font-size: 10px; margin-bottom: 4px; display: block;">Seconds</label>
+                        <input type="number" id="workSeconds" value="30" min="0" max="59">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label>Rest Time</label>
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label for="restMinutes" style="font-size: 10px; margin-bottom: 4px; display: block;">Minutes</label>
+                        <input type="number" id="restMinutes" value="0" min="0" max="60">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="restSeconds" style="font-size: 10px; margin-bottom: 4px; display: block;">Seconds</label>
+                        <input type="number" id="restSeconds" value="10" min="0" max="59">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label for="intervals">Number of Intervals</label>
+                <input type="number" id="intervals" value="8" min="1" max="100">
+            </div>
+            
+            <div class="input-group">
+                <label for="workPhrase">Work Phrase</label>
+                <input type="text" id="workPhrase" value="Work" placeholder="Work">
+            </div>
+            
+            <div class="input-group">
+                <label for="restPhrase">Rest Phrase</label>
+                <input type="text" id="restPhrase" value="Rest" placeholder="Rest">
+            </div>
+            
+            <button class="button button-primary" onclick="startTimer()">Start Timer</button>
+        </div>
+        
+        <!-- Countdown Screen -->
+        <div class="countdown-screen">
+            <div class="countdown-display">
+                <div class="countdown-number" id="countdownNumber">5</div>
+                <div class="countdown-label">Starting in...</div>
+            </div>
+        </div>
+        
+        <!-- Timer Screen -->
+        <div class="timer-screen">
+            <div class="phase" id="phaseDisplay">WORK</div>
+            <div class="timer-display">
+                <div class="time" id="timeDisplay">00:00</div>
+            </div>
+            <div class="interval-count" id="intervalDisplay">Interval 1 of 8</div>
+            <div class="controls">
+                <button class="button button-secondary" onclick="pauseResume()" id="pauseButton">Pause</button>
+                <button class="button button-secondary stop-button" onclick="stopTimer()">Stop</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let workTime, restTime, totalIntervals;
+        let workPhrase, restPhrase;
+        let currentInterval = 1;
+        let isWorkPhase = true;
+        let timeRemaining = 0;
+        let timerInterval = null;
+        let countdownInterval = null;
+        let isPaused = false;
+        let countdownRemaining = 5;
+        let intervalAnnouncementStarted = false;
+        let workCountdownStarted = false;
+        
+        // Speech synthesis functions
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                // Try to use a more natural voice if available
+                const voices = window.speechSynthesis.getVoices();
+                const preferredVoice = voices.find(voice => 
+                    voice.lang.includes('en') && 
+                    (voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Samantha'))
+                );
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Load voices when available
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                // Voices loaded
+            };
+        }
+        
+        function formatTimeForSpeech(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            
+            if (minutes > 0 && secs > 0) {
+                return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and ${secs} ${secs === 1 ? 'second' : 'seconds'}`;
+            } else if (minutes > 0) {
+                return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+            } else {
+                return `${secs} ${secs === 1 ? 'second' : 'seconds'}`;
+            }
+        }
+        
+        function autoResizePhaseText(element) {
+            if (!document.body.classList.contains('fullscreen')) {
+                return; // Only resize in fullscreen mode
+            }
+            
+            // Reset to CSS default (remove inline style) to start fresh
+            element.style.fontSize = '';
+            
+            // Force a reflow to get accurate measurements
+            void element.offsetHeight;
+            
+            // Get the max width (90vw as set in CSS)
+            const maxWidth = window.innerWidth * 0.9;
+            const minFontSize = 12; // Minimum readable size in pixels
+            
+            // Get current computed font size
+            let fontSize = parseFloat(window.getComputedStyle(element).fontSize);
+            const originalFontSize = fontSize;
+            
+            // Reduce font size until text fits
+            while (element.scrollWidth > maxWidth && fontSize > minFontSize) {
+                fontSize -= 0.5;
+                element.style.fontSize = fontSize + 'px';
+            }
+            
+            // If we had to reduce significantly, convert to vw for better scaling
+            if (fontSize < originalFontSize * 0.7) {
+                const vwSize = (fontSize / window.innerWidth) * 100;
+                element.style.fontSize = vwSize + 'vw';
+            }
+        }
+        
+        // Auto-resize on window resize
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                const phaseEl = document.getElementById('phaseDisplay');
+                if (phaseEl && document.body.classList.contains('fullscreen')) {
+                    autoResizePhaseText(phaseEl);
+                }
+            }, 100);
+        });
+        
+        function startTimer() {
+            const workMinutes = parseInt(document.getElementById('workMinutes').value) || 0;
+            const workSeconds = parseInt(document.getElementById('workSeconds').value) || 0;
+            const restMinutes = parseInt(document.getElementById('restMinutes').value) || 0;
+            const restSeconds = parseInt(document.getElementById('restSeconds').value) || 0;
+            
+            workTime = (workMinutes * 60) + workSeconds;
+            restTime = (restMinutes * 60) + restSeconds;
+            totalIntervals = parseInt(document.getElementById('intervals').value);
+            workPhrase = document.getElementById('workPhrase').value.trim() || 'Work';
+            restPhrase = document.getElementById('restPhrase').value.trim() || 'Rest';
+            
+            currentInterval = 1;
+            isWorkPhase = true;
+            timeRemaining = workTime;
+            isPaused = false;
+            countdownRemaining = 5;
+            intervalAnnouncementStarted = false;
+            workCountdownStarted = false;
+            
+            // Remove completion classes if present
+            document.getElementById('timeDisplay').classList.remove('complete');
+            document.getElementById('phaseDisplay').classList.remove('complete');
+            document.getElementById('intervalDisplay').classList.remove('complete');
+            
+            // Go to fullscreen
+            document.body.classList.add('fullscreen');
+            
+            // Show countdown screen
+            document.querySelector('.setup-screen').classList.remove('active');
+            document.querySelector('.timer-screen').classList.remove('active');
+            document.querySelector('.countdown-screen').classList.add('active');
+            
+            // Update countdown display
+            document.getElementById('countdownNumber').textContent = countdownRemaining;
+            
+            // Start countdown
+            countdownInterval = setInterval(() => {
+                countdownRemaining--;
+                document.getElementById('countdownNumber').textContent = countdownRemaining;
+                
+                // Speak countdown numbers 3, 2, 1
+                if (countdownRemaining <= 3 && countdownRemaining > 0) {
+                    speak(countdownRemaining.toString());
+                }
+                
+                if (countdownRemaining <= 0) {
+                    clearInterval(countdownInterval);
+                    startActualTimer();
+                }
+            }, 1000);
+        }
+        
+        function startActualTimer() {
+            // Hide countdown, show timer
+            document.querySelector('.countdown-screen').classList.remove('active');
+            document.querySelector('.timer-screen').classList.add('active');
+            
+            // Announce start
+            const timeText = formatTimeForSpeech(workTime);
+            speak(`${workPhrase} for ${timeText}`);
+            
+            updateDisplay();
+            timerInterval = setInterval(tick, 1000);
+        }
+        
+        function tick() {
+            if (isPaused) return;
+            
+            timeRemaining--;
+            
+            // Handle countdown at end of work period (last 3 seconds)
+            if (isWorkPhase && timeRemaining <= 3 && timeRemaining > 0) {
+                if (!workCountdownStarted && timeRemaining === 3) {
+                    workCountdownStarted = true;
+                }
+                // Count down audibly for the last 3 seconds
+                speak(timeRemaining.toString());
+            }
+            
+            // Handle interval announcement during rest period
+            if (!isWorkPhase && timeRemaining <= 5 && timeRemaining > 0) {
+                // Only announce if there's another interval coming
+                if (currentInterval < totalIntervals) {
+                    if (!intervalAnnouncementStarted && timeRemaining === 5) {
+                        // Start the announcement at 5 seconds so it completes around 3 seconds
+                        intervalAnnouncementStarted = true;
+                        speak(`Starting Interval ${currentInterval + 1} of ${totalIntervals} in`);
+                    }
+                }
+                // Count down audibly for the last 3 seconds (always, even on last interval)
+                if (timeRemaining <= 3 && timeRemaining > 0) {
+                    speak(timeRemaining.toString());
+                }
+            }
+            
+            if (timeRemaining < 0) {
+                if (isWorkPhase) {
+                    // Switch to rest
+                    isWorkPhase = false;
+                    timeRemaining = restTime;
+                    intervalAnnouncementStarted = false;
+                    workCountdownStarted = false;
+                    const timeText = formatTimeForSpeech(restTime);
+                    speak(`${restPhrase} for ${timeText}`);
+                } else {
+                    // Switch to next work interval
+                    currentInterval++;
+                    intervalAnnouncementStarted = false;
+                    workCountdownStarted = false;
+                    
+                    if (currentInterval > totalIntervals) {
+                        // Timer complete
+                        completeTimer();
+                        return;
+                    }
+                    
+                    // Start the work interval
+                    isWorkPhase = true;
+                    timeRemaining = workTime;
+                    const timeText = formatTimeForSpeech(workTime);
+                    speak(`${workPhrase} for ${timeText}`);
+                }
+            }
+            
+            updateDisplay();
+        }
+        
+        function updateDisplay() {
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            document.getElementById('timeDisplay').textContent = 
+                `${minutes}:${String(seconds).padStart(2, '0')}`;
+            
+            const phaseEl = document.getElementById('phaseDisplay');
+            phaseEl.textContent = isWorkPhase ? (workPhrase || 'WORK').toUpperCase() : (restPhrase || 'REST').toUpperCase();
+            phaseEl.className = isWorkPhase ? 'phase work' : 'phase rest';
+            
+            // Auto-resize phase text to fit on one line
+            setTimeout(() => autoResizePhaseText(phaseEl), 0);
+            
+            document.getElementById('intervalDisplay').textContent = 
+                `Interval ${currentInterval} of ${totalIntervals}`;
+            
+            const timerScreen = document.querySelector('.timer-screen');
+            timerScreen.className = isWorkPhase ? 'timer-screen active work' : 'timer-screen active rest';
+            
+            // Update body class for subtle background change
+            document.body.className = isWorkPhase ? 'fullscreen work' : 'fullscreen rest';
+            
+            // Pulse effect in last 3 seconds
+            if (timeRemaining <= 3) {
+                timerScreen.classList.add('pulsing');
+            } else {
+                timerScreen.classList.remove('pulsing');
+            }
+        }
+        
+        function pauseResume() {
+            isPaused = !isPaused;
+            document.getElementById('pauseButton').textContent = isPaused ? 'Resume' : 'Pause';
+        }
+        
+        function stopTimer() {
+            clearInterval(timerInterval);
+            clearInterval(countdownInterval);
+            window.speechSynthesis.cancel();
+            
+            document.body.className = '';
+            document.querySelector('.timer-screen').classList.remove('active', 'work', 'rest');
+            document.querySelector('.countdown-screen').classList.remove('active');
+            document.querySelector('.setup-screen').classList.add('active');
+            document.getElementById('pauseButton').textContent = 'Pause';
+        }
+        
+        function completeTimer() {
+            clearInterval(timerInterval);
+            speak('Workout complete! Great job!');
+            
+            const timeDisplay = document.getElementById('timeDisplay');
+            const phaseDisplay = document.getElementById('phaseDisplay');
+            const intervalDisplay = document.getElementById('intervalDisplay');
+            
+            timeDisplay.textContent = '✓ DONE';
+            timeDisplay.classList.add('complete');
+            phaseDisplay.textContent = 'COMPLETE';
+            phaseDisplay.classList.add('complete');
+            intervalDisplay.textContent = 'Great work!';
+            intervalDisplay.classList.add('complete');
+        }
+        
+        // Prevent screen sleep on mobile
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log('Wake Lock not supported');
+            }
+        }
+        
+        // Request wake lock when timer starts
+        const originalStartTimer = startTimer;
+        startTimer = function() {
+            requestWakeLock();
+            originalStartTimer();
+        };
+        
+        // Handle fullscreen on mobile
+        if (document.documentElement.requestFullscreen) {
+            document.addEventListener('click', function() {
+                if (document.body.classList.contains('fullscreen') && !document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.log('Fullscreen not supported or denied');
+                    });
+                }
+            }, { once: false });
+        }
+    </script>
+
+
+</body></html>
