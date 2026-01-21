@@ -9856,6 +9856,46 @@
             }
         }
 
+        async function handleDeleteAdminInvitation(invitationId, email) {
+            if (!confirm(`Are you sure you want to delete the invitation for ${email}? This cannot be undone.`)) {
+                return;
+            }
+
+            const statusDiv = document.getElementById('admin-invite-status');
+            if (statusDiv) {
+                statusDiv.textContent = 'Deleting invitation...';
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#666';
+            }
+
+            try {
+                // Call the database function from scripts/database.js
+                if (typeof deleteAdminInvitation === 'function') {
+                    await deleteAdminInvitation(invitationId);
+                } else {
+                    throw new Error('deleteAdminInvitation function not available');
+                }
+
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px; margin-top: 8px;">
+                            <strong style="color: #2e7d32;">Invitation deleted successfully!</strong>
+                        </div>
+                    `;
+                    statusDiv.style.color = '#2e7d32';
+                }
+
+                // Refresh invitations list
+                await loadAdminInvitations();
+            } catch (error) {
+                console.error('Error deleting invitation:', error);
+                if (statusDiv) {
+                    statusDiv.textContent = `Error: ${formatAdminInvitationError(error)}`;
+                    statusDiv.style.color = '#d32f2f';
+                }
+            }
+        }
+
         async function resendAdminInvitation(email) {
             const statusDiv = document.getElementById('admin-invite-status');
             if (!statusDiv) return;
@@ -9930,7 +9970,7 @@
                     html += `<td style="padding: 8px; color: ${statusColor}; font-weight: 600;">${status}</td>`;
                     html += `<td style="padding: 8px;">${new Date(inv.expires_at).toLocaleDateString()}</td>`;
                     html += `<td style="padding: 8px;">${new Date(inv.created_at).toLocaleDateString()}</td>`;
-                    html += `<td style="padding: 8px;">${!inv.used ? `<button class="btn-small secondary" onclick="resendAdminInvitation('${escapeHtml(inv.email)}')">Resend</button>` : ''}</td>`;
+                    html += `<td style="padding: 8px;">${!inv.used ? `<div style="display: flex; gap: 6px;"><button class="btn-small secondary" onclick="resendAdminInvitation('${escapeHtml(inv.email)}')">Resend</button><button class="btn-small secondary" onclick="handleDeleteAdminInvitation('${inv.id}', '${escapeHtml(inv.email)}')" style="background-color: #f44336; color: white; border-color: #f44336;">Delete</button></div>` : ''}</td>`;
                     html += '</tr>';
                 });
                 

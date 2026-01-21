@@ -1118,6 +1118,19 @@ async function expireAdminInvitationsByEmail(email) {
     return data || [];
 }
 
+async function deleteAdminInvitation(invitationId) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+
+    const { error } = await client
+        .from('admin_invitations')
+        .delete()
+        .eq('id', invitationId);
+
+    if (error) throw error;
+    return true;
+}
+
 // ============ RACES ============
 
 async function getAllRaces() {
