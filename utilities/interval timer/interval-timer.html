@@ -691,35 +691,84 @@
         let workCountdownStarted = false;
         
         // Speech synthesis functions
+        let voicesLoaded = false;
+        let voicesCache = [];
+        
+        // Load voices when available (critical for mobile)
+        function loadVoices() {
+            if ('speechSynthesis' in window) {
+                voicesCache = window.speechSynthesis.getVoices();
+                if (voicesCache.length > 0) {
+                    voicesLoaded = true;
+                }
+            }
+        }
+        
+        if ('speechSynthesis' in window) {
+            // Load voices immediately
+            loadVoices();
+            
+            // Also listen for when voices are loaded (important for mobile)
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+            
+            // Force voice loading on mobile by calling getVoices() multiple times
+            // This is a known workaround for iOS Safari
+            let loadAttempts = 0;
+            const forceLoadVoices = setInterval(() => {
+                loadVoices();
+                loadAttempts++;
+                if (voicesLoaded || loadAttempts > 10) {
+                    clearInterval(forceLoadVoices);
+                }
+            }, 100);
+        }
+        
         function speak(text) {
             if ('speechSynthesis' in window) {
                 // Cancel any ongoing speech
                 window.speechSynthesis.cancel();
                 
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 1.0;
-                utterance.pitch = 1.0;
-                utterance.volume = 1.0;
-                
-                // Try to use a more natural voice if available
-                const voices = window.speechSynthesis.getVoices();
-                const preferredVoice = voices.find(voice => 
-                    voice.lang.includes('en') && 
-                    (voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Samantha'))
-                );
-                if (preferredVoice) {
-                    utterance.voice = preferredVoice;
-                }
-                
-                window.speechSynthesis.speak(utterance);
+                // Small delay to ensure API is ready (especially on mobile)
+                setTimeout(() => {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = 1.0;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 1.0;
+                    
+                    // Reload voices if not cached (mobile browsers sometimes need this)
+                    if (!voicesLoaded || voicesCache.length === 0) {
+                        loadVoices();
+                    }
+                    
+                    // Try to use a more natural voice if available
+                    if (voicesCache.length > 0) {
+                        const preferredVoice = voicesCache.find(voice => 
+                            voice.lang.includes('en') && 
+                            (voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Samantha') || voice.name.includes('Enhanced'))
+                        );
+                        if (preferredVoice) {
+                            utterance.voice = preferredVoice;
+                        } else if (voicesCache.length > 0) {
+                            // Fallback to first English voice
+                            const englishVoice = voicesCache.find(voice => voice.lang.startsWith('en'));
+                            if (englishVoice) {
+                                utterance.voice = englishVoice;
+                            }
+                        }
+                    }
+                    
+                    // Error handling for mobile
+                    utterance.onerror = (event) => {
+                        console.log('Speech error:', event.error);
+                    };
+                    
+                    utterance.onend = () => {
+                        // Speech completed
+                    };
+                    
+                    window.speechSynthesis.speak(utterance);
+                }, 50); // Small delay helps on mobile browsers
             }
-        }
-        
-        // Load voices when available
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                // Voices loaded
-            };
         }
         
         function formatTimeForSpeech(seconds) {
@@ -803,6 +852,15 @@
             document.getElementById('timeDisplay').classList.remove('complete');
             document.getElementById('phaseDisplay').classList.remove('complete');
             document.getElementById('intervalDisplay').classList.remove('complete');
+            
+            // Activate speech API on mobile (iOS Safari requires immediate activation after user interaction)
+            if ('speechSynthesis' in window) {
+                // Trigger a silent/quick test to unlock the API
+                const testUtterance = new SpeechSynthesisUtterance('');
+                testUtterance.volume = 0;
+                window.speechSynthesis.speak(testUtterance);
+                window.speechSynthesis.cancel(); // Cancel immediately
+            }
             
             // Go to fullscreen
             document.body.classList.add('fullscreen');
