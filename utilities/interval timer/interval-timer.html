@@ -797,31 +797,47 @@
             }
         }
         
-        // Play a loud "ding" sound using Web Audio API
+        // Play a loud bell chime using Web Audio API
         function playDing() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
+                const now = audioContext.currentTime;
                 
-                // Connect nodes
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                // Create multiple oscillators for a rich bell-like sound
+                // Bell tones typically have multiple harmonics
+                const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5 - pleasant bell chord
+                const oscillators = [];
+                const gainNodes = [];
                 
-                // Configure the ding sound (pleasant chime)
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // Start at 800 Hz
-                oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1); // Rise to 1000 Hz
+                frequencies.forEach((freq, index) => {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+                    
+                    // Each harmonic decays at slightly different rates for bell-like effect
+                    const delay = index * 0.02; // Slight stagger
+                    const attackTime = 0.01;
+                    const decayTime = 0.3 + (index * 0.1);
+                    const sustainLevel = 0.1;
+                    const releaseTime = 0.5;
+                    
+                    gain.gain.setValueAtTime(0, now + delay);
+                    gain.gain.linearRampToValueAtTime(1.0, now + delay + attackTime); // Maximum volume
+                    gain.gain.exponentialRampToValueAtTime(sustainLevel, now + delay + attackTime + decayTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + delay + attackTime + decayTime + releaseTime);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    
+                    osc.start(now + delay);
+                    osc.stop(now + delay + attackTime + decayTime + releaseTime);
+                    
+                    oscillators.push(osc);
+                    gainNodes.push(gain);
+                });
                 
-                // Envelope for a clean ding
-                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0.8, audioContext.currentTime + 0.01); // Quick attack
-                gainNode.gain.exponentialRampToValueAtTime(0.3, audioContext.currentTime + 0.15); // Decay
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4); // Fade out
-                
-                // Play the sound
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.4);
             } catch (error) {
                 console.log('Audio not supported:', error);
             }
@@ -955,10 +971,12 @@
             timeRemaining = workTime;
             pausedTime = 0;
             
-            // Play ding and announce start
+            // Play ding and announce start (with slight pause after chime)
             playDing();
             const timeText = formatTimeForSpeech(workTime);
-            speak(`${workPhrase} for ${timeText}`);
+            setTimeout(() => {
+                speak(`${workPhrase} for ${timeText}`);
+            }, 300); // 300ms pause after chime
             
             updateDisplay();
             timerInterval = setInterval(tick, 100); // Check more frequently for accuracy
@@ -1029,7 +1047,9 @@
                     intervalAnnouncementStarted = false;
                     workCountdownStarted = false;
                     const timeText = formatTimeForSpeech(restTime);
-                    speak(`${restPhrase} for ${timeText}`);
+                    setTimeout(() => {
+                        speak(`${restPhrase} for ${timeText}`);
+                    }, 300); // 300ms pause after chime
                 } else {
                     // Switch to next work interval
                     currentInterval++;
@@ -1050,7 +1070,9 @@
                     timeRemaining = workTime;
                     pausedTime = 0;
                     const timeText = formatTimeForSpeech(workTime);
-                    speak(`${workPhrase} for ${timeText}`);
+                    setTimeout(() => {
+                        speak(`${workPhrase} for ${timeText}`);
+                    }, 300); // 300ms pause after chime
                 }
             }
             
