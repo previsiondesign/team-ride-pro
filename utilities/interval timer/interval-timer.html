@@ -703,6 +703,27 @@
         let pausedTime = 0;
         let pauseStartTime = null;
         
+        // Audio context for bell chime (iOS Safari requires persistent context)
+        let audioContext = null;
+        
+        // Initialize audio context (must be called from user interaction on iOS)
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    // iOS Safari starts in suspended state - resume it
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                } catch (error) {
+                    console.log('Audio context not supported:', error);
+                }
+            } else if (audioContext.state === 'suspended') {
+                // Resume if suspended
+                audioContext.resume();
+            }
+        }
+        
         // Speech synthesis functions
         let voicesLoaded = false;
         let voicesCache = [];
