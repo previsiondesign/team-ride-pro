@@ -9810,11 +9810,34 @@
                         const latest = existingInvites[0];
                         const isExpired = new Date(latest.expires_at) < new Date();
                         if (latest.used) {
-                            statusDiv.textContent = 'This email is already registered. Ask them to sign in or use password reset.';
-                            statusDiv.style.color = '#d32f2f';
-                            return;
+                            // Check if user actually still exists in auth/user_roles
+                            // If user was deleted from auth, allow re-invitation
+                            let userStillExists = false;
+                            if (typeof getAllUsersWithLoginInfo === 'function') {
+                                try {
+                                    const allUsers = await getAllUsersWithLoginInfo();
+                                    if (allUsers && allUsers.length > 0) {
+                                        userStillExists = allUsers.some(user => 
+                                            user.email && user.email.toLowerCase() === email.toLowerCase()
+                                        );
+                                    }
+                                } catch (checkError) {
+                                    console.warn('Error checking if user exists:', checkError);
+                                    // If check fails, assume user exists to be safe
+                                    userStillExists = true;
+                                }
+                            }
+                            
+                            if (userStillExists) {
+                                statusDiv.textContent = 'This email is already registered. Ask them to sign in or use password reset.';
+                                statusDiv.style.color = '#d32f2f';
+                                return;
+                            } else {
+                                // User was deleted but invitation marked as used - allow re-invitation
+                                console.log('Invitation was used but user no longer exists - allowing re-invitation');
+                            }
                         }
-                        if (!isExpired) {
+                        if (!isExpired && !latest.used) {
                             statusDiv.textContent = 'An active invitation already exists for this email. Please use the existing invite link.';
                             statusDiv.style.color = '#d32f2f';
                             return;
@@ -9914,26 +9937,32 @@
             try {
                 // Call the database function from scripts/database.js
                 if (typeof deleteAdminInvitation === 'function') {
-                    await deleteAdminInvitation(invitationId);
+                    const result = await deleteAdminInvitation(invitationId);
+                    console.log('Delete invitation result:', result);
+                    
+                    if (statusDiv) {
+                        statusDiv.innerHTML = `
+                            <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px; margin-top: 8px;">
+                                <strong style="color: #2e7d32;">Invitation deleted successfully!</strong>
+                            </div>
+                        `;
+                        statusDiv.style.color = '#2e7d32';
+                    }
+
+                    // Refresh invitations list
+                    await loadAdminInvitations();
                 } else {
-                    throw new Error('deleteAdminInvitation function not available');
+                    throw new Error('deleteAdminInvitation function not available. Make sure scripts/database.js is loaded.');
                 }
-
-                if (statusDiv) {
-                    statusDiv.innerHTML = `
-                        <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px; margin-top: 8px;">
-                            <strong style="color: #2e7d32;">Invitation deleted successfully!</strong>
-                        </div>
-                    `;
-                    statusDiv.style.color = '#2e7d32';
-                }
-
-                // Refresh invitations list
-                await loadAdminInvitations();
             } catch (error) {
                 console.error('Error deleting invitation:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    invitationId: invitationId
+                });
                 if (statusDiv) {
-                    statusDiv.textContent = `Error: ${formatAdminInvitationError(error)}`;
+                    statusDiv.textContent = `Error: ${error.message || formatAdminInvitationError(error)}`;
                     statusDiv.style.color = '#d32f2f';
                 }
             }

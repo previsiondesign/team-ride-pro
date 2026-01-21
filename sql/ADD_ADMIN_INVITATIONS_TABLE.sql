@@ -57,6 +57,17 @@ CREATE POLICY "Coach-admins can update invitations" ON admin_invitations
         )
     );
 
+-- Only coach-admins can delete invitations
+CREATE POLICY "Coach-admins can delete invitations" ON admin_invitations
+    FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = auth.uid()
+            AND ur.role = 'coach-admin'
+        )
+    );
+
 -- Anyone can view an invitation by token (for the invitation acceptance page)
 -- This is needed so users can access the invitation link without being authenticated
 CREATE POLICY "Anyone can view invitation by token" ON admin_invitations
