@@ -1018,7 +1018,7 @@
             const timeText = formatTimeForSpeech(workTime);
             setTimeout(() => {
                 speak(`${workPhrase} for ${timeText}`);
-            }, 400); // 400ms pause after chime
+            }, 600); // 600ms pause after chime
             
             updateDisplay();
             timerInterval = setInterval(tick, 100); // Check more frequently for accuracy
@@ -1091,7 +1091,7 @@
                     const timeText = formatTimeForSpeech(restTime);
                     setTimeout(() => {
                         speak(`${restPhrase} for ${timeText}`);
-                    }, 400); // 400ms pause after chime
+                    }, 600); // 600ms pause after chime
                 } else {
                     // Switch to next work interval
                     currentInterval++;
