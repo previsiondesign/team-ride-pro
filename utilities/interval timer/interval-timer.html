@@ -695,6 +695,12 @@
         let intervalAnnouncementStarted = false;
         let workCountdownStarted = false;
         
+        // Timestamp-based timing for background execution
+        let phaseStartTime = null;
+        let phaseDuration = 0;
+        let pausedTime = 0;
+        let pauseStartTime = null;
+        
         // Speech synthesis functions
         let voicesLoaded = false;
         let voicesCache = [];
@@ -852,6 +858,9 @@
             countdownRemaining = 5;
             intervalAnnouncementStarted = false;
             workCountdownStarted = false;
+            phaseStartTime = null;
+            pausedTime = 0;
+            pauseStartTime = null;
             
             // Remove completion classes if present
             document.getElementById('timeDisplay').classList.remove('complete');
@@ -878,21 +887,29 @@
             // Update countdown display
             document.getElementById('countdownNumber').textContent = countdownRemaining;
             
-            // Start countdown
+            // Start countdown with timestamp-based timing
+            const countdownStartTime = Date.now();
+            const countdownDuration = 5; // 5 seconds
+            let lastSpokenCountdown = 6; // Track what we've spoken to avoid repeats
+            
             countdownInterval = setInterval(() => {
-                countdownRemaining--;
+                const elapsed = Math.floor((Date.now() - countdownStartTime) / 1000);
+                const previousCountdown = countdownRemaining;
+                countdownRemaining = Math.max(0, countdownDuration - elapsed);
+                
                 document.getElementById('countdownNumber').textContent = countdownRemaining;
                 
-                // Speak countdown numbers 3, 2, 1
-                if (countdownRemaining <= 3 && countdownRemaining > 0) {
+                // Speak countdown numbers 3, 2, 1 (only when crossing threshold)
+                if (countdownRemaining <= 3 && countdownRemaining > 0 && countdownRemaining !== lastSpokenCountdown) {
                     speak(countdownRemaining.toString());
+                    lastSpokenCountdown = countdownRemaining;
                 }
                 
                 if (countdownRemaining <= 0) {
                     clearInterval(countdownInterval);
                     startActualTimer();
                 }
-            }, 1000);
+            }, 100); // Check more frequently for accuracy
         }
         
         function startActualTimer() {
@@ -900,49 +917,81 @@
             document.querySelector('.countdown-screen').classList.remove('active');
             document.querySelector('.timer-screen').classList.add('active');
             
+            // Initialize timestamp-based timing
+            phaseStartTime = Date.now();
+            phaseDuration = workTime;
+            timeRemaining = workTime;
+            pausedTime = 0;
+            
             // Announce start
             const timeText = formatTimeForSpeech(workTime);
             speak(`${workPhrase} for ${timeText}`);
             
             updateDisplay();
-            timerInterval = setInterval(tick, 1000);
+            timerInterval = setInterval(tick, 100); // Check more frequently for accuracy
         }
         
         function tick() {
-            if (isPaused) return;
+            if (isPaused) {
+                if (pauseStartTime === null) {
+                    pauseStartTime = Date.now();
+                }
+                return;
+            }
             
-            timeRemaining--;
+            // Resume from pause - adjust timing
+            if (pauseStartTime !== null) {
+                const pauseDuration = Math.floor((Date.now() - pauseStartTime) / 1000);
+                pausedTime += pauseDuration;
+                pauseStartTime = null;
+            }
+            
+            // Calculate elapsed time using timestamps (works even when page is in background)
+            const now = Date.now();
+            const elapsed = Math.floor((now - phaseStartTime - pausedTime * 1000) / 1000);
+            const previousTimeRemaining = timeRemaining;
+            timeRemaining = Math.max(0, phaseDuration - elapsed);
+            
+            // Only trigger announcements when crossing thresholds (avoid repeats)
+            const crossedThreshold = (prev, curr, threshold) => {
+                return prev > threshold && curr <= threshold;
+            };
             
             // Handle countdown at end of work period (last 3 seconds)
             if (isWorkPhase && timeRemaining <= 3 && timeRemaining > 0) {
-                if (!workCountdownStarted && timeRemaining === 3) {
+                if (!workCountdownStarted && crossedThreshold(previousTimeRemaining, timeRemaining, 3)) {
                     workCountdownStarted = true;
                 }
-                // Count down audibly for the last 3 seconds
-                speak(timeRemaining.toString());
+                // Count down audibly for the last 3 seconds (only on whole seconds)
+                if (timeRemaining !== previousTimeRemaining && timeRemaining > 0 && timeRemaining <= 3) {
+                    speak(timeRemaining.toString());
+                }
             }
             
             // Handle interval announcement during rest period
             if (!isWorkPhase && timeRemaining <= 5 && timeRemaining > 0) {
                 // Only announce if there's another interval coming
                 if (currentInterval < totalIntervals) {
-                    if (!intervalAnnouncementStarted && timeRemaining === 5) {
+                    if (!intervalAnnouncementStarted && crossedThreshold(previousTimeRemaining, timeRemaining, 5)) {
                         // Start the announcement at 5 seconds so it completes around 3 seconds
                         intervalAnnouncementStarted = true;
                         speak(`Starting Interval ${currentInterval + 1} of ${totalIntervals} in`);
                     }
                 }
                 // Count down audibly for the last 3 seconds (always, even on last interval)
-                if (timeRemaining <= 3 && timeRemaining > 0) {
+                if (timeRemaining <= 3 && timeRemaining > 0 && timeRemaining !== previousTimeRemaining) {
                     speak(timeRemaining.toString());
                 }
             }
             
-            if (timeRemaining < 0) {
+            if (timeRemaining <= 0) {
                 if (isWorkPhase) {
                     // Switch to rest
                     isWorkPhase = false;
+                    phaseStartTime = Date.now();
+                    phaseDuration = restTime;
                     timeRemaining = restTime;
+                    pausedTime = 0;
                     intervalAnnouncementStarted = false;
                     workCountdownStarted = false;
                     const timeText = formatTimeForSpeech(restTime);
@@ -961,7 +1010,10 @@
                     
                     // Start the work interval
                     isWorkPhase = true;
+                    phaseStartTime = Date.now();
+                    phaseDuration = workTime;
                     timeRemaining = workTime;
+                    pausedTime = 0;
                     const timeText = formatTimeForSpeech(workTime);
                     speak(`${workPhrase} for ${timeText}`);
                 }
@@ -1002,6 +1054,16 @@
         
         function pauseResume() {
             isPaused = !isPaused;
+            if (isPaused) {
+                pauseStartTime = Date.now();
+            } else {
+                // When resuming, adjust pausedTime
+                if (pauseStartTime !== null) {
+                    const pauseDuration = Math.floor((Date.now() - pauseStartTime) / 1000);
+                    pausedTime += pauseDuration;
+                    pauseStartTime = null;
+                }
+            }
             document.getElementById('pauseButton').textContent = isPaused ? 'Resume' : 'Pause';
         }
         
@@ -1009,6 +1071,18 @@
             clearInterval(timerInterval);
             clearInterval(countdownInterval);
             window.speechSynthesis.cancel();
+            
+            // Release wake lock
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => {
+                    wakeLock = null;
+                }).catch(() => {});
+            }
+            
+            // Reset timing variables
+            phaseStartTime = null;
+            pausedTime = 0;
+            pauseStartTime = null;
             
             document.body.className = '';
             document.querySelector('.timer-screen').classList.remove('active', 'work', 'rest');
@@ -1019,6 +1093,16 @@
         
         function completeTimer() {
             clearInterval(timerInterval);
+            clearInterval(countdownInterval);
+            window.speechSynthesis.cancel();
+            
+            // Release wake lock
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => {
+                    wakeLock = null;
+                }).catch(() => {});
+            }
+            
             speak('Workout complete! Great job!');
             
             const timeDisplay = document.getElementById('timeDisplay');
@@ -1035,15 +1119,40 @@
         
         // Prevent screen sleep on mobile
         let wakeLock = null;
+        let wakeLockSupported = 'wakeLock' in navigator;
+        
         async function requestWakeLock() {
             try {
-                if ('wakeLock' in navigator) {
+                if (wakeLockSupported) {
+                    // Release existing lock if any
+                    if (wakeLock !== null) {
+                        await wakeLock.release().catch(() => {});
+                    }
                     wakeLock = await navigator.wakeLock.request('screen');
+                    
+                    // Handle wake lock release (e.g., when screen is manually locked)
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Wake Lock released');
+                        // Try to re-acquire if timer is still running
+                        if (timerInterval !== null || countdownInterval !== null) {
+                            requestWakeLock();
+                        }
+                    });
                 }
             } catch (err) {
-                console.log('Wake Lock not supported');
+                console.log('Wake Lock error:', err);
             }
         }
+        
+        // Re-acquire wake lock when page becomes visible
+        document.addEventListener('visibilitychange', async () => {
+            if (!document.hidden && wakeLockSupported) {
+                // Page became visible - re-acquire wake lock if timer is running
+                if (timerInterval !== null || countdownInterval !== null) {
+                    await requestWakeLock();
+                }
+            }
+        });
         
         // Request wake lock when timer starts
         const originalStartTimer = startTimer;
