@@ -27,6 +27,49 @@
         .rider-card.rider-unavailable .attendance-checkbox input {
             opacity: 1 !important;
         }
+        
+        /* Responsive columns for pasteboard lists */
+        .unassigned-list-container {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+            gap: 8px !important;
+            align-content: start !important;
+            grid-auto-flow: row !important; /* Flow top to bottom, left to right */
+        }
+        
+        /* On narrow screens, force single column */
+        /* Since pasteboard is in 2-column grid, each list gets ~half width */
+        /* Force single column when screen is narrow enough that each list < 600px */
+        @media (max-width: 1200px) {
+            .unassigned-list-container {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        
+        /* Resizable divider for pasteboard */
+        .pasteboard-divider {
+            width: 8px;
+            background: #ffe8a1;
+            cursor: col-resize;
+            border-radius: 4px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        
+        .pasteboard-divider:hover {
+            background: #ffc107;
+        }
+        
+        .pasteboard-divider::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #856404;
+            transform: translateX(-50%);
+        }
     </style>
     <!-- Supabase JS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -132,7 +175,15 @@
                     </div>
                     <div id="practice-rows" class="practice-rows"></div>
                 </div>
+                <!-- Site Settings Collapsible Section -->
                 <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px 0;" onclick="toggleSiteSettings()">
+                        <h3 style="margin: 0; color: #555;">Site Settings</h3>
+                        <span id="site-settings-toggle" style="font-size: 18px; color: #666; user-select: none;">▼</span>
+                    </div>
+                    <div id="site-settings-content" style="display: none; margin-top: 16px;">
+                
+                <div class="section" style="margin-top: 0; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                     <h3 style="margin-bottom: 12px; color: #555;">Coach Roles</h3>
                     <div id="coach-roles-container" style="margin-bottom: 20px;">
                         <!-- Coach roles will be dynamically added here -->
@@ -240,6 +291,8 @@
                         <div id="backups-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
                             <p style="color: #666; margin: 0;">Click "Refresh Backups" to load available backups.</p>
                         </div>
+                    </div>
+                </div>
                     </div>
                 </div>
             </div>
@@ -353,28 +406,15 @@
                                 <button id="redo-btn" class="btn-small" onclick="redoAssignmentChange()" title="Redo last undone change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↷</button>
                                 <div style="width: 1px; height: 20px; background: #ddd; margin: 0 4px;"></div>
                                 <button class="btn-small" onclick="addGroup()">Add Group</button>
-                                <button class="btn-small" onclick="addGroupsFromLastPractice()" style="background: #1976D2; color: white; border-color: #1976D2;">Add Groups from Last Practice</button>
+                                <button class="btn-small" onclick="openCopyGroupsFromPriorPracticeDialog()" style="background: #1976D2; color: white; border-color: #1976D2;">Copy Prior Practice</button>
                                 <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
-                                <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Auto-Assign Settings...</button>
-                                <button id="unassigned-palette-toggle-btn" class="btn-small" onclick="toggleUnassignedPaletteVisibility()" style="background: #fff3cd; color: #856404; border-color: #ffc107;">Show Unassigned Palette</button>
-                                <div style="display: flex; align-items: center; gap: 6px;">
-                                    <label for="group-pace-order" style="font-size: 12px; color: #555;">Group Pace Options:</label>
-                                    <select id="group-pace-order" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateGroupPaceOrder(this.value)">
-                                        <option value="fastest_to_slowest">Fastest to Slowest</option>
-                                        <option value="slowest_to_fastest">Slowest to Fastest</option>
-                                    </select>
-                                </div>
+                                <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Group Rules</button>
                                 <button id="more-groups-btn" class="btn-small secondary" onclick="tryMoreGroups()" style="display: none;">More/Smaller Groups</button>
                                 <button id="fewer-groups-btn" class="btn-small secondary" onclick="tryFewerGroups()" style="display: none;">Fewer/Larger Groups</button>
-                                <button class="btn-small danger" onclick="clearAssignments()" style="margin-left: auto;">Clear Group Assignments</button>
+                                <button class="btn-small secondary" onclick="unassignAllCoaches()" style="margin-left: auto;">Unassign all Coaches</button>
+                                <button class="btn-small danger" onclick="clearAssignments()">Clear Group Assignments</button>
                             </div>
-                            <div id="publish-groups-container" style="display: flex; justify-content: center; gap: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; flex-wrap: wrap;">
-                                <button id="publish-groups-btn" class="btn-small" onclick="publishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Publish Group Assignments</button>
-                                <button id="unpublish-groups-btn" class="btn-small" onclick="unpublishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Unpublish Group Assignments</button>
-                                <button id="send-notification-btn" class="btn-small" onclick="sendGroupAssignmentNotification()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Send Notification</button>
-                                <button id="print-groups-btn" class="btn-small" onclick="printGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Print Group Assignments</button>
-                            </div>
-                            <div id="unassigned-new-attendees" style="display: none; margin-bottom: 16px;">
+                            <div id="unassigned-new-attendees" style="display: none; margin-bottom: 16px; position: relative; overflow: visible;">
                                 <!-- Unassigned new attendees will be shown here -->
                             </div>
                             <div id="assignments" class="assignments"></div>
@@ -754,6 +794,78 @@
             <div class="modal-footer">
                 <button class="btn-small secondary" onclick="closeAutoAssignSettingsModal()">Cancel</button>
                 <button class="btn-small" onclick="saveAutoAssignSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="copy-groups-prior-practice-modal" class="modal-overlay" aria-hidden="true" onclick="if(event.target === this) closeCopyGroupsFromPriorPracticeDialog()">
+        <div class="modal" style="max-width: 600px; width: min(600px, 95%);">
+            <div class="modal-header">
+                <span>Copy Prior Practice</span>
+                <button class="btn-small secondary" onclick="closeCopyGroupsFromPriorPracticeDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Select a prior practice to copy group assignments from:
+                    </p>
+                    <div id="prior-practices-list" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Prior practices will be rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeCopyGroupsFromPriorPracticeDialog()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="photo-crop-modal" class="modal-overlay" aria-hidden="true" onclick="if(event.target === this) closePhotoCropDialog()">
+        <div class="modal" style="max-width: 600px; width: min(600px, 95%);">
+            <div class="modal-header">
+                <span>Crop Photo</span>
+                <button class="btn-small secondary" onclick="closePhotoCropDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Drag to reposition, scroll to zoom. Photo will be cropped to a square.
+                    </p>
+                    <div style="position: relative; width: 100%; max-width: 500px; margin: 0 auto; background: #f0f0f0; border: 2px solid #ddd; overflow: hidden; touch-action: none;">
+                        <canvas id="photo-crop-canvas" style="display: block; max-width: 100%; cursor: move;"></canvas>
+                        <div id="photo-crop-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; border: 2px solid #2196F3; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div style="margin-top: 16px; text-align: center;">
+                        <input type="range" id="photo-crop-zoom" min="1" max="3" step="0.1" value="1" style="width: 200px;" oninput="updatePhotoCropZoom(this.value)">
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">Zoom</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closePhotoCropDialog()">Cancel</button>
+                <button class="btn-small" onclick="applyPhotoCrop()">Apply Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="group-count-selection-modal" class="modal-overlay" onclick="if(event.target === this) closeGroupCountSelectionDialog()" style="display: none;">
+        <div class="modal" style="max-width: 500px; width: min(500px, 95%);">
+            <div class="modal-header">
+                <span>Select Number of Groups</span>
+                <button class="btn-small secondary" onclick="closeGroupCountSelectionDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Insufficient coaches available to create compliant groups. Please select the number of groups to create:
+                    </p>
+                    <div id="group-count-options" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Options will be rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeGroupCountSelectionDialog()">Cancel</button>
             </div>
         </div>
     </div>
@@ -1609,6 +1721,34 @@
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
                 <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Cancel</button>
                 <button class="btn-small" onclick="applyCSVFieldMapping()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Mapping & Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Review Modal -->
+    <div id="csv-review-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeCSVReviewModal();">
+        <div class="modal" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span id="csv-review-modal-title">Review CSV Changes</span>
+                <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
+                    <strong>Review Changes:</strong> Review the changes below and select which records to include or ignore. Click "Apply Selected Changes" when ready.
+                </div>
+                <div id="csv-review-content" style="max-height: 60vh; overflow-y: auto;">
+                    <!-- Review content will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="selectAllCSVReviewItems()">Select All</button>
+                    <button class="btn-small secondary" onclick="deselectAllCSVReviewItems()">Deselect All</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+                    <button class="btn-small" onclick="applyCSVReviewChanges()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Selected Changes</button>
+                </div>
             </div>
         </div>
     </div>
@@ -6328,6 +6468,16 @@
             }
         }
 
+        function toggleSiteSettings() {
+            const content = document.getElementById('site-settings-content');
+            const toggle = document.getElementById('site-settings-toggle');
+            if (content && toggle) {
+                const isOpen = content.style.display !== 'none';
+                content.style.display = isOpen ? 'none' : 'block';
+                toggle.textContent = isOpen ? '▼' : '▲';
+            }
+        }
+
         function selectMobileTab(tabName) {
             // Find the corresponding desktop tab button
             const tabs = document.querySelectorAll('#desktop-tabs .tab');
@@ -6950,10 +7100,21 @@
             if (!coach) return;
 
             const file = input.files[0];
-            const photo = await readPhotoFileFromInput(input);
             
-            coach.photo = photo;
+            // Show crop dialog
+            const croppedPhoto = await showPhotoCropDialog(file);
+            if (!croppedPhoto) return; // User cancelled
+            
+            coach.photo = croppedPhoto;
+            
+            // Save to both localStorage and Supabase
             saveData();
+            try {
+                await saveCoachToDB(coach);
+            } catch (error) {
+                console.error('Error saving coach photo to Supabase:', error);
+            }
+            
             renderCoaches();
             if (data.currentRide) {
                 const ride = data.rides.find(r => r.id === data.currentRide);
@@ -6970,10 +7131,21 @@
             if (!rider) return;
 
             const file = input.files[0];
-            const photo = await readPhotoFileFromInput(input);
             
-            rider.photo = photo;
+            // Show crop dialog
+            const croppedPhoto = await showPhotoCropDialog(file);
+            if (!croppedPhoto) return; // User cancelled
+            
+            rider.photo = croppedPhoto;
+            
+            // Save to both localStorage and Supabase
             saveData();
+            try {
+                await saveRiderToDB(rider);
+            } catch (error) {
+                console.error('Error saving rider photo to Supabase:', error);
+            }
+            
             renderRiders();
             if (data.currentRide) {
                 const ride = data.rides.find(r => r.id === data.currentRide);
@@ -6986,13 +7158,16 @@
         async function handleRiderPhotoUploadInModal(input) {
             if (!input.files || input.files.length === 0) return;
             
-            const photo = await readPhotoFileFromInput(input);
-            if (!photo) return;
+            const file = input.files[0];
+            
+            // Show crop dialog
+            const croppedPhoto = await showPhotoCropDialog(file);
+            if (!croppedPhoto) return; // User cancelled
 
             const photoPreview = document.getElementById('edit-rider-photo-preview');
             const photoPlaceholder = document.getElementById('edit-rider-photo-placeholder');
             
-            photoPreview.src = photo;
+            photoPreview.src = croppedPhoto;
             photoPreview.style.display = 'block';
             photoPlaceholder.style.display = 'none';
         }
@@ -7011,6 +7186,311 @@
                 reader.readAsDataURL(file);
             });
         }
+
+        // Photo crop dialog state
+        let photoCropState = {
+            image: null,
+            canvas: null,
+            ctx: null,
+            scale: 1,
+            offsetX: 0,
+            offsetY: 0,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0,
+            containerWidth: 0,
+            containerHeight: 0,
+            resolve: null
+        };
+
+        async function showPhotoCropDialog(file) {
+            return new Promise((resolve) => {
+                photoCropState.resolve = resolve;
+                
+                const modal = document.getElementById('photo-crop-modal');
+                const canvas = document.getElementById('photo-crop-canvas');
+                const container = canvas.parentElement;
+                
+                if (!modal || !canvas) {
+                    resolve(null);
+                    return;
+                }
+                
+                const img = new Image();
+                img.onload = () => {
+                    photoCropState.image = img;
+                    photoCropState.canvas = canvas;
+                    photoCropState.ctx = canvas.getContext('2d');
+                    
+                    // Set container size (square, max 500px)
+                    const containerSize = Math.min(500, window.innerWidth - 100);
+                    container.style.width = containerSize + 'px';
+                    container.style.height = containerSize + 'px';
+                    photoCropState.containerWidth = containerSize;
+                    photoCropState.containerHeight = containerSize;
+                    
+                    // Set canvas size
+                    canvas.width = containerSize;
+                    canvas.height = containerSize;
+                    
+                    // Calculate initial scale to fit image (square crop)
+                    const imgAspect = img.width / img.height;
+                    let drawWidth, drawHeight;
+                    
+                    if (imgAspect > 1) {
+                        // Landscape: fit height
+                        drawHeight = containerSize;
+                        drawWidth = drawHeight * imgAspect;
+                    } else {
+                        // Portrait or square: fit width
+                        drawWidth = containerSize;
+                        drawHeight = drawWidth / imgAspect;
+                    }
+                    
+                    photoCropState.scale = drawWidth / img.width;
+                    photoCropState.offsetX = (containerSize - drawWidth) / 2;
+                    photoCropState.offsetY = (containerSize - drawHeight) / 2;
+                    
+                    // Reset zoom slider
+                    document.getElementById('photo-crop-zoom').value = 1;
+                    
+                    renderPhotoCrop();
+                    
+                    // Show modal
+                    modal.setAttribute('aria-hidden', 'false');
+                    modal.style.display = 'flex';
+                };
+                
+                img.onerror = () => {
+                    resolve(null);
+                };
+                
+                const reader = new FileReader();
+                reader.onload = (e) => img.src = e.target.result;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function renderPhotoCrop() {
+            const { canvas, ctx, image, scale, offsetX, offsetY, containerWidth, containerHeight } = photoCropState;
+            if (!canvas || !ctx || !image) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const drawWidth = image.width * scale;
+            const drawHeight = image.height * scale;
+            
+            ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+        }
+
+        function updatePhotoCropZoom(value) {
+            const zoom = parseFloat(value);
+            const { image, containerWidth, containerHeight } = photoCropState;
+            if (!image) return;
+            
+            const baseScale = photoCropState.scale;
+            photoCropState.scale = baseScale * zoom;
+            
+            // Re-center image
+            const drawWidth = image.width * photoCropState.scale;
+            const drawHeight = image.height * photoCropState.scale;
+            photoCropState.offsetX = Math.max(containerWidth - drawWidth, Math.min(0, (containerWidth - drawWidth) / 2));
+            photoCropState.offsetY = Math.max(containerHeight - drawHeight, Math.min(0, (containerHeight - drawHeight) / 2));
+            
+            renderPhotoCrop();
+        }
+
+        function closePhotoCropDialog() {
+            const modal = document.getElementById('photo-crop-modal');
+            if (modal) {
+                modal.setAttribute('aria-hidden', 'true');
+                modal.style.display = 'none';
+            }
+            if (photoCropState.resolve) {
+                photoCropState.resolve(null);
+                photoCropState.resolve = null;
+            }
+        }
+
+        function applyPhotoCrop() {
+            const { canvas, ctx, image, scale, offsetX, offsetY, containerWidth, containerHeight } = photoCropState;
+            if (!canvas || !ctx || !image) {
+                closePhotoCropDialog();
+                return;
+            }
+            
+            // Create output canvas (square)
+            const outputSize = Math.min(containerWidth, containerHeight);
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = outputSize;
+            outputCanvas.height = outputSize;
+            const outputCtx = outputCanvas.getContext('2d');
+            
+            // Calculate source rectangle (what's visible in the crop area)
+            const drawWidth = image.width * scale;
+            const drawHeight = image.height * scale;
+            
+            // Source coordinates in the original image
+            const sourceX = Math.max(0, -offsetX / scale);
+            const sourceY = Math.max(0, -offsetY / scale);
+            const sourceWidth = Math.min(image.width - sourceX, outputSize / scale);
+            const sourceHeight = Math.min(image.height - sourceY, outputSize / scale);
+            
+            // Destination in output canvas
+            const destSize = Math.min(outputSize, sourceWidth * scale, sourceHeight * scale);
+            const destX = (outputSize - destSize) / 2;
+            const destY = (outputSize - destSize) / 2;
+            
+            // Draw cropped image
+            outputCtx.drawImage(
+                image,
+                sourceX, sourceY, sourceWidth, sourceHeight,
+                destX, destY, destSize, destSize
+            );
+            
+            // Get result as data URL
+            const result = outputCanvas.toDataURL('image/png');
+            
+            closePhotoCropDialog();
+            
+            if (photoCropState.resolve) {
+                photoCropState.resolve(result);
+                photoCropState.resolve = null;
+            }
+        }
+
+        // Group count selection dialog state
+        let groupCountSelectionState = {
+            resolve: null
+        };
+
+        async function showGroupCountSelectionDialog(options) {
+            return new Promise((resolve) => {
+                groupCountSelectionState.resolve = resolve;
+                
+                const modal = document.getElementById('group-count-selection-modal');
+                const optionsContainer = document.getElementById('group-count-options');
+                
+                if (!modal || !optionsContainer) {
+                    resolve(null);
+                    return;
+                }
+                
+                // Ensure aria-hidden is not set (modal should be accessible)
+                if (modal.hasAttribute('aria-hidden')) {
+                    modal.removeAttribute('aria-hidden');
+                }
+                
+                // Render options as buttons FIRST (before showing modal)
+                // This ensures buttons exist before the modal becomes visible
+                optionsContainer.innerHTML = options.map((opt, idx) => `
+                    <button 
+                        class="btn-small" 
+                        style="width: 100%; padding: 12px 16px; text-align: left; font-size: 15px; background: #555; color: white; border: 2px solid #555; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: 500;"
+                        onmouseover="this.style.borderColor='#2196F3'; this.style.background='#2196F3'"
+                        onmouseout="this.style.borderColor='#555'; this.style.background='#555'"
+                        onclick="selectGroupCount(${opt.numGroups})"
+                    >
+                        <strong>${opt.label}</strong>
+                    </button>
+                `).join('');
+                
+                // Show modal immediately after buttons are rendered
+                modal.style.display = 'flex';
+            });
+        }
+
+        function selectGroupCount(numGroups) {
+            console.log('🔵 selectGroupCount called with:', numGroups);
+            if (groupCountSelectionState.resolve) {
+                groupCountSelectionState.resolve(numGroups);
+                groupCountSelectionState.resolve = null;
+            }
+            closeGroupCountSelectionDialog();
+        }
+
+        function closeGroupCountSelectionDialog() {
+            const modal = document.getElementById('group-count-selection-modal');
+            if (modal) {
+                // Don't set aria-hidden - just hide with display:none
+                // The modal doesn't have aria-hidden in HTML, so we don't need to set it
+                modal.style.display = 'none';
+            }
+            if (groupCountSelectionState.resolve) {
+                groupCountSelectionState.resolve(null);
+                groupCountSelectionState.resolve = null;
+            }
+        }
+
+        // Add drag handlers for photo crop
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('photo-crop-canvas');
+            if (!canvas) return;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                if (!photoCropState.image) return;
+                photoCropState.isDragging = true;
+                photoCropState.dragStartX = e.clientX - photoCropState.offsetX;
+                photoCropState.dragStartY = e.clientY - photoCropState.offsetY;
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (!photoCropState.isDragging || !photoCropState.image) return;
+                
+                const { image, scale, containerWidth, containerHeight } = photoCropState;
+                const drawWidth = image.width * scale;
+                const drawHeight = image.height * scale;
+                
+                photoCropState.offsetX = e.clientX - photoCropState.dragStartX;
+                photoCropState.offsetY = e.clientY - photoCropState.dragStartY;
+                
+                // Constrain to keep crop area filled
+                photoCropState.offsetX = Math.max(containerWidth - drawWidth, Math.min(0, photoCropState.offsetX));
+                photoCropState.offsetY = Math.max(containerHeight - drawHeight, Math.min(0, photoCropState.offsetY));
+                
+                renderPhotoCrop();
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                photoCropState.isDragging = false;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                photoCropState.isDragging = false;
+            });
+            
+            // Touch support
+            canvas.addEventListener('touchstart', (e) => {
+                if (!photoCropState.image) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                photoCropState.isDragging = true;
+                photoCropState.dragStartX = touch.clientX - photoCropState.offsetX;
+                photoCropState.dragStartY = touch.clientY - photoCropState.offsetY;
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                if (!photoCropState.isDragging || !photoCropState.image) return;
+                e.preventDefault();
+                
+                const touch = e.touches[0];
+                const { image, scale, containerWidth, containerHeight } = photoCropState;
+                const drawWidth = image.width * scale;
+                const drawHeight = image.height * scale;
+                
+                photoCropState.offsetX = touch.clientX - photoCropState.dragStartX;
+                photoCropState.offsetY = touch.clientY - photoCropState.dragStartY;
+                
+                photoCropState.offsetX = Math.max(containerWidth - drawWidth, Math.min(0, photoCropState.offsetX));
+                photoCropState.offsetY = Math.max(containerHeight - drawHeight, Math.min(0, photoCropState.offsetY));
+                
+                renderPhotoCrop();
+            });
+            
+            canvas.addEventListener('touchend', () => {
+                photoCropState.isDragging = false;
+            });
+        });
 
         function formatPhoneNumber(input) {
             let value = input.value.replace(/\D/g, ''); // Remove all non-digits
@@ -9004,13 +9484,16 @@
         async function handleCoachPhotoUploadInModal(input) {
             if (!input.files || input.files.length === 0) return;
             
-            const photo = await readPhotoFileFromInput(input);
-            if (!photo) return;
+            const file = input.files[0];
+            
+            // Show crop dialog
+            const croppedPhoto = await showPhotoCropDialog(file);
+            if (!croppedPhoto) return; // User cancelled
 
             const photoPreview = document.getElementById('edit-coach-photo-preview');
             const photoPlaceholder = document.getElementById('edit-coach-photo-placeholder');
             
-            photoPreview.src = photo;
+            photoPreview.src = croppedPhoto;
             photoPreview.style.display = 'block';
             photoPlaceholder.style.display = 'none';
         }
@@ -18778,7 +19261,7 @@
         }
         
         // Auto-assignment algorithm - SEQUENTIAL REQUIREMENT-BASED VERSION
-        function autoAssign(targetNumGroups = null) {
+        async function autoAssign(targetNumGroups = null) {
             try {
                 const ride = data.rides.find(r => r.id === data.currentRide);
                 if (!ride) {
@@ -18975,11 +19458,9 @@
                 });
                 debugLines.push('');
 
+                // Note: Groups can be created without coaches if needed
                 if (availableCoaches.length === 0) {
-                    alert('Please select available coaches first');
-                    autoAssignDebugLog = debugLines.concat('❌ Aborted: no coaches selected.').join('\n');
-                    updateDebugOutput();
-                    return;
+                    debugLines.push('⚠️ Warning: No coaches selected. Groups will be created without coaches.');
                 }
 
                 if (availableRiders.length === 0) {
@@ -18987,6 +19468,44 @@
                     autoAssignDebugLog = debugLines.concat('❌ Aborted: no riders selected.').join('\n');
                     updateDebugOutput();
                     return;
+                }
+
+                // If targetNumGroups is specified (from More/Fewer Groups buttons), only redistribute
+                // coaches and riders that are currently assigned to groups. Leave unassigned ones untouched.
+                let coachesToRedistribute = availableCoaches;
+                let ridersToRedistribute = availableRiders;
+                
+                if (targetNumGroups !== null && ride.groups && ride.groups.length > 0) {
+                    // Track which coaches/riders are currently assigned to groups
+                    const assignedCoachIds = new Set();
+                    const assignedRiderIds = new Set();
+                    
+                    ride.groups.forEach(group => {
+                        // Track assigned coaches
+                        if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
+                        if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
+                        if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
+                        if (Array.isArray(group.coaches.extraRoam)) {
+                            group.coaches.extraRoam.forEach(id => {
+                                if (id) assignedCoachIds.add(id);
+                            });
+                        }
+                        // Track assigned riders
+                        if (Array.isArray(group.riders)) {
+                            group.riders.forEach(riderId => assignedRiderIds.add(riderId));
+                        }
+                    });
+                    
+                    // Only redistribute coaches/riders that are currently assigned
+                    coachesToRedistribute = availableCoaches.filter(coach => assignedCoachIds.has(coach.id));
+                    ridersToRedistribute = availableRiders.filter(rider => assignedRiderIds.has(rider.id));
+                    
+                    debugLines.push(`=== RESIZING GROUPS ===`);
+                    debugLines.push(`Current groups: ${ride.groups.length}, Target groups: ${targetNumGroups}`);
+                    debugLines.push(`Assigned coaches to redistribute: ${coachesToRedistribute.length} of ${availableCoaches.length}`);
+                    debugLines.push(`Assigned riders to redistribute: ${ridersToRedistribute.length} of ${availableRiders.length}`);
+                    debugLines.push(`Unassigned coaches/riders will remain in unassigned palette`);
+                    debugLines.push('');
                 }
 
                 // Get settings
@@ -19011,40 +19530,178 @@
                 // STEP 1: Validate Requirements
                 debugLines.push('=== STEP 1: VALIDATE REQUIREMENTS ===');
                 
-                // Get Level 2/3 coaches (eligible leaders)
-                const eligibleLeaders = availableCoaches.filter(coach => {
+                // Get Level 2/3 coaches (eligible leaders) - but not required
+                // Use coachesToRedistribute if resizing, otherwise use all availableCoaches
+                const coachesForAssignment = targetNumGroups !== null && ride.groups && ride.groups.length > 0 
+                    ? coachesToRedistribute 
+                    : availableCoaches;
+                    
+                const eligibleLeaders = coachesForAssignment.filter(coach => {
                     const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                     const level = parseInt(levelRaw, 10);
                     return Number.isFinite(level) && level >= minLeaderLevel;
                 });
 
                 debugLines.push(`Level ${minLeaderLevel}+ Coaches (Eligible Leaders): ${eligibleLeaders.length}`);
+                debugLines.push(`Note: Groups can be created without leaders if needed.`);
                 
-                if (eligibleLeaders.length === 0) {
-                    const errorMsg = `Not enough qualifying coaches: Need at least one Level ${minLeaderLevel}+ coach, but none available.`;
-                    debugLines.push(`❌ ${errorMsg}`);
-                    alert(errorMsg);
-                    autoAssignDebugLog = debugLines.join('\n');
-                    updateDebugOutput();
-                    return;
-                }
-
-                // Check rider/coach ratio
-                const maxGroups = eligibleLeaders.length;
+                // Calculate possible group counts based on rider count and preferred group size
+                // Use ridersToRedistribute if resizing, otherwise use all availableRiders
+                const ridersForAssignment = targetNumGroups !== null && ride.groups && ride.groups.length > 0
+                    ? ridersToRedistribute
+                    : availableRiders;
+                    
+                const totalRiders = ridersForAssignment.length;
+                const minGroups = Math.ceil(totalRiders / preferredGroupSizeMax);
+                const maxGroups = Math.floor(totalRiders / preferredGroupSizeMin);
+                
+                // Also consider coach capacity
                 const totalCapacity = availableCoaches.length * ridersPerCoach;
-                const ridersPerGroup = availableRiders.length / maxGroups;
+                const maxGroupsByCapacity = Math.floor(totalRiders / preferredGroupSizeMin);
+                const actualMaxGroups = Math.min(maxGroups, maxGroupsByCapacity, totalRiders);
+                
+                debugLines.push(`Possible group counts: ${minGroups} to ${actualMaxGroups} (based on ${totalRiders} riders, preferred size ${preferredGroupSizeMin}-${preferredGroupSizeMax})`);
+                
+                // Check if compliant groups can be made based on attendance
+                // A compliant group means:
+                // 1. Group size within preferred range (preferredGroupSizeMin to preferredGroupSizeMax)
+                // 2. Has enough coaches for preferred coaches per group
+                // 3. Has eligible leaders (if minLeaderLevel > 0)
+                // 4. Total capacity sufficient (ridersPerCoach)
+                
+                let normalGroupCount = 0;
+                let canMakeCompliantGroups = false;
+                
+                // Calculate possible group counts within preferred size range
+                const possibleGroupCounts = [];
+                for (let numGroups = minGroups; numGroups <= actualMaxGroups; numGroups++) {
+                    const avgRidersPerGroup = totalRiders / numGroups;
+                    if (avgRidersPerGroup >= preferredGroupSizeMin && avgRidersPerGroup <= preferredGroupSizeMax) {
+                        possibleGroupCounts.push(numGroups);
+                    }
+                }
+                
+                if (possibleGroupCounts.length === 0) {
+                    // Can't make groups within preferred size range
+                    canMakeCompliantGroups = false;
+                    normalGroupCount = Math.max(1, Math.floor(totalRiders / preferredGroupSizeMin));
+                    debugLines.push(`Cannot create groups within preferred size range (${preferredGroupSizeMin}-${preferredGroupSizeMax})`);
+                } else {
+                    // Check each possible group count to see if we can make compliant groups
+                    for (const numGroups of possibleGroupCounts) {
+                        const avgRidersPerGroup = totalRiders / numGroups;
+                        const coachesNeeded = numGroups * preferredCoachesPerGroup;
+                        const totalCapacity = coachesForAssignment.length * ridersPerCoach;
+                        
+                        // Check if we have enough coaches
+                        const hasEnoughCoaches = coachesForAssignment.length >= coachesNeeded;
+                        
+                        // Check if we have enough eligible leaders (if required)
+                        // If minLeaderLevel is 1, all coaches are eligible, so check total coaches
+                        // Otherwise, need enough eligible leaders
+                        const hasEnoughLeaders = minLeaderLevel === 1 
+                            ? coachesForAssignment.length >= numGroups 
+                            : eligibleLeaders.length >= numGroups;
+                        
+                        // Check if total capacity is sufficient
+                        const hasEnoughCapacity = totalRiders <= totalCapacity || availableCoaches.length === 0;
+                        
+                        // Check if group size is within preferred range
+                        const groupSizeCompliant = avgRidersPerGroup >= preferredGroupSizeMin && avgRidersPerGroup <= preferredGroupSizeMax;
+                        
+                        if (hasEnoughCoaches && hasEnoughLeaders && hasEnoughCapacity && groupSizeCompliant) {
+                            // This group count is compliant - use it
+                            normalGroupCount = numGroups;
+                            canMakeCompliantGroups = true;
+                            debugLines.push(`Found compliant group configuration: ${numGroups} groups`);
+                            debugLines.push(`  - Average riders per group: ${avgRidersPerGroup.toFixed(1)} (within ${preferredGroupSizeMin}-${preferredGroupSizeMax})`);
+                            debugLines.push(`  - Coaches needed: ${coachesNeeded}, Available: ${coachesForAssignment.length}`);
+                            debugLines.push(`  - Eligible leaders: ${eligibleLeaders.length}, Needed: ${numGroups}`);
+                            debugLines.push(`  - Total capacity: ${totalCapacity}, Riders: ${totalRiders}`);
+                            break;
+                        }
+                    }
+                    
+                    if (!canMakeCompliantGroups) {
+                        // No compliant configuration found - use best available
+                        normalGroupCount = possibleGroupCounts[0] || Math.max(1, Math.floor(totalRiders / preferredGroupSizeMin));
+                        debugLines.push(`Cannot create fully compliant groups - will use ${normalGroupCount} groups`);
+                        debugLines.push(`  Available coaches: ${coachesForAssignment.length}, Eligible leaders: ${eligibleLeaders.length}`);
+                    }
+                }
+                
+                debugLines.push(`Can make compliant groups: ${canMakeCompliantGroups}, Normal group count: ${normalGroupCount}`);
+                
+                // Track if we showed the dialog (only when insufficient coaches)
+                let showedDialogForInsufficientCoaches = false;
+                
+                // If targetNumGroups is not specified, only prompt if we can't make compliant groups
+                if (targetNumGroups === null) {
+                    if (canMakeCompliantGroups) {
+                        // Can make compliant groups - use normal group count
+                        targetNumGroups = normalGroupCount;
+                        debugLines.push(`Using normal group count: ${targetNumGroups} (compliant groups can be made)`);
+                    } else {
+                        // Cannot make compliant groups - show dialog for user to select number of groups
+                        showedDialogForInsufficientCoaches = true;
+                        debugLines.push(`Cannot make compliant groups - showing dialog for user to select number of groups`);
+                        
+                        const validGroupOptions = [];
+                        for (let numGroups = minGroups; numGroups <= actualMaxGroups; numGroups++) {
+                            const avgRiders = totalRiders / numGroups;
+                            const minRiders = Math.floor(totalRiders / numGroups);
+                            const maxRiders = Math.ceil(totalRiders / numGroups);
+                            
+                            let label = `${numGroups} groups of `;
+                            if (minRiders === maxRiders) {
+                                label += `${minRiders} riders/group`;
+                            } else {
+                                label += `${minRiders}-${maxRiders} riders/group`;
+                            }
+                            
+                            validGroupOptions.push({ numGroups, label, avgRiders });
+                        }
+                        
+                        if (validGroupOptions.length === 0) {
+                            alert(`Cannot create groups: ${totalRiders} riders cannot be divided into groups of size ${preferredGroupSizeMin}-${preferredGroupSizeMax}.`);
+                            autoAssignDebugLog = debugLines.join('\n');
+                            updateDebugOutput();
+                            return;
+                        }
+                        
+                        // Show modal dialog with buttons instead of prompt
+                        const selectedNumGroups = await showGroupCountSelectionDialog(validGroupOptions);
+                        
+                        if (selectedNumGroups === null) {
+                            // User cancelled
+                            return;
+                        }
+                        
+                        targetNumGroups = selectedNumGroups;
+                        debugLines.push(`User selected: ${targetNumGroups} groups (insufficient coaches - coaches will remain unassigned)`);
+                    }
+                }
+                
+                // Track if we had insufficient coaches and showed the dialog
+                // Only skip coach assignment if we showed the dialog (not if targetNumGroups was passed in as parameter)
+                const hadInsufficientCoaches = showedDialogForInsufficientCoaches;
+                
+                // Check rider/coach ratio - use filtered lists when resizing
+                const ridersPerGroup = ridersForAssignment.length / targetNumGroups;
+                const coachesForCapacity = coachesForAssignment.length;
 
-                debugLines.push(`Max Groups (based on L${minLeaderLevel}+ coaches): ${maxGroups}`);
-                debugLines.push(`Total Capacity (${availableCoaches.length} coaches × ${ridersPerCoach}): ${totalCapacity}`);
+                debugLines.push(`Selected Groups: ${targetNumGroups}`);
+                debugLines.push(`Total Capacity (${coachesForCapacity} coaches × ${ridersPerCoach}): ${coachesForCapacity * ridersPerCoach}`);
                 debugLines.push(`Riders per Group (if evenly distributed): ${ridersPerGroup.toFixed(1)}`);
 
-                if (availableRiders.length > totalCapacity) {
-                    const errorMsg = `Not enough coaches: ${availableRiders.length} riders need ${Math.ceil(availableRiders.length / ridersPerCoach)} coaches (at ${ridersPerCoach} riders per coach), but only ${availableCoaches.length} coaches available.`;
-                    debugLines.push(`❌ ${errorMsg}`);
-                    alert(errorMsg);
-                    autoAssignDebugLog = debugLines.join('\n');
-                    updateDebugOutput();
-                    return;
+                // Note: Groups can be created even with insufficient coaches
+                // Any coaches that can't be assigned will remain in unassigned area
+                if (coachesForCapacity > 0 && ridersForAssignment.length > (coachesForCapacity * ridersPerCoach)) {
+                    const neededCoaches = Math.ceil(ridersForAssignment.length / ridersPerCoach);
+                    debugLines.push(`⚠️ Warning: ${ridersForAssignment.length} riders ideally need ${neededCoaches} coaches (at ${ridersPerCoach} riders per coach), but only ${coachesForCapacity} coaches available.`);
+                    debugLines.push(`   Groups will still be created, and available coaches will be assigned where possible.`);
+                } else if (coachesForCapacity === 0) {
+                    debugLines.push(`⚠️ No coaches available - groups will be created without coaches`);
                 }
 
                 if (ridersPerGroup > ridersPerCoach) {
@@ -19058,49 +19715,14 @@
                 // STEP 2: Calculate Possible Group Configurations
                 debugLines.push('=== STEP 2: CALCULATE POSSIBLE GROUP CONFIGURATIONS ===');
                 
-                // Step 2A: Find group counts within preferred size range
-                debugLines.push('Step 2A: Testing group counts within preferred size range:');
-                const validGroupCounts = [];
-                
-                for (let numGroups = 1; numGroups <= maxGroups; numGroups++) {
-                    const avgRidersPerGroup = availableRiders.length / numGroups;
-                    if (avgRidersPerGroup >= preferredGroupSizeMin && avgRidersPerGroup <= preferredGroupSizeMax) {
-                        validGroupCounts.push(numGroups);
-                        debugLines.push(`  ✓ ${numGroups} groups = ${avgRidersPerGroup.toFixed(1)} riders/group (WITHIN RANGE)`);
-                    } else {
-                        debugLines.push(`  ✗ ${numGroups} groups = ${avgRidersPerGroup.toFixed(1)} riders/group (OUTSIDE RANGE)`);
-                    }
-                }
-
-                if (validGroupCounts.length === 0) {
-                    debugLines.push(`⚠️ No group counts within preferred range. Using max groups (${maxGroups}).`);
-                    validGroupCounts.push(maxGroups);
-                }
-
-                debugLines.push(`Valid group counts: ${validGroupCounts.join(', ')}`);
+                // Use the selected targetNumGroups
+                const validGroupCounts = [targetNumGroups];
+                debugLines.push(`Using selected number of groups: ${targetNumGroups}`);
                 debugLines.push('');
-
-                // If targetNumGroups is specified, use it (but validate it's in range)
-                if (targetNumGroups !== null) {
-                    const avgRidersPerGroup = availableRiders.length / targetNumGroups;
-                    if (targetNumGroups > maxGroups) {
-                        alert(`Cannot create ${targetNumGroups} groups: Only ${maxGroups} Level ${minLeaderLevel}+ coaches available.`);
-                        return;
-                    }
-                    if (avgRidersPerGroup < preferredGroupSizeMin || avgRidersPerGroup > preferredGroupSizeMax) {
-                        alert(`Cannot create ${targetNumGroups} groups: Would result in ${avgRidersPerGroup.toFixed(1)} riders per group, which is outside the preferred range of ${preferredGroupSizeMin}-${preferredGroupSizeMax}.`);
-                        return;
-                    }
-                    // Force this group count to be used
-                    validGroupCounts.length = 0;
-                    validGroupCounts.push(targetNumGroups);
-                    debugLines.push(`Using target number of groups: ${targetNumGroups}`);
-                    debugLines.push('');
-                }
 
                 // Step 2B: Calculate coach distributions for each valid group count
                 debugLines.push('Step 2B: Calculate coach distributions:');
-                const totalCoaches = availableCoaches.length;
+                const totalCoaches = coachesForAssignment.length;
                 
                 // Smart function to generate candidate coach distributions (limited set)
                 function generateCoachDistributions(numGroups, totalCoaches, targetCoachesPerGroup) {
@@ -19212,8 +19834,15 @@
                 for (const numGroups of validGroupCounts) {
                     debugLines.push(`  Testing ${numGroups} groups with ${totalCoaches} coaches:`);
                     
-                    const distributions = generateCoachDistributions(numGroups, totalCoaches, preferredCoachesPerGroup);
-                    debugLines.push(`    Generated ${distributions.length} candidate distributions`);
+                    // If no coaches, create empty distribution
+                    let distributions = [];
+                    if (totalCoaches === 0) {
+                        distributions = [Array(numGroups).fill(0)];
+                        debugLines.push(`    No coaches available - using empty distribution`);
+                    } else {
+                        distributions = generateCoachDistributions(numGroups, totalCoaches, preferredCoachesPerGroup);
+                        debugLines.push(`    Generated ${distributions.length} candidate distributions`);
+                    }
                     
                     for (const sortedDist of distributions) {
                         const oneLeaderGroups = sortedDist.filter(c => c === 1).length;
@@ -19255,10 +19884,10 @@
                 }
 
                 // Calculate expected rider distribution
-                const totalRiders = availableRiders.length;
-                const avgRidersPerGroup = totalRiders / bestConfig.numGroups;
+                // Use ridersForAssignment when resizing to only redistribute assigned riders
+                const avgRidersPerGroup = ridersForAssignment.length / bestConfig.numGroups;
                 const baseRidersPerGroup = Math.floor(avgRidersPerGroup);
-                const remainder = totalRiders % bestConfig.numGroups;
+                const remainder = ridersForAssignment.length % bestConfig.numGroups;
                 const riderDistribution = Array(bestConfig.numGroups).fill(baseRidersPerGroup);
                 for (let i = 0; i < remainder; i++) {
                     riderDistribution[i]++;
@@ -19278,7 +19907,8 @@
                 debugLines.push('=== STEP 3: DISTRIBUTE RIDERS ===');
                 
                 // Step 3: Rank riders by fitness (fastest to slowest)
-                const sortedRiders = [...availableRiders].sort((a, b) => {
+                // Use ridersForAssignment when resizing to only redistribute assigned riders
+                const sortedRiders = [...ridersForAssignment].sort((a, b) => {
                     const aFitness = parseInt(a.fitness || '5', 10);
                     const bFitness = parseInt(b.fitness || '5', 10);
                     const aRelative = getRelativePaceValue(aFitness);
@@ -19491,89 +20121,111 @@
 
                 // Step 4A: Rank L2/3 coaches by fitness
                 debugLines.push('Step 4A: Ranking L2/3 coaches by fitness:');
-                const sortedLeaders = [...eligibleLeaders].sort((a, b) => {
+                const sortedLeaders = coachesForAssignment.length > 0 ? [...eligibleLeaders].sort((a, b) => {
                     const aFitness = getCoachFitnessValue(a);
                     const bFitness = getCoachFitnessValue(b);
                     return bFitness - aFitness; // Highest fitness first
-                });
+                }) : [];
 
-                sortedLeaders.forEach((coach, idx) => {
-                    const fitness = getCoachFitnessValue(coach);
-                    const level = coach.coachingLicenseLevel || coach.level || '1';
-                    debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
-                });
-                debugLines.push('');
-
-                // Step 4B: Assign Leaders
-                debugLines.push('Step 4B: Assigning ride leaders:');
-                let leaderIndex = 0;
-                groupInfo.forEach((info) => {
-                    if (leaderIndex < sortedLeaders.length) {
-                        info.group.coaches.leader = sortedLeaders[leaderIndex].id;
-                        debugLines.push(`  ${info.group.label} Leader: ${sortedLeaders[leaderIndex].name || 'Coach'}`);
-                        leaderIndex++;
-                    }
-                });
-                debugLines.push('');
-
-                // Step 4C: Get remaining coaches (L1 + unassigned L2/3)
-                debugLines.push('Step 4C: Remaining coaches (L1 + unassigned L2/3):');
-                const remainingCoaches = availableCoaches
-                    .filter(coach => {
-                        // Not already assigned as leader
-                        return !groupInfo.some(info => info.group.coaches.leader === coach.id);
-                    })
-                    .sort((a, b) => {
-                        const aFitness = getCoachFitnessValue(a);
-                        const bFitness = getCoachFitnessValue(b);
-                        return bFitness - aFitness; // Highest fitness first
+                if (sortedLeaders.length > 0) {
+                    sortedLeaders.forEach((coach, idx) => {
+                        const fitness = getCoachFitnessValue(coach);
+                        const level = coach.coachingLicenseLevel || coach.level || '1';
+                        debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
                     });
-
-                remainingCoaches.forEach((coach, idx) => {
-                    const fitness = getCoachFitnessValue(coach);
-                    const level = coach.coachingLicenseLevel || coach.level || '1';
-                    debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
-                });
-                debugLines.push('');
-
-                // Step 4D: Assign additional coaches (Sweep, Roam)
-                debugLines.push('Step 4D: Assigning additional coaches:');
-                let remainingCoachIndex = 0;
-
-                // Sort groups by coach count needed (most first)
-                const groupsNeedingCoaches = groupInfo
-                    .filter(info => info.coachCount > 1)
-                    .sort((a, b) => b.coachCount - a.coachCount);
-
-                for (const info of groupsNeedingCoaches) {
-                    const coachesNeeded = info.coachCount - 1; // Already has leader
-                    let coachesAssigned = 0;
-
-                    while (coachesAssigned < coachesNeeded && remainingCoachIndex < remainingCoaches.length) {
-                        const coach = remainingCoaches[remainingCoachIndex];
-                        
-                        if (!info.group.coaches.sweep) {
-                            info.group.coaches.sweep = coach.id;
-                            debugLines.push(`  ${info.group.label} Sweep: ${coach.name || 'Coach'}`);
-                            coachesAssigned++;
-                        } else if (!info.group.coaches.roam) {
-                            info.group.coaches.roam = coach.id;
-                            debugLines.push(`  ${info.group.label} Roam: ${coach.name || 'Coach'}`);
-                            coachesAssigned++;
-                        } else {
-                            // Add as extraRoam
-                            if (!Array.isArray(info.group.coaches.extraRoam)) {
-                                info.group.coaches.extraRoam = [];
-                            }
-                            info.group.coaches.extraRoam.push(coach.id);
-                            debugLines.push(`  ${info.group.label} Extra Roam: ${coach.name || 'Coach'}`);
-                            coachesAssigned++;
-                        }
-                        
-                        remainingCoachIndex++;
-                    }
+                } else {
+                    debugLines.push('  No eligible leaders available.');
                 }
                 debugLines.push('');
+
+                // Step 4B: Assign Leaders (optional - groups can exist without leaders)
+                // Skip coach assignment if we had insufficient coaches (they'll remain in unassigned palette)
+                if (hadInsufficientCoaches) {
+                    debugLines.push('Step 4B: Skipping coach assignment (insufficient coaches - coaches will remain in unassigned area)');
+                    debugLines.push('');
+                    debugLines.push('Step 4C: Skipped (insufficient coaches)');
+                    debugLines.push('');
+                    debugLines.push('Step 4D: Skipped (insufficient coaches)');
+                    debugLines.push('');
+                } else {
+                    debugLines.push('Step 4B: Assigning ride leaders:');
+                    let leaderIndex = 0;
+                    groupInfo.forEach((info) => {
+                        if (leaderIndex < sortedLeaders.length) {
+                            info.group.coaches.leader = sortedLeaders[leaderIndex].id;
+                            debugLines.push(`  ${info.group.label} Leader: ${sortedLeaders[leaderIndex].name || 'Coach'}`);
+                            leaderIndex++;
+                        } else {
+                            debugLines.push(`  ${info.group.label} Leader: None (no eligible leaders available)`);
+                        }
+                    });
+                    debugLines.push('');
+
+                    // Step 4C: Get remaining coaches (L1 + unassigned L2/3)
+                    debugLines.push('Step 4C: Remaining coaches (L1 + unassigned L2/3):');
+                    const remainingCoaches = coachesForAssignment.length > 0 ? coachesForAssignment
+                        .filter(coach => {
+                            // Not already assigned as leader
+                            return !groupInfo.some(info => info.group.coaches.leader === coach.id);
+                        })
+                        .sort((a, b) => {
+                            const aFitness = getCoachFitnessValue(a);
+                            const bFitness = getCoachFitnessValue(b);
+                            return bFitness - aFitness; // Highest fitness first
+                        }) : [];
+
+                    if (remainingCoaches.length > 0) {
+                        remainingCoaches.forEach((coach, idx) => {
+                            const fitness = getCoachFitnessValue(coach);
+                            const level = coach.coachingLicenseLevel || coach.level || '1';
+                            debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
+                        });
+                    } else {
+                        debugLines.push('  No remaining coaches available.');
+                    }
+                    debugLines.push('');
+
+                    // Step 4D: Assign additional coaches (Sweep, Roam)
+                    debugLines.push('Step 4D: Assigning additional coaches:');
+                    let remainingCoachIndex = 0;
+
+                    // Sort groups by coach count needed (most first)
+                    const groupsNeedingCoaches = groupInfo
+                        .filter(info => info.coachCount > 1)
+                        .sort((a, b) => b.coachCount - a.coachCount);
+
+                    for (const info of groupsNeedingCoaches) {
+                        // Calculate coaches needed: if group has leader, need coachCount - 1, otherwise need coachCount
+                        const hasLeader = !!info.group.coaches.leader;
+                        const coachesNeeded = hasLeader ? info.coachCount - 1 : info.coachCount;
+                        let coachesAssigned = 0;
+
+                        while (coachesAssigned < coachesNeeded && remainingCoachIndex < remainingCoaches.length) {
+                            const coach = remainingCoaches[remainingCoachIndex];
+                            
+                            if (!info.group.coaches.sweep) {
+                                info.group.coaches.sweep = coach.id;
+                                debugLines.push(`  ${info.group.label} Sweep: ${coach.name || 'Coach'}`);
+                                coachesAssigned++;
+                            } else if (!info.group.coaches.roam) {
+                                info.group.coaches.roam = coach.id;
+                                debugLines.push(`  ${info.group.label} Roam: ${coach.name || 'Coach'}`);
+                                coachesAssigned++;
+                            } else {
+                                // Add as extraRoam
+                                if (!Array.isArray(info.group.coaches.extraRoam)) {
+                                    info.group.coaches.extraRoam = [];
+                                }
+                                info.group.coaches.extraRoam.push(coach.id);
+                                debugLines.push(`  ${info.group.label} Extra Roam: ${coach.name || 'Coach'}`);
+                                coachesAssigned++;
+                            }
+                            
+                            remainingCoachIndex++;
+                        }
+                    }
+                    debugLines.push('');
+                }
 
                 // Validate no 1-leader + 1-rider groups if required
                 if (noOneLeaderOneRider) {
@@ -19615,6 +20267,29 @@
                     }
                 });
 
+                // Track which coaches were assigned to groups
+                const assignedCoachIds = new Set();
+                ride.groups.forEach(group => {
+                    if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
+                    if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
+                    if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
+                    if (Array.isArray(group.coaches.extraRoam)) {
+                        group.coaches.extraRoam.forEach(id => assignedCoachIds.add(id));
+                    }
+                });
+                
+                // Any coaches that weren't assigned remain in availableCoaches (will show in unassigned palette)
+                const unassignedCoaches = availableCoaches.filter(coach => !assignedCoachIds.has(coach.id));
+                if (unassignedCoaches.length > 0) {
+                    debugLines.push('');
+                    debugLines.push(`=== UNASSIGNED COACHES ===`);
+                    debugLines.push(`${unassignedCoaches.length} coach(es) could not be assigned to groups and remain in unassigned area:`);
+                    unassignedCoaches.forEach(coach => {
+                        debugLines.push(`  - ${coach.name || 'Coach'} (Level ${coach.coachingLicenseLevel || coach.level || '1'})`);
+                    });
+                    debugLines.push('');
+                }
+
                 // Clear new attendees when autofill runs (they're now assigned)
                 ride.newAttendees = null;
 
@@ -19640,7 +20315,7 @@
             }
         }
 
-        function addGroupsFromLastPractice() {
+        function openCopyGroupsFromPriorPracticeDialog() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) {
                 alert('No practice selected.');
@@ -19651,10 +20326,6 @@
                 return;
             }
 
-            // Save state before change
-            saveAssignmentState(ride);
-
-            // Find the most recent practice before this one
             const currentDate = parseISODate(ride.date);
             if (!currentDate) {
                 alert('Invalid practice date.');
@@ -19676,26 +20347,75 @@
                 .filter(r => r.date)
                 .sort((a, b) => b.date - a.date); // Most recent first
 
-            // Find first practice with group assignments
-            let sourceRide = null;
-            for (const { ride: candidateRide } of allRides) {
-                if (candidateRide.groups && candidateRide.groups.length > 0) {
-                    sourceRide = candidateRide;
-                    break;
-                }
-            }
+            // Filter to only practices with group assignments
+            const ridesWithGroups = allRides.filter(({ ride: candidateRide }) => 
+                candidateRide.groups && candidateRide.groups.length > 0
+            );
 
-            if (!sourceRide || !sourceRide.groups || sourceRide.groups.length === 0) {
-                alert('No previous practice with group assignments found.');
+            if (ridesWithGroups.length === 0) {
+                alert('No previous practices with group assignments found.');
                 return;
             }
 
-            // Confirm with user
-            const sourceDate = parseISODate(sourceRide.date);
-            const sourceDateStr = sourceDate ? sourceDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : sourceRide.date;
-            if (!confirm(`Copy group assignments from practice on ${sourceDateStr}?\n\nThis will recreate the same group structure and assignments for the current practice.`)) {
+            // Render the list
+            const listContainer = document.getElementById('prior-practices-list');
+            if (!listContainer) return;
+
+            listContainer.innerHTML = ridesWithGroups.map(({ ride: sourceRide, date }) => {
+                const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                const groupCount = sourceRide.groups ? sourceRide.groups.length : 0;
+                return `
+                    <div style="padding: 12px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white; transition: background 0.2s;" 
+                         onmouseover="this.style.background='#f5f5f5'" 
+                         onmouseout="this.style.background='white'"
+                         onclick="copyGroupsFromPriorPractice(${sourceRide.id})">
+                        <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${dateStr}</div>
+                        <div style="font-size: 13px; color: #666;">${groupCount} group${groupCount !== 1 ? 's' : ''}</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Show modal
+            const modal = document.getElementById('copy-groups-prior-practice-modal');
+            if (modal) {
+                modal.setAttribute('aria-hidden', 'false');
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeCopyGroupsFromPriorPracticeDialog() {
+            const modal = document.getElementById('copy-groups-prior-practice-modal');
+            if (modal) {
+                modal.setAttribute('aria-hidden', 'true');
+                modal.style.display = 'none';
+            }
+        }
+
+        function copyGroupsFromPriorPractice(sourceRideId) {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            // Convert sourceRideId to number if it's a string (from onclick attribute)
+            const sourceId = typeof sourceRideId === 'string' ? parseInt(sourceRideId, 10) : sourceRideId;
+            const sourceRide = data.rides.find(r => {
+                // Try both string and number comparison
+                return r.id === sourceId || r.id === sourceRideId || String(r.id) === String(sourceRideId);
+            });
+            
+            if (!ride) {
+                alert('Error: Current practice not found.');
                 return;
             }
+            
+            if (!sourceRide) {
+                console.error('Source ride not found. Looking for ID:', sourceRideId, 'Available ride IDs:', data.rides.map(r => ({ id: r.id, type: typeof r.id })));
+                alert(`Error: Prior practice not found (ID: ${sourceRideId}).`);
+                return;
+            }
+
+            // Close modal
+            closeCopyGroupsFromPriorPracticeDialog();
+
+            // Save state before change
+            saveAssignmentState(ride);
 
             // Get current practice's available coaches and riders
             const currentAvailableCoaches = new Set(ride.availableCoaches || []);
@@ -19864,7 +20584,10 @@
                 return Number.isFinite(level) && level >= minLeaderLevel;
             });
 
-            const maxGroups = eligibleLeaders.length;
+            // Calculate max groups based on rider count and preferred size
+            // Groups can be created without leaders, so don't limit by eligibleLeaders.length
+            const maxGroupsByRiders = Math.floor(availableRiders.length / preferredGroupSizeMin);
+            const maxGroups = Math.min(maxGroupsByRiders, availableRiders.length);
 
             // Find next larger valid group count
             let nextNumGroups = currentNumGroups + 1;
@@ -19878,8 +20601,17 @@
                 nextNumGroups++;
             }
 
-            // No valid larger group count found
-            alert(`Cannot create more groups: The next larger group count (${currentNumGroups + 1}) would result in ${(availableRiders.length / (currentNumGroups + 1)).toFixed(1)} riders per group, which is outside the preferred range of ${preferredGroupSizeMin}-${preferredGroupSizeMax}.`);
+            // No valid larger group count found - check why
+            const nextGroupRidersPerGroup = availableRiders.length / (currentNumGroups + 1);
+            if (nextGroupRidersPerGroup >= preferredGroupSizeMin && nextGroupRidersPerGroup <= preferredGroupSizeMax) {
+                // The next group count IS within range - allow it (shouldn't have been rejected by loop)
+                autoAssign(currentNumGroups + 1);
+            } else if (nextGroupRidersPerGroup < preferredGroupSizeMin) {
+                alert(`Cannot create more groups: The next larger group count (${currentNumGroups + 1}) would result in ${nextGroupRidersPerGroup.toFixed(1)} riders per group, which is below the minimum of ${preferredGroupSizeMin}.`);
+            } else {
+                // nextGroupRidersPerGroup > preferredGroupSizeMax
+                alert(`Cannot create more groups: The next larger group count (${currentNumGroups + 1}) would result in ${nextGroupRidersPerGroup.toFixed(1)} riders per group, which exceeds the maximum of ${preferredGroupSizeMax}.`);
+            }
         }
 
         function tryFewerGroups() {
@@ -19960,6 +20692,52 @@
             });
         }
 
+        function unassignAllCoaches() {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            
+            if (!confirm('Unassign all coaches from groups? Coaches will be moved to the unassigned palette.')) return;
+            
+            // Save state before change (for undo/redo)
+            saveAssignmentState(ride);
+            
+            // Collect all coach IDs that are assigned to groups
+            const assignedCoachIds = new Set();
+            ride.groups.forEach(group => {
+                if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
+                if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
+                if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
+                if (Array.isArray(group.coaches.extraRoam)) {
+                    group.coaches.extraRoam.forEach(id => {
+                        if (id) assignedCoachIds.add(id);
+                    });
+                }
+            });
+            
+            // Remove all coaches from all groups
+            ride.groups.forEach(group => {
+                group.coaches.leader = null;
+                group.coaches.sweep = null;
+                group.coaches.roam = null;
+                group.coaches.extraRoam = [];
+            });
+            
+            // Ensure all unassigned coaches are in availableCoaches
+            assignedCoachIds.forEach(coachId => {
+                if (!ride.availableCoaches.includes(coachId)) {
+                    ride.availableCoaches.push(coachId);
+                }
+            });
+            
+            // Make the unassigned palette visible
+            unassignedPaletteVisibility = 'show';
+            
+            // Save and render
+            saveRideToDB(ride);
+            renderAssignments(ride);
+            renderPracticeAttendanceLists();
+        }
+
         function clearAssignments() {
             if (!confirm('Clear all assignments? This will delete all groups and remove all rider and coach assignments.')) return;
             
@@ -19989,6 +20767,90 @@
             updateDebugOutput();
         }
 
+        function showGroupValidationErrorModal(title, errors) {
+            // Create or get modal element
+            let modal = document.getElementById('group-validation-error-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'group-validation-error-modal';
+                modal.className = 'modal-overlay';
+                modal.setAttribute('aria-hidden', 'true');
+                modal.onclick = function(e) {
+                    if (e.target === modal) {
+                        closeGroupValidationErrorModal();
+                    }
+                };
+                modal.innerHTML = `
+                    <div class="modal" style="max-width: 600px; width: min(600px, 95%);">
+                        <div class="modal-header">
+                            <span style="color: #d32f2f; font-weight: 600;">${escapeHtml(title)}</span>
+                            <button class="btn-small secondary" onclick="closeGroupValidationErrorModal()">Close</button>
+                        </div>
+                        <div class="modal-body" id="group-validation-error-body" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                            <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">Please fix the following errors:</p>
+                            <ul id="group-validation-error-list" style="margin: 0; padding-left: 20px; color: #333;">
+                            </ul>
+                        </div>
+                        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                            <button class="btn-small" onclick="closeGroupValidationErrorModal()">OK</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            // Update title
+            const titleElement = modal.querySelector('.modal-header span');
+            if (titleElement) {
+                titleElement.textContent = title;
+            }
+            
+            // Update error list
+            const errorList = modal.querySelector('#group-validation-error-list');
+            if (errorList) {
+                errorList.innerHTML = errors.map(error => `<li style="margin-bottom: 8px;">${escapeHtml(error)}</li>`).join('');
+            }
+            
+            // Show modal first to measure content
+            modal.style.display = 'flex';
+            modal.removeAttribute('aria-hidden');
+            
+            // Calculate optimal height for modal body (fit content without scrolling if possible)
+            const modalBody = modal.querySelector('#group-validation-error-body');
+            const modalElement = modal.querySelector('.modal');
+            if (modalBody && modalElement) {
+                // Use requestAnimationFrame to ensure DOM is rendered
+                requestAnimationFrame(() => {
+                    // Reset max-height to allow measurement
+                    const originalMaxHeight = modalBody.style.maxHeight;
+                    modalBody.style.maxHeight = 'none';
+                    const bodyHeight = modalBody.scrollHeight;
+                    const viewportHeight = window.innerHeight;
+                    const headerHeight = modal.querySelector('.modal-header')?.offsetHeight || 60;
+                    const footerHeight = modal.querySelector('.modal-footer')?.offsetHeight || 60;
+                    const padding = 40; // Extra padding for modal margins
+                    const maxBodyHeight = viewportHeight - headerHeight - footerHeight - padding;
+                    
+                    // Set max-height to fit content or viewport, whichever is smaller
+                    if (bodyHeight <= maxBodyHeight) {
+                        modalBody.style.maxHeight = bodyHeight + 'px';
+                        modalBody.style.overflowY = 'visible';
+                    } else {
+                        modalBody.style.maxHeight = maxBodyHeight + 'px';
+                        modalBody.style.overflowY = 'auto';
+                    }
+                });
+            }
+        }
+        
+        function closeGroupValidationErrorModal() {
+            const modal = document.getElementById('group-validation-error-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            }
+        }
+        
         async function publishGroupAssignments() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) {
@@ -19998,6 +20860,83 @@
 
             if (!Array.isArray(ride.groups) || ride.groups.length === 0) {
                 alert('No groups to publish. Please create groups first.');
+                return;
+            }
+
+            // Validate before publishing - check for unassigned attendees first
+            const allErrors = [];
+            
+            // Check for unassigned riders and coaches
+            const assignedRiderIds = new Set();
+            const assignedCoachIds = new Set();
+            ride.groups.forEach(group => {
+                if (Array.isArray(group.riders)) {
+                    group.riders.forEach(riderId => assignedRiderIds.add(riderId));
+                }
+                if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
+                if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
+                if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
+                if (Array.isArray(group.coaches.extraRoam)) {
+                    group.coaches.extraRoam.forEach(id => {
+                        if (id) assignedCoachIds.add(id);
+                    });
+                }
+            });
+            
+            // For refined practices, use filtered riders
+            const isRefined = isRideRefined(ride);
+            const ridersToCheck = isRefined ? getFilteredRiderIdsForRide(ride) : (ride.availableRiders || []);
+            const availableRiderIds = new Set(ridersToCheck.map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            
+            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id));
+            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id));
+            
+            if (unassignedRiders.length > 0) {
+                const riderNames = unassignedRiders.map(id => {
+                    const rider = getRiderById(id);
+                    return rider ? rider.name : `Rider ${id}`;
+                }).slice(0, 5); // Show first 5 names
+                const moreCount = unassignedRiders.length > 5 ? ` and ${unassignedRiders.length - 5} more` : '';
+                allErrors.push(`${unassignedRiders.length} unassigned rider${unassignedRiders.length !== 1 ? 's' : ''}: ${riderNames.join(', ')}${moreCount}`);
+            }
+            
+            if (unassignedCoaches.length > 0) {
+                const coachNames = unassignedCoaches.map(id => {
+                    const coach = getCoachById(id);
+                    return coach ? coach.name : `Coach ${id}`;
+                }).slice(0, 5); // Show first 5 names
+                const moreCount = unassignedCoaches.length > 5 ? ` and ${unassignedCoaches.length - 5} more` : '';
+                allErrors.push(`${unassignedCoaches.length} unassigned coach${unassignedCoaches.length !== 1 ? 'es' : ''}: ${coachNames.join(', ')}${moreCount}`);
+            }
+            
+            // Then check group-specific errors
+            const groupErrors = [];
+            ride.groups.forEach((group, index) => {
+                const groupLabel = group.label || `Group ${index + 1}`;
+                const issues = [];
+                
+                // Check if group is compliant
+                if (!checkGroupCompliance(group)) {
+                    issues.push('not compliant (missing leader, missing coaches, or over capacity)');
+                }
+                
+                // Check if route is assigned (but allow "Ride Leader's Choice")
+                if (!group.routeId || group.routeId === '') {
+                    issues.push('no route assigned');
+                }
+                
+                // Only add error if there are issues
+                if (issues.length > 0) {
+                    groupErrors.push(`${groupLabel}: ${issues.join(', ')}`);
+                }
+            });
+            
+            // Combine all errors (unassigned first, then group errors)
+            allErrors.push(...groupErrors);
+            
+            if (allErrors.length > 0) {
+                showGroupValidationErrorModal('Cannot publish group assignments', allErrors);
                 return;
             }
 
@@ -20142,6 +21081,83 @@
 
             if (!Array.isArray(ride.groups) || ride.groups.length === 0) {
                 alert('No groups to print. Please create groups first.');
+                return;
+            }
+
+            // Validate before printing - check for unassigned attendees first
+            const allErrors = [];
+            
+            // Check for unassigned riders and coaches
+            const assignedRiderIds = new Set();
+            const assignedCoachIds = new Set();
+            ride.groups.forEach(group => {
+                if (Array.isArray(group.riders)) {
+                    group.riders.forEach(riderId => assignedRiderIds.add(riderId));
+                }
+                if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
+                if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
+                if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
+                if (Array.isArray(group.coaches.extraRoam)) {
+                    group.coaches.extraRoam.forEach(id => {
+                        if (id) assignedCoachIds.add(id);
+                    });
+                }
+            });
+            
+            // For refined practices, use filtered riders
+            const isRefined = isRideRefined(ride);
+            const ridersToCheck = isRefined ? getFilteredRiderIdsForRide(ride) : (ride.availableRiders || []);
+            const availableRiderIds = new Set(ridersToCheck.map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            
+            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id));
+            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id));
+            
+            if (unassignedRiders.length > 0) {
+                const riderNames = unassignedRiders.map(id => {
+                    const rider = getRiderById(id);
+                    return rider ? rider.name : `Rider ${id}`;
+                }).slice(0, 5); // Show first 5 names
+                const moreCount = unassignedRiders.length > 5 ? ` and ${unassignedRiders.length - 5} more` : '';
+                allErrors.push(`${unassignedRiders.length} unassigned rider${unassignedRiders.length !== 1 ? 's' : ''}: ${riderNames.join(', ')}${moreCount}`);
+            }
+            
+            if (unassignedCoaches.length > 0) {
+                const coachNames = unassignedCoaches.map(id => {
+                    const coach = getCoachById(id);
+                    return coach ? coach.name : `Coach ${id}`;
+                }).slice(0, 5); // Show first 5 names
+                const moreCount = unassignedCoaches.length > 5 ? ` and ${unassignedCoaches.length - 5} more` : '';
+                allErrors.push(`${unassignedCoaches.length} unassigned coach${unassignedCoaches.length !== 1 ? 'es' : ''}: ${coachNames.join(', ')}${moreCount}`);
+            }
+            
+            // Then check group-specific errors
+            const groupErrors = [];
+            ride.groups.forEach((group, index) => {
+                const groupLabel = group.label || `Group ${index + 1}`;
+                const issues = [];
+                
+                // Check if group is compliant
+                if (!checkGroupCompliance(group)) {
+                    issues.push('not compliant (missing leader, missing coaches, or over capacity)');
+                }
+                
+                // Check if route is assigned (but allow "Ride Leader's Choice")
+                if (!group.routeId || group.routeId === '') {
+                    issues.push('no route assigned');
+                }
+                
+                // Only add error if there are issues
+                if (issues.length > 0) {
+                    groupErrors.push(`${groupLabel}: ${issues.join(', ')}`);
+                }
+            });
+            
+            // Combine all errors (unassigned first, then group errors)
+            allErrors.push(...groupErrors);
+            
+            if (allErrors.length > 0) {
+                showGroupValidationErrorModal('Cannot print group assignments', allErrors);
                 return;
             }
 
@@ -21436,18 +22452,13 @@
                 await checkAndAutoUnpublish(ride);
             }
             
-            // Update publish/unpublish button visibility
-            updatePublishButtons();
-            
             // Update undo/redo button states
             updateUndoRedoButtons();
+            
+            // Note: updatePublishButtons() is called after container.innerHTML is set
 
             const groupPaceOrder = getGroupPaceOrderForRide(ride);
             ride.groupPaceOrder = groupPaceOrder;
-            const groupPaceSelect = document.getElementById('group-pace-order');
-            if (groupPaceSelect) {
-                groupPaceSelect.value = groupPaceOrder;
-            }
 
             // Sort groups by fitness based on pace order setting
             ride.groups.sort(getGroupPaceComparator(ride));
@@ -21471,8 +22482,9 @@
                 });
             });
             
-            // Get sort preference for unassigned riders (default to 'pace')
-            const unassignedRidersSort = ride.unassignedRidersSort || 'pace';
+            // Get sort preference for pasteboard (default to 'pace')
+            const pasteboardSort = ride.pasteboardSort || 'pace';
+            const unassignedRidersSort = pasteboardSort; // Use pasteboard sort for riders
             
             // For refined practices, use filtered riders instead of all availableRiders
             const isRefined = isRideRefined(ride);
@@ -21532,8 +22544,8 @@
                 }))
                 .join('');
 
-            // Get sort preference for unassigned coaches (default to 'pace')
-            const unassignedCoachesSort = ride.unassignedCoachesSort || 'pace';
+            // Use pasteboard sort for coaches too
+            const unassignedCoachesSort = pasteboardSort;
             
             const unassignedCoaches = data.coaches
                 .filter(coach => !coachAssignmentMap[coach.id])
@@ -21553,6 +22565,21 @@
                 if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1;
                 
                 if (unassignedCoachesSort === 'pace') {
+                    const fitnessDiff = b.fitness - a.fitness;
+                    if (fitnessDiff !== 0) return fitnessDiff;
+                    return a.lastName.localeCompare(b.lastName);
+                } else if (unassignedCoachesSort === 'skills') {
+                    // Coaches don't have skills, so fall back to pace then name
+                    const fitnessDiff = b.fitness - a.fitness;
+                    if (fitnessDiff !== 0) return fitnessDiff;
+                    return a.lastName.localeCompare(b.lastName);
+                } else if (unassignedCoachesSort === 'grade') {
+                    // Coaches don't have grade, so fall back to pace then name
+                    const fitnessDiff = b.fitness - a.fitness;
+                    if (fitnessDiff !== 0) return fitnessDiff;
+                    return a.lastName.localeCompare(b.lastName);
+                } else if (unassignedCoachesSort === 'gender') {
+                    // Coaches don't have gender, so fall back to pace then name
                     const fitnessDiff = b.fitness - a.fitness;
                     if (fitnessDiff !== 0) return fitnessDiff;
                     return a.lastName.localeCompare(b.lastName);
@@ -21583,18 +22610,12 @@
                 const warnings = [];
 
                 const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
-                if (!group.coaches.leader) {
-                    warnings.push(`Assign a leader (Level ${minLeaderLevel}+)`);
-                } else {
+                if (group.coaches.leader) {
                     const leader = getCoachById(group.coaches.leader);
                     const leaderLevel = leader ? parseInt(leader.coachingLicenseLevel || leader.level || '1', 10) : 0;
                     if (!Number.isFinite(leaderLevel) || leaderLevel < minLeaderLevel) {
                         warnings.push(`Leader must be Level ${minLeaderLevel}+`);
                     }
-                }
-
-                if (coachCount === 0) {
-                    warnings.push('Add at least one coach to this group');
                 }
 
                 if (coachCount > 0 && group.riders.length > capacity) {
@@ -21796,7 +22817,7 @@
                                     <option value="">-- Select Route --</option>
                                     ${renderRouteOptions(group.routeId, group, ride)}
                                 </select>
-                                ${group.routeId ? `<div class="route-preview-container" data-route-id="${group.routeId}" style="margin-top: 12px; width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden;"></div>` : ''}
+                                ${group.routeId && group.routeId !== 'leader-choice' ? `<div class="route-preview-container" data-route-id="${group.routeId}" style="margin-top: 12px; width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden;"></div>` : ''}
                             </div>
                         </div>
                         ${warningsHtml}
@@ -21856,8 +22877,73 @@
                 unassignedPaletteVisibility === 'show' ||
                 (unassignedPaletteVisibility !== 'hide' && hasUnassigned)
             );
-            if (shouldShowUnassignedPalette) {
-                const coachesHtml = unassignedAvailableCoaches.map(coach => 
+            const isPasteboardExpanded = unassignedPaletteVisibility === 'show' || (unassignedPaletteVisibility !== 'hide' && hasUnassigned);
+            
+            // Always show pasteboard header if there are groups, but content only if expanded
+            if (ride.groups.length > 0) {
+                // Get pasteboard sort preference
+                const pasteboardSortForRender = ride.pasteboardSort || 'pace';
+                
+                // Only sort and render content if expanded
+                if (isPasteboardExpanded) {
+                // Sort riders based on pasteboard sort
+                const sortedRiders = [...unassignedAvailableRiders].map(rider => ({
+                    rider,
+                    fitness: (() => {
+                        const fitnessScale = getFitnessScale();
+                        return Math.max(1, Math.min(fitnessScale, parseInt(rider.fitness || Math.ceil(fitnessScale / 2), 10)));
+                    })(),
+                    skills: (() => {
+                        const skillsScale = getSkillsScale();
+                        return Math.max(1, Math.min(skillsScale, parseInt(rider.skills || Math.ceil(skillsScale / 2), 10)));
+                    })(),
+                    grade: parseInt(rider.grade || '0', 10) || 0,
+                    gender: (rider.gender || 'M').toUpperCase(),
+                    lastName: getSortableLastName(rider.name || ''),
+                    name: (rider.name || '').toLowerCase()
+                })).sort((a, b) => {
+                    if (pasteboardSortForRender === 'pace') {
+                        const aPace = getRelativePaceValue(a.fitness);
+                        const bPace = getRelativePaceValue(b.fitness);
+                        if (bPace !== aPace) return bPace - aPace;
+                        return a.lastName.localeCompare(b.lastName);
+                    } else if (pasteboardSortForRender === 'skills') {
+                        if (b.skills !== a.skills) return b.skills - a.skills;
+                        return a.lastName.localeCompare(b.lastName);
+                    } else if (pasteboardSortForRender === 'grade') {
+                        if (b.grade !== a.grade) return b.grade - a.grade;
+                        return a.lastName.localeCompare(b.lastName);
+                    } else if (pasteboardSortForRender === 'gender') {
+                        if (a.gender !== b.gender) return a.gender.localeCompare(b.gender);
+                        return a.lastName.localeCompare(b.lastName);
+                    } else { // name
+                        return a.lastName.localeCompare(b.lastName) || a.name.localeCompare(b.name);
+                    }
+                });
+                
+                // Sort coaches based on pasteboard sort
+                const sortedCoaches = [...unassignedAvailableCoaches].map(coach => ({
+                    coach,
+                    fitness: getCoachFitnessValue(coach),
+                    level: parseInt(coach.level || '1', 10),
+                    lastName: getSortableLastName(coach.name || ''),
+                    name: (coach.name || '').toLowerCase()
+                })).sort((a, b) => {
+                    if (pasteboardSortForRender === 'pace') {
+                        const fitnessDiff = b.fitness - a.fitness;
+                        if (fitnessDiff !== 0) return fitnessDiff;
+                        return a.lastName.localeCompare(b.lastName);
+                    } else if (pasteboardSortForRender === 'skills' || pasteboardSortForRender === 'grade' || pasteboardSortForRender === 'gender') {
+                        // Coaches don't have these fields, so fall back to pace then name
+                        const fitnessDiff = b.fitness - a.fitness;
+                        if (fitnessDiff !== 0) return fitnessDiff;
+                        return a.lastName.localeCompare(b.lastName);
+                    } else { // name
+                        return a.lastName.localeCompare(b.lastName) || a.name.localeCompare(b.name);
+                    }
+                });
+                
+                const coachesHtml = sortedCoaches.map(({ coach }) => 
                     renderCoachCardHtml(coach, null, 'unassigned', {
                         draggable: true,
                         showAttendance: true,
@@ -21866,7 +22952,7 @@
                     })
                 ).join('');
                 
-                const ridersHtml = unassignedAvailableRiders.map(rider => 
+                const ridersHtml = sortedRiders.map(({ rider }) => 
                     renderRiderCardHtml(rider, {
                         draggable: true,
                         showAttendance: true,
@@ -21876,26 +22962,54 @@
                     })
                 ).join('');
                 
+                // Expanded state - show full pasteboard
                 newAttendeesHtml = `
-                    <div id="new-attendees-sticky" style="margin-bottom: 20px; padding: 16px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #856404;">Unassigned Attendees - Drag to Assign</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                            <div>
-                                <strong style="display: block; margin-bottom: 8px; color: #856404;">Riders (${unassignedAvailableRiders.length})</strong>
-                                <div class="rider-drop-list" data-drop-type="rider" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
-                                    ${ridersHtml || '<div class="empty-message">No unassigned riders</div>'}
+                    <div id="new-attendees-sticky" data-unassigned-palette="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="margin-bottom: 20px; padding: 16px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; position: -webkit-sticky; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <h3 style="margin: 0; font-size: 16px; color: #856404;">Pasteboard - Drag to Assign</h3>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label for="pasteboard-sort" style="font-size: 12px; color: #856404; font-weight: 500;">Sort by:</label>
+                                    <select id="pasteboard-sort" onchange="changePasteboardSort(this.value)" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: white; color: #333;">
+                                        <option value="pace" ${pasteboardSortForRender === 'pace' ? 'selected' : ''}>Pace</option>
+                                        <option value="skills" ${pasteboardSortForRender === 'skills' ? 'selected' : ''}>Bike Skills</option>
+                                        <option value="grade" ${pasteboardSortForRender === 'grade' ? 'selected' : ''}>Grade</option>
+                                        <option value="gender" ${pasteboardSortForRender === 'gender' ? 'selected' : ''}>Gender</option>
+                                        <option value="name" ${pasteboardSortForRender === 'name' ? 'selected' : ''}>Name</option>
+                                    </select>
                                 </div>
                             </div>
-                            <div>
+                            <button class="btn-small" onclick="toggleUnassignedPaletteVisibility()" style="background: #fff3cd; color: #856404; border-color: #ffc107; padding: 4px 12px; font-size: 13px;">Hide</button>
+                        </div>
+                        <div style="display: flex; gap: 0; align-items: stretch;">
+                            <div style="flex: ${ride.pasteboardRidersWidth || 1}; min-width: 0; display: flex; flex-direction: column;">
+                                <strong style="display: block; margin-bottom: 8px; color: #856404;">Riders (${unassignedAvailableRiders.length})</strong>
+                                <div class="rider-drop-list unassigned-list-container" data-drop-type="rider" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                                    ${ridersHtml || '<div class="empty-message" style="grid-column: 1 / -1;">No unassigned riders</div>'}
+                                </div>
+                            </div>
+                            <div class="pasteboard-divider" onmousedown="startPasteboardDividerResize(event)" title="Drag to resize"></div>
+                            <div style="flex: ${ride.pasteboardCoachesWidth || 1}; min-width: 0; display: flex; flex-direction: column;">
                                 <strong style="display: block; margin-bottom: 8px; color: #856404;">Coaches (${unassignedAvailableCoaches.length})</strong>
-                                <div class="rider-drop-list" data-drop-type="coach" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
-                                    ${coachesHtml || '<div class="empty-message">No unassigned coaches</div>'}
+                                <div class="rider-drop-list unassigned-list-container" data-drop-type="coach" data-group-id="unassigned" data-unassigned-list="true" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" style="min-height: 100px; height: ${unassignedPaletteHeight}px; max-height: ${unassignedPaletteHeight}px; overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                                    ${coachesHtml || '<div class="empty-message" style="grid-column: 1 / -1;">No unassigned coaches</div>'}
                                 </div>
                             </div>
                         </div>
                         <div class="unassigned-resize-handle" onmousedown="startUnassignedPaletteResize(event)" style="margin-top: 10px; height: 8px; cursor: ns-resize; background: #ffe8a1; border-radius: 4px;"></div>
                     </div>
                 `;
+                } else {
+                    // Collapsed state - show header only
+                    newAttendeesHtml = `
+                        <div id="new-attendees-sticky" data-unassigned-palette="true" style="margin-bottom: 12px; padding: 12px 16px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; position: -webkit-sticky; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin: 0; font-size: 16px; color: #856404;">Pasteboard</h3>
+                                <button class="btn-small" onclick="toggleUnassignedPaletteVisibility()" style="background: #fff3cd; color: #856404; border-color: #ffc107; padding: 4px 12px; font-size: 13px;">Show</button>
+                            </div>
+                        </div>
+                    `;
+                }
             }
             
             // Add "Clone Entire Practice" button at bottom if no groups assigned
@@ -21907,17 +23021,32 @@
                 </div>`
                 : '';
             
+            // Hide the unassigned-new-attendees container since we're putting pasteboard in assignments
+            const unassignedContainer = document.getElementById('unassigned-new-attendees');
+            if (unassignedContainer) {
+                unassignedContainer.style.display = 'none';
+            }
+            
             const centerColumnHtml = `
-                ${newAttendeesHtml}
+                ${newAttendeesHtml || ''}
                 <div class="assignment-column groups-column" style="width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 16px; max-width: 100%; padding: 0; border: none;">
                     ${groupsHtml}
                     ${cloneButtonHtml}
+                </div>
+                <div id="publish-groups-container" style="display: flex; justify-content: center; gap: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; flex-wrap: wrap;">
+                    <button id="publish-groups-btn" class="btn-small" onclick="publishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Publish Group Assignments</button>
+                    <button id="unpublish-groups-btn" class="btn-small" onclick="unpublishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Unpublish Group Assignments</button>
+                    <button id="send-notification-btn" class="btn-small" onclick="sendGroupAssignmentNotification()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Send Notification</button>
+                    <button id="print-groups-btn" class="btn-small" onclick="printGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Print Group Assignments</button>
                 </div>
             `;
 
             container.innerHTML = centerColumnHtml;
             updateUnassignedPaletteToggleButton(shouldShowUnassignedPalette);
             updateDebugOutput();
+            
+            // Update publish buttons after container is updated
+            updatePublishButtons();
             
             // Add event delegation for checkboxes in group riders containers
             // This allows checkboxes in groups to toggle rider availability
@@ -23062,10 +24191,16 @@
 
         function toggleUnassignedPaletteVisibility() {
             const palette = document.getElementById('new-attendees-sticky');
-            const isVisible = !!palette;
-            if (isVisible) {
+            if (!palette) return;
+            
+            // Check if the pasteboard is currently expanded by looking for the content area
+            const hasContent = palette.querySelector('.unassigned-list-container') !== null;
+            
+            if (hasContent) {
+                // Currently expanded, so hide it
                 unassignedPaletteVisibility = 'hide';
             } else {
+                // Currently collapsed, so show it
                 unassignedPaletteVisibility = 'show';
             }
             renderAssignments(data.rides.find(r => r.id === data.currentRide));
@@ -23074,7 +24209,7 @@
         function updateUnassignedPaletteToggleButton(isVisible) {
             const toggleBtn = document.getElementById('unassigned-palette-toggle-btn');
             if (!toggleBtn) return;
-            toggleBtn.textContent = isVisible ? 'Hide Unassigned Palette' : 'Show Unassigned Palette';
+            toggleBtn.textContent = isVisible ? 'Hide Pasteboard' : 'Show Pasteboard';
         }
 
         function startUnassignedPaletteResize(event) {
@@ -23228,7 +24363,12 @@
             const group = ride.groups.find(g => String(g.id) === String(groupId));
             if (!group) return;
             
-            group.routeId = routeId || null;
+            // Handle "Ride Leader's Choice" option
+            if (routeId === 'leader-choice') {
+                group.routeId = 'leader-choice';
+            } else {
+                group.routeId = routeId || null;
+            }
             saveRideToDB(ride);
             
             // Re-render assignments to show/hide route preview
@@ -23244,7 +24384,7 @@
             
             // If no group or ride provided, render all routes normally
             if (!group || !ride) {
-                return routes.map(route => {
+                let html = routes.map(route => {
                     const selected = selectedRouteId && String(route.id) === String(selectedRouteId) ? 'selected' : '';
                     let routeText = escapeHtml(route.name || 'Unnamed Route');
                     
@@ -23259,6 +24399,12 @@
                     
                     return `<option value="${route.id}" ${selected}>${routeText}</option>`;
                 }).join('');
+                
+                // Add "Ride Leader's Choice" option at the bottom
+                const leaderChoiceSelected = selectedRouteId && String(selectedRouteId) === 'leader-choice' ? 'selected' : '';
+                html += `<option value="leader-choice" ${leaderChoiceSelected}>Ride Leader's Choice</option>`;
+                
+                return html;
             }
             
             // Parse practice time
@@ -23399,6 +24545,10 @@
                 
                 html += `<option value="${route.id}" ${selected}>${routeText}</option>`;
             });
+            
+            // Add "Ride Leader's Choice" option at the bottom
+            const leaderChoiceSelected = selectedRouteId && String(selectedRouteId) === 'leader-choice' ? 'selected' : '';
+            html += `<option value="leader-choice" ${leaderChoiceSelected}>Ride Leader's Choice</option>`;
             
             return html;
         }
@@ -23625,7 +24775,7 @@
             renderAssignments(ride);
         }
 
-        function changeUnassignedRidersSort(sortBy) {
+        function changePasteboardSort(sortBy) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             
@@ -23635,26 +24785,74 @@
                 sortBy = 'pace'; // Default to pace if invalid
             }
             
-            ride.unassignedRidersSort = sortBy;
+            ride.pasteboardSort = sortBy;
             // Save immediately to localStorage
             saveRideToDB(ride);
             renderAssignments(ride);
         }
 
-        function changeUnassignedCoachesSort(sortBy) {
+        function startPasteboardDividerResize(event) {
+            event.preventDefault();
+            event.stopPropagation();
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             
-            // Validate sortBy value
-            const validSorts = ['pace', 'level', 'name'];
-            if (!validSorts.includes(sortBy)) {
-                sortBy = 'pace'; // Default to pace if invalid
-            }
+            const startX = event.clientX;
+            const container = event.currentTarget.parentElement;
+            const ridersDiv = container.querySelector('[data-drop-type="rider"]').parentElement;
+            const coachesDiv = container.querySelector('[data-drop-type="coach"]').parentElement;
             
-            ride.unassignedCoachesSort = sortBy;
-            // Save immediately to localStorage
-            saveRideToDB(ride);
-            renderAssignments(ride);
+            const startRidersWidth = ride.pasteboardRidersWidth || 1;
+            const startCoachesWidth = ride.pasteboardCoachesWidth || 1;
+            const totalFlex = startRidersWidth + startCoachesWidth;
+            const containerWidth = container.offsetWidth;
+            const dividerWidth = 8; // Width of divider
+            
+            const onMove = (moveEvent) => {
+                const deltaX = moveEvent.clientX - startX;
+                const deltaPercent = (deltaX / (containerWidth - dividerWidth)) * totalFlex;
+                
+                let newRidersWidth = startRidersWidth + deltaPercent;
+                let newCoachesWidth = startCoachesWidth - deltaPercent;
+                
+                // Enforce minimum widths (at least 20% each)
+                const minWidth = totalFlex * 0.2;
+                if (newRidersWidth < minWidth) {
+                    newRidersWidth = minWidth;
+                    newCoachesWidth = totalFlex - minWidth;
+                } else if (newCoachesWidth < minWidth) {
+                    newCoachesWidth = minWidth;
+                    newRidersWidth = totalFlex - minWidth;
+                }
+                
+                ridersDiv.style.flex = newRidersWidth;
+                coachesDiv.style.flex = newCoachesWidth;
+            };
+            
+            const onUp = () => {
+                const ride = data.rides.find(r => r.id === data.currentRide);
+                if (ride) {
+                    const container = document.getElementById('new-attendees-sticky');
+                    if (container) {
+                        const ridersDiv = container.querySelector('[data-drop-type="rider"]').parentElement;
+                        const coachesDiv = container.querySelector('[data-drop-type="coach"]').parentElement;
+                        const ridersFlex = parseFloat(ridersDiv.style.flex) || 1;
+                        const coachesFlex = parseFloat(coachesDiv.style.flex) || 1;
+                        ride.pasteboardRidersWidth = ridersFlex;
+                        ride.pasteboardCoachesWidth = coachesFlex;
+                        saveRideToDB(ride);
+                    }
+                }
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
         }
 
         function deleteGroup(groupId) {
@@ -23688,10 +24886,21 @@
             } catch (err) {
                 payload = {};
             }
-            const expectedType = ev.currentTarget.dataset.dropType;
-            if (expectedType && payload.type && expectedType !== payload.type) {
-                return;
+            
+            // Check if dropping on unassigned palette - allow any type to be dropped anywhere in the palette
+            const isUnassignedPalette = ev.currentTarget.closest('#new-attendees-sticky') || 
+                                       ev.currentTarget.dataset.unassignedList === 'true' ||
+                                       ev.currentTarget.id === 'new-attendees-sticky' ||
+                                       ev.currentTarget.dataset.unassignedPalette === 'true';
+            
+            if (!isUnassignedPalette) {
+                // For other drop zones, check type matching
+                const expectedType = ev.currentTarget.dataset.dropType;
+                if (expectedType && payload.type && expectedType !== payload.type) {
+                    return;
+                }
             }
+            
             ev.preventDefault();
             
             // Highlight drop target
@@ -23923,6 +25132,22 @@
             const riderId = parseInt(payload.riderId, 10);
             if (!Number.isFinite(riderId)) return;
 
+            // Check if dropping on unassigned palette - allow dropping anywhere in the palette
+            const isUnassignedPalette = dropTarget.closest('#new-attendees-sticky') || 
+                                       dropTarget.dataset.unassignedList === 'true' ||
+                                       dropTarget.id === 'new-attendees-sticky';
+            
+            if (isUnassignedPalette) {
+                // Dropping on unassigned palette - remove from groups and ensure in availableRiders
+                removeRiderFromGroups(ride, riderId);
+                if (!ride.availableRiders.includes(riderId)) {
+                    ride.availableRiders.push(riderId);
+                }
+                saveRideToDB(ride);
+                renderAssignments(ride);
+                return;
+            }
+
             const dropType = dropTarget.dataset.dropType;
             if (dropType && dropType !== 'rider') return;
 
@@ -23951,19 +25176,7 @@
                     return;
                 }
 
-                const coachCount = countGroupCoaches(group);
-                if (coachCount === 0) {
-                    alert('Assign at least one coach before adding riders to this group.');
-                    if (previousGroupId !== null) {
-                        const previousGroup = findGroupById(ride, previousGroupId);
-                        if (previousGroup) {
-                            previousGroup.riders.push(riderId);
-                        }
-                    }
-                    renderAssignments(ride);
-                    return;
-                }
-
+                // Note: Groups can now exist without coaches - removed coach requirement check
                 // Allow adding riders even if it exceeds capacity - group will be marked as non-compliant (red)
                 // This allows flexibility when moving things around
                 if (!group.riders.includes(riderId)) {
@@ -24612,6 +25825,23 @@
         function handleCoachDrop(ride, payload, dropTarget, ev) {
             const coachId = parseInt(payload.coachId, 10);
             if (!Number.isFinite(coachId)) return;
+
+            // Check if dropping on unassigned palette - allow dropping anywhere in the palette
+            const isUnassignedPalette = dropTarget.closest('#new-attendees-sticky') || 
+                                       dropTarget.dataset.unassignedList === 'true' ||
+                                       dropTarget.id === 'new-attendees-sticky';
+            
+            if (isUnassignedPalette) {
+                // Dropping on unassigned palette - remove from groups and ensure in availableCoaches
+                saveAssignmentState(ride);
+                removeCoachFromGroups(ride, coachId);
+                if (!ride.availableCoaches.includes(coachId)) {
+                    ride.availableCoaches.push(coachId);
+                }
+                saveRideToDB(ride);
+                renderAssignments(ride);
+                return;
+            }
 
             const dropType = dropTarget.dataset.dropType;
             if (dropType && dropType !== 'coach') return;
@@ -27807,6 +29037,46 @@
                     </div>
                 `;
             }).join('');
+            
+            // Add Group Pace Options at the end
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            const groupPaceOrder = ride?.groupPaceOrder || data.seasonSettings?.groupPaceOrder || 'fastest_to_slowest';
+            container.innerHTML += `
+                <div style="border: 1px solid #ddd; border-radius: 4px; padding: 16px; margin-bottom: 12px; background: white;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <label style="font-weight: 600; color: #333; font-size: 14px; display: block; margin-bottom: 4px;">
+                                Group Pace Order
+                            </label>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                                Controls the order in which groups are displayed (fastest to slowest or slowest to fastest)
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <select id="auto-assign-group-pace-order" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 200px;" onchange="updateAutoAssignGroupPaceOrder(this.value)">
+                            <option value="fastest_to_slowest" ${groupPaceOrder === 'fastest_to_slowest' ? 'selected' : ''}>Fastest to Slowest</option>
+                            <option value="slowest_to_fastest" ${groupPaceOrder === 'slowest_to_fastest' ? 'selected' : ''}>Slowest to Fastest</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function updateAutoAssignGroupPaceOrder(value) {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            const normalized = normalizeGroupPaceOrder(value);
+            ride.groupPaceOrder = normalized;
+            if (!data.seasonSettings) {
+                data.seasonSettings = {};
+            }
+            data.seasonSettings.groupPaceOrder = normalized;
+            saveRideToDB(ride);
+            if (typeof updateSeasonSettings === 'function') {
+                updateSeasonSettings(data.seasonSettings);
+            }
+            renderAssignments(ride);
         }
 
         function updateAutoAssignParamValue(id, value) {
