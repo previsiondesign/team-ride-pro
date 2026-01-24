@@ -6637,7 +6637,15 @@
                 notes
             };
 
-            await saveRiderToDB(riderData);
+            const added = await saveRiderToDB(riderData);
+            if (added && added.id) {
+                addNewRiderToAttendanceLists(added.id);
+                if (typeof renderPracticeAttendanceLists === 'function') renderPracticeAttendanceLists();
+                if (data.currentRide) {
+                    const r = data.rides.find(x => x.id === data.currentRide);
+                    if (r) renderAssignments(r);
+                }
+            }
             resetRiderForm();
             renderRiders();
         }
@@ -6652,6 +6660,18 @@
             document.getElementById('rider-fitness').value = '5';
             document.getElementById('rider-notes').value = '';
             handleFileChange('rider-photo', 'rider-photo-name');
+        }
+
+        /** Add a newly created rider to availableRiders (attendance) for all non-deleted rides. */
+        function addNewRiderToAttendanceLists(newRiderId) {
+            if (!newRiderId || !Array.isArray(data.rides)) return;
+            data.rides.forEach(ride => {
+                if (ride.deleted) return;
+                if (!Array.isArray(ride.availableRiders)) ride.availableRiders = [];
+                if (ride.availableRiders.includes(newRiderId)) return;
+                ride.availableRiders.push(newRiderId);
+                saveRideToDB(ride);
+            });
         }
 
         async function deleteRider(id) {
@@ -7038,7 +7058,11 @@
             }
 
             try {
-                await saveRiderToDB(riderData);
+                const added = await saveRiderToDB(riderData);
+                if (added && added.id) {
+                    addNewRiderToAttendanceLists(added.id);
+                    if (typeof renderPracticeAttendanceLists === 'function') renderPracticeAttendanceLists();
+                }
                 renderRiders();
                 closeEditRiderModal();
                 if (data.currentRide) {
