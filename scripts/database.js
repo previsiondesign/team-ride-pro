@@ -340,6 +340,121 @@ async function deleteCoachFromDB(id) {
 }
 
 // ============ RIDES ============
+// Single schema: add new ride fields here only. Write/read use this map so nothing is dropped.
+// To add a new ride setting: 1) Add DB column (migration) if not using settings JSONB.
+// 2) Add one entry to RIDE_APP_TO_DB (appKey: 'db_column'). Unknown app keys auto-go to settings JSONB.
+/** App key -> DB column name. */
+const RIDE_APP_TO_DB = {
+    date: 'date',
+    time: 'time',
+    endTime: 'end_time',
+    description: 'description',
+    meetLocation: 'meet_location',
+    locationLat: 'location_lat',
+    locationLng: 'location_lng',
+    goals: 'goals',
+    availableCoaches: 'available_coaches',
+    availableRiders: 'available_riders',
+    assignments: 'assignments',
+    groups: 'groups',
+    cancelled: 'cancelled',
+    cancellationReason: 'cancellation_reason',
+    deleted: 'deleted',
+    rescheduledFrom: 'rescheduled_from',
+    publishedGroups: 'published_groups',
+    settings: 'settings'
+};
+/** DB column -> app key (for load) */
+const RIDE_DB_TO_APP = Object.fromEntries(Object.entries(RIDE_APP_TO_DB).map(([app, db]) => [db, app]));
+
+/**
+ * Build DB payload from app ride. Uses RIDE_APP_TO_DB; unknown app keys go into settings JSONB.
+ * Call this from saveRideToDB and updateRide so all fields persist.
+ */
+function buildRideDbData(rideData) {
+    const dbData = {};
+    const knownAppKeys = new Set(Object.keys(RIDE_APP_TO_DB));
+    const extra = {};
+
+    for (const [appKey, dbKey] of Object.entries(RIDE_APP_TO_DB)) {
+        if (appKey === 'settings') continue; // filled from extra below
+        const value = rideData[appKey];
+        if (value === undefined && dbKey !== 'deleted') continue;
+        if (dbKey === 'groups') {
+            dbData.groups = JSON.parse(JSON.stringify(Array.isArray(rideData.groups) ? rideData.groups : []));
+        } else if (dbKey === 'assignments') {
+            dbData.assignments = rideData.assignments && typeof rideData.assignments === 'object' ? rideData.assignments : {};
+        } else if (dbKey === 'deleted') {
+            dbData.deleted = rideData.deleted === true ? true : (rideData.deleted === false ? false : false);
+        } else if (dbKey === 'settings') {
+            // skip, we'll set from extra
+        } else if (dbKey === 'available_riders' || dbKey === 'available_coaches') {
+            // Always send arrays so attendance/availability persists (use empty array if undefined)
+            dbData[dbKey] = Array.isArray(value) ? value : [];
+        } else {
+            dbData[dbKey] = value;
+        }
+    }
+
+    for (const k of Object.keys(rideData || {})) {
+        if (k === 'id' || k === 'isPersisted' || knownAppKeys.has(k)) continue;
+        const v = rideData[k];
+        if (v !== undefined) extra[k] = v;
+    }
+    // Store rescheduledFrom in settings as fallback when rescheduled_from column is missing
+    if (rideData.rescheduledFrom !== undefined && rideData.rescheduledFrom !== null) {
+        extra.rescheduledFrom = rideData.rescheduledFrom;
+    }
+    // Store availableRiders in settings so attendance persists even if available_riders column is missing or RLS omits it
+    if (Array.isArray(rideData.availableRiders)) {
+        extra.availableRiders = rideData.availableRiders;
+    }
+    if (Object.keys(extra).length > 0) dbData.settings = extra;
+
+    return dbData;
+}
+
+/**
+ * Map DB row to app ride. Uses RIDE_DB_TO_APP; settings JSONB is merged onto the result.
+ */
+function mapRideDbToApp(row) {
+    if (!row) return null;
+    const result = { id: row.id, isPersisted: true };
+    for (const [dbKey, appKey] of Object.entries(RIDE_DB_TO_APP)) {
+        if (appKey === 'settings') continue;
+        let value = row[dbKey];
+        if (dbKey === 'groups') value = Array.isArray(value) ? value : [];
+        else if (dbKey === 'deleted') value = value === true ? true : (value === false ? false : false);
+        else if (dbKey === 'end_time') value = value ?? '';
+        else if (dbKey === 'meet_location') value = value ?? '';
+        else if (dbKey === 'available_coaches') value = value || [];
+        else if (dbKey === 'available_riders') value = value || [];
+        else if (dbKey === 'cancellation_reason') value = value ?? '';
+        else if (dbKey === 'rescheduled_from') {
+            value = value ?? null;
+            // Normalize to YYYY-MM-DD for consistent comparison (DB may return ISO timestamp)
+            if (value && typeof value === 'string') {
+                const normalized = value.substring(0, 10);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) value = normalized;
+            }
+        }
+        else if (dbKey === 'published_groups') value = value ?? false;
+        result[appKey] = value;
+    }
+    if (row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)) {
+        Object.assign(result, row.settings);
+    }
+    // Normalize rescheduledFrom from settings fallback (column may be missing)
+    if (result.rescheduledFrom && typeof result.rescheduledFrom === 'string') {
+        const n = result.rescheduledFrom.substring(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(n)) result.rescheduledFrom = n;
+    }
+    // Use settings.availableRiders as source of truth when present (column may not persist due to RLS/schema)
+    if (row.settings && Array.isArray(row.settings.availableRiders)) {
+        result.availableRiders = row.settings.availableRiders;
+    }
+    return result;
+}
 
 async function getAllRides() {
     const client = getSupabaseClient();
@@ -355,44 +470,10 @@ async function getAllRides() {
         return [];
     }
     
-    // Debug: Log raw data from database
-    const deletedRides = (data || []).filter(r => r.deleted === true);
-    console.log('📥 getAllRides: Raw data from DB - total:', (data || []).length, 'deleted in DB:', deletedRides.length, 'deleted rides:', deletedRides.map(r => ({ id: r.id, date: r.date, deleted: r.deleted, deletedType: typeof r.deleted })));
     
-    // Map database structure to app structure
-    const mapped = (data || []).map(ride => {
-        // Explicitly handle deleted field - check for true, false, null, undefined
-        const deletedValue = ride.deleted === true ? true : (ride.deleted === false ? false : false);
-        const result = {
-            id: ride.id,
-            date: ride.date,
-            time: ride.time || '',
-            endTime: ride.end_time || ride.endTime || '',
-            description: ride.description || '',
-            meetLocation: ride.meet_location || ride.meetLocation || '',
-            locationLat: ride.location_lat != null ? ride.location_lat : (ride.locationLat != null ? ride.locationLat : null),
-            locationLng: ride.location_lng != null ? ride.location_lng : (ride.locationLng != null ? ride.locationLng : null),
-            goals: ride.goals || '',
-            availableCoaches: ride.available_coaches || [],
-            availableRiders: ride.available_riders || [],
-            assignments: ride.assignments || {},
-            groups: ride.groups || [],
-            cancelled: ride.cancelled || false,
-            cancellationReason: ride.cancellation_reason || ride.cancellationReason || '',
-            deleted: deletedValue,
-            rescheduledFrom: ride.rescheduled_from || ride.rescheduledFrom || null,
-            publishedGroups: ride.published_groups || false,
-            isPersisted: true
-        };
-        if (ride.deleted === true || deletedValue === true) {
-            console.log('📥 getAllRides: Mapped deleted ride, id:', result.id, 'date:', result.date, 'deleted from DB:', ride.deleted, 'deleted mapped:', result.deleted);
-        }
-        return result;
-    });
-    
-    const mappedDeleted = mapped.filter(r => r.deleted === true);
-    console.log('📥 getAllRides: Mapped rides - total:', mapped.length, 'deleted:', mappedDeleted.length);
-    
+    // Map database structure to app structure (single schema)
+    const mapped = (data || []).map(ride => mapRideDbToApp(ride));
+
     return mapped;
 }
 
@@ -411,135 +492,43 @@ async function getRideById(id) {
         return null;
     }
     
-    // Map database structure to app structure
-    return {
-        id: data.id,
-        date: data.date,
-        time: data.time || '',
-        endTime: data.end_time || data.endTime || '',
-        description: data.description || '',
-        meetLocation: data.meet_location || data.meetLocation || '',
-        locationLat: data.location_lat != null ? data.location_lat : (data.locationLat != null ? data.locationLat : null),
-        locationLng: data.location_lng != null ? data.location_lng : (data.locationLng != null ? data.locationLng : null),
-        goals: data.goals || '',
-        availableCoaches: data.available_coaches || [],
-        availableRiders: data.available_riders || [],
-        assignments: data.assignments || {},
-        groups: data.groups || [],
-        cancelled: data.cancelled || false,
-        cancellationReason: data.cancellation_reason || data.cancellationReason || '',
-        deleted: data.deleted || false,
-        rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
-        publishedGroups: data.published_groups || false,
-        isPersisted: true
-    };
+    return mapRideDbToApp(data);
 }
 
 async function createRide(rideData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
-    
-    // Map app structure to database structure
-    const dbData = {
-        date: rideData.date,
-        time: rideData.time || '',
-        end_time: rideData.endTime || rideData.end_time || '',
-        description: rideData.description || '',
-        meet_location: rideData.meetLocation || rideData.meet_location || '',
-        location_lat: rideData.locationLat != null ? rideData.locationLat : (rideData.location_lat != null ? rideData.location_lat : null),
-        location_lng: rideData.locationLng != null ? rideData.locationLng : (rideData.location_lng != null ? rideData.location_lng : null),
-        goals: rideData.goals || '',
-        available_coaches: rideData.availableCoaches || rideData.available_coaches || [],
-        available_riders: rideData.availableRiders || rideData.available_riders || [],
-        assignments: rideData.assignments || {},
-        groups: rideData.groups || [],
-        cancelled: rideData.cancelled || false,
-        cancellation_reason: rideData.cancellationReason || rideData.cancellation_reason || '',
-        deleted: rideData.deleted || false,
-        rescheduled_from: rideData.rescheduledFrom || rideData.rescheduled_from || null,
-        published_groups: rideData.publishedGroups || rideData.published_groups || false
-    };
-    
+    const dbData = buildRideDbData(rideData);
     const { data, error } = await client
         .from('rides')
         .insert([dbData])
         .select()
         .single();
-    
     if (error) throw error;
-    
-    // Map back to app structure
-    return {
-        id: data.id,
-        date: data.date,
-        time: data.time || '',
-        endTime: data.end_time || data.endTime || '',
-        description: data.description || '',
-        meetLocation: data.meet_location || data.meetLocation || '',
-        locationLat: data.location_lat != null ? data.location_lat : (data.locationLat != null ? data.locationLat : null),
-        locationLng: data.location_lng != null ? data.location_lng : (data.locationLng != null ? data.locationLng : null),
-        goals: data.goals || '',
-        availableCoaches: data.available_coaches || [],
-        availableRiders: data.available_riders || [],
-        assignments: data.assignments || {},
-        groups: data.groups || [],
-        cancelled: data.cancelled || false,
-        cancellationReason: data.cancellation_reason || data.cancellationReason || '',
-        deleted: data.deleted || false,
-        rescheduledFrom: data.rescheduled_from || data.rescheduledFrom || null,
-        publishedGroups: data.published_groups || false,
-        isPersisted: true
-    };
+    return mapRideDbToApp(data);
 }
 
 async function updateRide(id, rideData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
-    
-    // Map app structure to database structure
-    const dbData = {};
-    if (rideData.date !== undefined) dbData.date = rideData.date;
-    if (rideData.time !== undefined) dbData.time = rideData.time || '';
-    if (rideData.endTime !== undefined) dbData.end_time = rideData.endTime || '';
-    if (rideData.end_time !== undefined) dbData.end_time = rideData.end_time || '';
-    if (rideData.description !== undefined) dbData.description = rideData.description || '';
-    if (rideData.meetLocation !== undefined) dbData.meet_location = rideData.meetLocation || '';
-    if (rideData.meet_location !== undefined) dbData.meet_location = rideData.meet_location || '';
-    if (rideData.locationLat !== undefined) dbData.location_lat = rideData.locationLat != null ? rideData.locationLat : null;
-    if (rideData.location_lat !== undefined) dbData.location_lat = rideData.location_lat != null ? rideData.location_lat : null;
-    if (rideData.locationLng !== undefined) dbData.location_lng = rideData.locationLng != null ? rideData.locationLng : null;
-    if (rideData.location_lng !== undefined) dbData.location_lng = rideData.location_lng != null ? rideData.location_lng : null;
-    if (rideData.goals !== undefined) dbData.goals = rideData.goals || '';
-    if (rideData.availableCoaches !== undefined) dbData.available_coaches = rideData.availableCoaches;
-    if (rideData.available_coaches !== undefined) dbData.available_coaches = rideData.available_coaches;
-    if (rideData.available_riders !== undefined) dbData.available_riders = rideData.available_riders;
-    if (rideData.availableRiders !== undefined) dbData.available_riders = rideData.availableRiders;
-    if (rideData.assignments !== undefined) dbData.assignments = rideData.assignments;
-    if (rideData.groups !== undefined) dbData.groups = rideData.groups;
-    if (rideData.cancelled !== undefined) dbData.cancelled = rideData.cancelled;
-    if (rideData.cancellationReason !== undefined) dbData.cancellation_reason = rideData.cancellationReason || '';
-    if (rideData.cancellation_reason !== undefined) dbData.cancellation_reason = rideData.cancellation_reason || '';
-    if (rideData.deleted !== undefined) {
-        dbData.deleted = rideData.deleted === true ? true : (rideData.deleted === false ? false : false); // Explicitly handle true/false
-        console.log('📥 updateRide: Including deleted in dbData, id:', id, 'deleted:', dbData.deleted, 'rideData.deleted:', rideData.deleted);
-    } else {
-        console.log('📥 updateRide: deleted NOT in rideData, id:', id);
-    }
-    if (rideData.rescheduledFrom !== undefined) dbData.rescheduled_from = rideData.rescheduledFrom || null;
-    if (rideData.rescheduled_from !== undefined) dbData.rescheduled_from = rideData.rescheduled_from || null;
-    if (rideData.publishedGroups !== undefined) dbData.published_groups = rideData.publishedGroups;
-    if (rideData.published_groups !== undefined) dbData.published_groups = rideData.published_groups;
-    
+    const dbData = buildRideDbData(rideData);
+    // Debug: confirm attendance payload being sent
+    const ar = dbData.available_riders;
+    const setAr = dbData.settings && dbData.settings.availableRiders;
+    console.log('🟢 updateRide: Payload for ride', id, '| available_riders length:', Array.isArray(ar) ? ar.length : '-', '| settings.availableRiders length:', Array.isArray(setAr) ? setAr.length : '-');
     // Update the record - don't use .single() as RLS might prevent row return
-    console.log('📥 updateRide: Updating ride in database, id:', id, 'dbData keys:', Object.keys(dbData), 'deleted in dbData:', dbData.deleted);
     const { data, error, count } = await client
         .from('rides')
         .update(dbData)
         .eq('id', id)
         .select();
-    
-    console.log('📥 updateRide: Update response - data:', data, 'error:', error, 'count:', count);
-    
+    if (error) {
+        console.error('🔴 updateRide: Supabase error', error.code, error.message);
+    } else {
+        const row = Array.isArray(data) ? data[0] : data;
+        const back = row && row.settings && row.settings.availableRiders;
+        console.log('🟢 updateRide: Supabase OK | rows returned:', Array.isArray(data) ? data.length : (data ? 1 : 0), '| settings.availableRiders after save:', Array.isArray(back) ? back.length : (back != null ? 'present' : 'missing'));
+    }
     if (error) {
         console.error('📥 updateRide: Update error:', error);
         // If it's a PGRST116 (no rows), check if it's because RLS blocked the return
@@ -557,7 +546,8 @@ async function updateRide(id, rideData) {
                 assignments: rideData.assignments || {},
                 groups: rideData.groups || [],
                 cancelled: rideData.cancelled || false,
-                deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Include deleted field
+                deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false),
+                rescheduledFrom: rideData.rescheduledFrom ?? null,
                 publishedGroups: rideData.publishedGroups || false,
                 isPersisted: true
             };
@@ -565,38 +555,12 @@ async function updateRide(id, rideData) {
         throw error;
     }
     
-    // If we got data back, use it; otherwise return the input data
     if (data && data.length > 0) {
-        const updated = data[0];
-        const result = {
-            id: updated.id,
-            date: updated.date,
-            availableCoaches: updated.available_coaches || [],
-            availableRiders: updated.available_riders || [],
-            assignments: updated.assignments || {},
-            groups: updated.groups || [],
-            cancelled: updated.cancelled || false,
-            deleted: updated.deleted === true ? true : (updated.deleted === false ? false : false), // Explicitly handle true/false
-            publishedGroups: updated.published_groups || false,
-            isPersisted: true
-        };
-        console.log('📥 updateRide: Updated ride returned, id:', result.id, 'date:', result.date, 'deleted:', result.deleted, 'deleted from DB:', updated.deleted);
+        const result = mapRideDbToApp(data[0]);
+        if (rideData.groups !== undefined) result.groups = rideData.groups;
         return result;
-    } else {
-        // Update succeeded but no data returned (RLS blocking)
-        // Return the input data as confirmation (include deleted field)
-        return {
-            id: id,
-            date: rideData.date,
-            availableCoaches: rideData.availableCoaches || [],
-            availableRiders: rideData.availableRiders || [],
-            assignments: rideData.assignments || {},
-            groups: rideData.groups || [],
-            cancelled: rideData.cancelled || false,
-            deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Include deleted field
-            isPersisted: true
-        };
     }
+    return { id, ...rideData, isPersisted: true };
 }
 
 async function deleteRide(id) {
@@ -751,7 +715,104 @@ async function setRiderAvailability(rideId, riderId, available) {
     return data;
 }
 
+// ============ COLOR NAMES (for group color names feature) ============
+
+async function getColorNames() {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from('color_names')
+        .select('id, name, sort_order')
+        .order('sort_order', { ascending: true });
+    if (error) {
+        console.error('Error fetching color names:', error);
+        return [];
+    }
+    return (data || []).map(row => ({ id: row.id, name: row.name, sortOrder: row.sort_order }));
+}
+
 // ============ SEASON SETTINGS ============
+// Single schema: add new season setting fields here only.
+/** App key -> DB column name. */
+const SEASON_APP_TO_DB = {
+    id: 'id',
+    startDate: 'start_date',
+    endDate: 'end_date',
+    practices: 'practices',
+    fitnessScale: 'fitness_scale',
+    skillsScale: 'skills_scale',
+    paceScaleOrder: 'pace_scale_order',
+    groupPaceOrder: 'group_pace_order',
+    csvFieldMappings: 'csv_field_mappings',
+    timeEstimationSettings: 'time_estimation_settings',
+    coachRoles: 'coach_roles',
+    riderRoles: 'rider_roles',
+    settings: 'settings'
+};
+const SEASON_DB_TO_APP = Object.fromEntries(Object.entries(SEASON_APP_TO_DB).map(([app, db]) => [db, app]));
+
+const SEASON_DEFAULTS = {
+    fitnessScale: 5,
+    skillsScale: 3,
+    paceScaleOrder: 'fastest_to_slowest',
+    groupPaceOrder: 'fastest_to_slowest',
+    timeEstimationSettings: {
+        fastSpeedBase: 12.5,
+        slowSpeedBase: 10,
+        fastSpeedMin: 5.5,
+        slowSpeedMin: 4,
+        elevationAdjustment: 0.5,
+        lengthAdjustmentFactor: 0.1
+    }
+};
+
+function buildSeasonDbData(settings) {
+    const dbData = { id: settings.id || 'current' };
+    const knownAppKeys = new Set(Object.keys(SEASON_APP_TO_DB));
+    const extra = {};
+    for (const [appKey, dbKey] of Object.entries(SEASON_APP_TO_DB)) {
+        if (appKey === 'id' || appKey === 'settings') continue;
+        const value = settings[appKey] ?? settings[dbKey];
+        if (value === undefined) continue;
+        if (dbKey === 'start_date') dbData.start_date = value ?? null;
+        else if (dbKey === 'end_date') dbData.end_date = value ?? null;
+        else if (dbKey === 'practices') dbData.practices = Array.isArray(value) ? value : [];
+        else if (dbKey === 'coach_roles') dbData.coach_roles = Array.isArray(value) ? value : [];
+        else if (dbKey === 'rider_roles') dbData.rider_roles = Array.isArray(value) ? value : [];
+        else dbData[dbKey] = value;
+    }
+    for (const k of Object.keys(settings || {})) {
+        if (knownAppKeys.has(k)) continue;
+        const v = settings[k];
+        if (v !== undefined) extra[k] = v;
+    }
+    if (Object.keys(extra).length > 0) dbData.settings = extra;
+    return dbData;
+}
+
+function mapSeasonDbToApp(row) {
+    if (!row) return null;
+    const result = { id: row.id };
+    result.startDate = row.start_date ?? null;
+    result.endDate = row.end_date ?? null;
+    result.start_date = row.start_date;
+    result.end_date = row.end_date;
+    result.practices = row.practices || [];
+    result.fitnessScale = row.fitness_scale !== null && row.fitness_scale !== undefined ? row.fitness_scale : SEASON_DEFAULTS.fitnessScale;
+    result.skillsScale = row.skills_scale !== null && row.skills_scale !== undefined ? row.skills_scale : SEASON_DEFAULTS.skillsScale;
+    result.paceScaleOrder = row.pace_scale_order || SEASON_DEFAULTS.paceScaleOrder;
+    result.groupPaceOrder = row.group_pace_order || SEASON_DEFAULTS.groupPaceOrder;
+    result.csvFieldMappings = row.csv_field_mappings || {};
+    result.coachRoles = Array.isArray(row.coach_roles) ? row.coach_roles : [];
+    result.riderRoles = Array.isArray(row.rider_roles) ? row.rider_roles : [];
+    result.timeEstimationSettings = row.time_estimation_settings && typeof row.time_estimation_settings === 'object'
+        ? row.time_estimation_settings
+        : SEASON_DEFAULTS.timeEstimationSettings;
+    if (row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)) {
+        Object.assign(result, row.settings);
+    }
+    return result;
+}
 
 async function getSeasonSettings() {
     const client = getSupabaseClient();
@@ -763,134 +824,28 @@ async function getSeasonSettings() {
         .single();
     
     if (error) {
-        // PGRST116 = no rows returned (expected if no settings exist)
-        // 406 = Not Acceptable (RLS blocking - user doesn't have role, suppress error)
-        // PGRST301 = similar to 406, RLS blocking
         if (error.code === 'PGRST116' || error.code === 'PGRST301' || error.status === 406 || error.statusCode === 406) {
-            // Silently return null - this is expected for non-coach users
             return null;
         }
-        // Only log unexpected errors (but don't spam console)
         if (error.message && !error.message.includes('Row Level Security')) {
             console.error('Error fetching season settings:', error);
         }
         return null;
     }
-    
-    // Map database format to app format
-    const result = {
-        id: data.id,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        practices: data.practices || [],
-        fitnessScale: data.fitness_scale !== null && data.fitness_scale !== undefined ? data.fitness_scale : 5,
-        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3,
-        paceScaleOrder: data.pace_scale_order || 'fastest_to_slowest',
-        groupPaceOrder: data.group_pace_order || 'fastest_to_slowest',
-        coachRoles: Array.isArray(data.coach_roles) ? data.coach_roles : [],
-        riderRoles: Array.isArray(data.rider_roles) ? data.rider_roles : [],
-        csvFieldMappings: data.csv_field_mappings || {}
-    };
-    
-    // Map time_estimation_settings from database to app format
-    if (data.time_estimation_settings) {
-        result.timeEstimationSettings = data.time_estimation_settings;
-    } else {
-        // Provide defaults if not present
-        result.timeEstimationSettings = {
-            fastSpeedBase: 12.5,
-            slowSpeedBase: 10,
-            fastSpeedMin: 5.5,
-            slowSpeedMin: 4,
-            elevationAdjustment: 0.5,
-            lengthAdjustmentFactor: 0.1
-        };
-    }
-    
-    return result;
+    return mapSeasonDbToApp(data);
 }
 
 async function updateSeasonSettings(settings) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
-    
-    // Map app format to database format
-    const dbData = {
-        id: settings.id || 'current',
-        start_date: settings.start_date || settings.startDate || null,
-        end_date: settings.end_date || settings.endDate || null,
-        practices: settings.practices || []
-    };
-    
-    // Map scale settings (fitnessScale -> fitness_scale, skillsScale -> skills_scale)
-    if (settings.fitnessScale !== undefined) {
-        dbData.fitness_scale = settings.fitnessScale;
-    }
-    if (settings.skillsScale !== undefined) {
-        dbData.skills_scale = settings.skillsScale;
-    }
-    if (settings.paceScaleOrder !== undefined) {
-        dbData.pace_scale_order = settings.paceScaleOrder;
-    }
-    if (settings.groupPaceOrder !== undefined) {
-        dbData.group_pace_order = settings.groupPaceOrder;
-    }
-    if (settings.csvFieldMappings !== undefined) {
-        dbData.csv_field_mappings = settings.csvFieldMappings;
-    }
-    
-    // Map timeEstimationSettings to time_estimation_settings
-    if (settings.timeEstimationSettings !== undefined) {
-        dbData.time_estimation_settings = settings.timeEstimationSettings;
-    }
-    
-    // Map coachRoles and riderRoles
-    if (settings.coachRoles !== undefined) {
-        dbData.coach_roles = Array.isArray(settings.coachRoles) ? settings.coachRoles : [];
-    }
-    if (settings.riderRoles !== undefined) {
-        dbData.rider_roles = Array.isArray(settings.riderRoles) ? settings.riderRoles : [];
-    }
-    
+    const dbData = buildSeasonDbData(settings);
     const { data, error } = await client
         .from('season_settings')
         .upsert(dbData, { onConflict: 'id' })
         .select()
         .single();
-    
     if (error) throw error;
-    
-    // Map database format back to app format
-    const result = {
-        id: data.id,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        practices: data.practices || [],
-        fitnessScale: data.fitness_scale !== null && data.fitness_scale !== undefined ? data.fitness_scale : 5,
-        skillsScale: data.skills_scale !== null && data.skills_scale !== undefined ? data.skills_scale : 3,
-        paceScaleOrder: data.pace_scale_order || 'fastest_to_slowest',
-        groupPaceOrder: data.group_pace_order || 'fastest_to_slowest'
-    };
-    
-    // Map time_estimation_settings back to app format
-    if (data.time_estimation_settings) {
-        result.timeEstimationSettings = data.time_estimation_settings;
-    } else {
-        result.timeEstimationSettings = {
-            fastSpeedBase: 12.5,
-            slowSpeedBase: 10,
-            fastSpeedMin: 5.5,
-            slowSpeedMin: 4,
-            elevationAdjustment: 0.5,
-            lengthAdjustmentFactor: 0.1
-        };
-    }
-    
-    return result;
+    return mapSeasonDbToApp(data);
 }
 
 // ============ AUTO ASSIGN SETTINGS ============
@@ -1140,30 +1095,47 @@ async function getAllRaces() {
         return [];
     }
     
-    const { data, error } = await client
-        .from('races')
-        .select('*')
-        .order('race_date', { ascending: true });
-    
-    if (error) {
-        // Log the error with more details
-        console.error('Error fetching races:', error);
-        console.error('Error code:', error.code, 'Error message:', error.message);
-        // Don't throw - return empty array so app can continue
+    try {
+        // Add timeout to prevent long waits (5 seconds max)
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('getAllRaces timeout')), 5000)
+        );
+        
+        const queryPromise = client
+            .from('races')
+            .select('*')
+            .order('race_date', { ascending: true })
+            .then(result => result); // Ensure it's a promise
+        
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        const { data, error } = result;
+        
+        if (error) {
+            // Log the error with more details
+            console.error('Error fetching races:', error);
+            console.error('Error code:', error.code, 'Error message:', error.message);
+            // Don't throw - return empty array so app can continue
+            return [];
+        }
+        
+        // Map database structure to app structure
+        const mappedRaces = (data || []).map(race => ({
+            id: race.id,
+            name: race.name,
+            raceDate: race.race_date,
+            preRideDate: race.pre_ride_date,
+            location: race.location
+        }));
+        
+        return mappedRaces;
+    } catch (err) {
+        if (err.message === 'getAllRaces timeout') {
+            console.warn('getAllRaces: Query timed out after 5 seconds, returning empty array');
+        } else {
+            console.error('getAllRaces: Unexpected error:', err);
+        }
         return [];
     }
-    
-    // Map database structure to app structure
-    const mappedRaces = (data || []).map(race => ({
-        id: race.id,
-        name: race.name,
-        raceDate: race.race_date,
-        preRideDate: race.pre_ride_date,
-        location: race.location
-    }));
-    
-    console.log('getAllRaces: Loaded', mappedRaces.length, 'races from database');
-    return mappedRaces;
 }
 
 async function createRace(raceData) {
@@ -1297,6 +1269,7 @@ async function getAllRoutes() {
         description: route.description,
         stravaEmbedCode: route.strava_embed_code,
         stravaUrl: route.strava_url || null,
+        cachedPreviewDataUrl: route.cached_preview_data_url || null,
         distance: route.distance || null,
         elevation: route.elevation || null,
         estimatedTime: route.estimated_time || null,
@@ -1328,6 +1301,7 @@ async function getRouteById(id) {
         description: data.description,
         stravaEmbedCode: data.strava_embed_code,
         stravaUrl: data.strava_url || null,
+        cachedPreviewDataUrl: data.cached_preview_data_url || null,
         distance: data.distance || null,
         elevation: data.elevation || null,
         estimatedTime: data.estimated_time || null,
@@ -1349,6 +1323,7 @@ async function createRoute(route) {
             description: route.description || null,
             strava_embed_code: route.stravaEmbedCode || null,
             strava_url: route.stravaUrl || null,
+            cached_preview_data_url: route.cachedPreviewDataUrl || null,
             distance: route.distance || null,
             elevation: route.elevation || null,
             estimated_time: route.estimatedTime || null,
@@ -1368,6 +1343,7 @@ async function createRoute(route) {
         description: data.description,
         stravaEmbedCode: data.strava_embed_code,
         stravaUrl: data.strava_url || null,
+        cachedPreviewDataUrl: data.cached_preview_data_url || null,
         distance: data.distance || null,
         elevation: data.elevation || null,
         estimatedTime: data.estimated_time || null,
@@ -1389,6 +1365,7 @@ async function updateRoute(id, route) {
             description: route.description || null,
             strava_embed_code: route.stravaEmbedCode || null,
             strava_url: route.stravaUrl || null,
+            cached_preview_data_url: route.cachedPreviewDataUrl || null,
             distance: route.distance || null,
             elevation: route.elevation || null,
             estimated_time: route.estimatedTime || null,

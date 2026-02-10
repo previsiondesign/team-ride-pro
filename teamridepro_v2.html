@@ -70,6 +70,66 @@
             background: #856404;
             transform: translateX(-50%);
         }
+        
+        /* Practice Planner home - large choice buttons */
+        .practice-planner-home {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 24px 0;
+        }
+        .practice-planner-home-btn {
+            display: block;
+            width: 100%;
+            padding: 24px 28px;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #2196F3;
+            border-radius: 8px;
+            background: #2196F3;
+            color: white;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+        }
+        .practice-planner-home-btn:hover {
+            background: #1976D2;
+            border-color: #1976D2;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+        }
+        .practice-planner-home-btn.primary {
+            border-color: #2196F3;
+            background: #2196F3;
+            color: white;
+        }
+        .practice-planner-home-btn.primary:hover {
+            background: #1976D2;
+            border-color: #1976D2;
+        }
+        .practice-planner-home-btn:disabled,
+        .practice-planner-home-btn.primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .practice-planner-picker-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .practice-planner-back-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .practice-planner-back-btn:hover {
+            background: #f5f5f5;
+        }
     </style>
     <!-- Supabase JS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -140,22 +200,6 @@
         <!-- SEASON CALENDAR TAB -->
         <div id="settings-tab" class="tab-content active">
             <div class="section">
-                <div class="form-row" style="margin-bottom: 16px;">
-                    <div style="flex:1;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <label class="field-label" style="margin:0;">Season Date Range</label>
-                            <button class="btn-small secondary" onclick="applySeasonUpdates('dates')" title="Update calendar after changing dates">Update Dates</button>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button" style="flex: 1; text-align: left; justify-content: flex-start; padding: 8px 12px; background: white; border: 1px solid #ddd; cursor: pointer; color: #333;">
-                                Select Date Range
-                            </button>
-                            <!-- Hidden inputs for backwards compatibility with existing code -->
-                            <input type="date" id="season-start-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
-                            <input type="date" id="season-end-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
-                        </div>
-                    </div>
-                </div>
                 <div class="season-calendar-wrapper" id="season-calendar-wrapper-settings">
                     <div class="season-calendar-header" style="display: none;">
                         <h3 style="margin:0;">Season Calendar</h3>
@@ -163,10 +207,14 @@
                     <div id="season-calendar-settings" class="season-calendar-empty">
                         Set your season dates and practices to see the calendar here.
                     </div>
+                    <!-- Hidden inputs for backwards compatibility with existing code -->
+                    <input type="date" id="season-start-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
+                    <input type="date" id="season-end-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
                 </div>
-                <div style="margin-top: 12px; display: flex; gap: 8px;">
+                <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
                     <button class="btn-small" onclick="openPracticesModal()">Add/Edit Practices</button>
                     <button class="btn-small secondary" onclick="openAddRacesModal()">Add Races</button>
+                    <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button">Season dates. . .</button>
                 </div>
                 <div>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; margin-top: 16px;">
@@ -356,14 +404,56 @@
 
         <!-- RIDES TAB -->
         <div id="rides-tab" class="tab-content">
+            <!-- Practice Planner home: 3 choice buttons -->
+            <div id="practice-planner-home" class="section practice-planner-home">
+                <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">What do you want to do?</h2>
+                <button type="button" class="practice-planner-home-btn primary" id="plan-next-practice-btn" onclick="openPlanNextPractice()">
+                    Plan the Next Practice on <span id="next-practice-date-label">[loading…]</span>
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openPlanFuturePracticePicker()">
+                    Plan another future practice
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openReviewPriorPracticePicker()">
+                    Review a Prior Practice
+                </button>
+            </div>
+
+            <!-- Group method choice: Build new vs Copy from prior -->
+            <div id="practice-group-method-home" class="section practice-planner-home" style="display: none;">
+                <div class="practice-planner-picker-header" style="margin-bottom: 20px;">
+                    <button type="button" class="practice-planner-back-btn" onclick="closeGroupMethodView()">← Back</button>
+                </div>
+                <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How do you want to make these groups?</h2>
+                <button type="button" class="practice-planner-home-btn" onclick="openBuildNewGroups()">
+                    Build new groups
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openCopyGroupsFromPrior()">
+                    Copy groups from a prior practice
+                </button>
+            </div>
+
+            <!-- Calendar picker for future/past practice selection -->
+            <div id="practice-calendar-picker" class="section" style="display: none;">
+                <div class="practice-planner-picker-header">
+                    <button type="button" class="practice-planner-back-btn" onclick="closePracticeCalendarPicker()">← Back</button>
+                    <span id="practice-calendar-picker-title" style="font-weight: 600; font-size: 16px;">Select a practice</span>
+                </div>
+                <div id="practice-calendar-picker-calendar" class="season-calendar-empty">
+                    <!-- Calendar rendered here -->
+                </div>
+            </div>
+
             <div class="section">
                 <div id="practice-navigation" style="display: none; margin-bottom: 16px;"></div>
             </div>
 
             <div id="current-ride" style="display: none;">
                 <div class="section">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
-                        <h2 id="ride-title" style="margin: 0;"></h2>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <button type="button" id="practice-planner-back-btn" class="practice-planner-back-btn" onclick="closePracticePlannerView()" style="flex-shrink: 0;">← Back</button>
+                            <h2 id="ride-title" style="margin: 0;"></h2>
+                        </div>
                         <div id="practice-navigation-buttons" style="display: none; gap: 8px; flex-direction: row;">
                             <button class="btn-small secondary" onclick="navigateToPriorPractice()" id="prior-practice-btn">← Show Prior Practice</button>
                             <button class="btn-small secondary" onclick="navigateToNextPractice()" id="next-practice-btn">Show Next Practice →</button>
@@ -409,6 +499,7 @@
                                 <button class="btn-small" onclick="openCopyGroupsFromPriorPracticeDialog()" style="background: #1976D2; color: white; border-color: #1976D2;">Copy Prior Practice</button>
                                 <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
                                 <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Group Rules</button>
+                                <button id="group-color-names-btn" class="btn-small" onclick="toggleGroupColorNames()" style="background: linear-gradient(90deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6); color: white; border: none; font-weight: 600;">Color Names!</button>
                                 <button id="more-groups-btn" class="btn-small secondary" onclick="tryMoreGroups()" style="display: none;">More/Smaller Groups</button>
                                 <button id="fewer-groups-btn" class="btn-small secondary" onclick="tryFewerGroups()" style="display: none;">Fewer/Larger Groups</button>
                                 <button class="btn-small secondary" onclick="unassignAllCoaches()" style="margin-left: auto;">Unassign all Coaches</button>
@@ -645,6 +736,25 @@
             <div class="modal-footer">
                 <button class="btn-small secondary" onclick="closeRosterRefinement()">Cancel</button>
                 <button class="btn-small" onclick="saveRosterRefinement()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Exceptions Modal (deleted individual practices within a series) -->
+    <div id="view-exceptions-modal" class="modal-overlay" style="z-index: 2000;" aria-hidden="true" onclick="if(event.target === this) closeViewExceptionsDialog()">
+        <div class="modal-content" style="width: 480px; max-width: 95vw; background: #ffffff !important; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <div class="modal-header" style="background-color: #FF9800; color: white;">
+                <h3>View Exceptions</h3>
+                <button class="modal-close" onclick="closeViewExceptionsDialog()" aria-label="Close">&times;</button>
+            </div>
+            <div style="padding: 16px;">
+                <p id="view-exceptions-intro" style="margin: 0 0 12px 0; color: #555; font-size: 14px;">These dates were removed from the calendar. Restore to show them again.</p>
+                <ul id="view-exceptions-list" style="list-style: none; margin: 0; padding: 0;">
+                    <!-- Filled by openViewExceptionsDialog -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeViewExceptionsDialog()">Close</button>
             </div>
         </div>
     </div>
@@ -1411,6 +1521,12 @@
                         <label for="route-description" class="field-label">Notes (Optional)</label>
                         <textarea id="route-description" class="modal-field-input" rows="3" placeholder="Brief description of the route..."></textarea>
                     </div>
+                    <div id="route-cached-preview-section">
+                        <label for="route-cached-preview-file" class="field-label">Cached map preview (optional)</label>
+                        <input type="file" id="route-cached-preview-file" class="modal-field-input" accept="image/*" onchange="onRouteCachedPreviewFileChange(event)">
+                        <small style="display: block; margin-top: 6px; font-size: 11px; color: #888;">Upload a screenshot of the route map to avoid loading live Strava embeds and keep the page fast.</small>
+                        <span id="route-cached-preview-status" style="font-size: 12px; color: #666; margin-top: 4px; display: none;"></span>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1556,7 +1672,7 @@
 
     <!-- Reschedule Practice Modal -->
     <div id="reschedule-practice-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal" style="max-width: 500px;">
+        <div class="modal" style="max-width: 500px;" onclick="event.stopPropagation();">
             <div class="modal-header">
                 <span>Reschedule Practice</span>
                 <button class="btn-small secondary" onclick="closeReschedulePracticeModal()">Close</button>
@@ -1815,6 +1931,9 @@
             route: true
         };
         let seasonSettingsDraft = null;
+        let practicePlannerView = 'home'; // 'home' | 'groupMethod' | 'planner' | 'picker'
+        let practicePickerMode = null;    // 'future' | 'past' when in picker
+        const USE_PRACTICE_PLANNER_LANDING = false; // Set true to show "What do you want to do?" and group-method pages
 
         let isReadOnlyMode = false;
         window.isReadOnlyMode = false;
@@ -1823,6 +1942,7 @@
         let adminEditLockInterval = null;
         let unassignedPaletteVisibility = 'auto'; // 'auto' | 'show' | 'hide'
         let unassignedPaletteHeight = 300;
+        let addRouteCachedPreviewDataUrl = null;
 
         
         // Helper functions to get rating scales
@@ -4587,7 +4707,6 @@
 
         // Override auth state change handler
         async function handleAuthStateChange(isAuthenticated) {
-            console.log('handleAuthStateChange called:', isAuthenticated);
             const authOverlay = document.getElementById('auth-overlay');
             const userMenu = document.getElementById('user-menu');
             const mainContainer = document.querySelector('.container');
@@ -4610,7 +4729,6 @@
             }
 
             if (isAuthenticated || simplifiedLoginInfo) {
-                console.log('Hiding auth overlay, showing main app');
                 
                 // For simplified login, hide auth overlay and show main app
                 if (simplifiedLoginInfo && !isAuthenticated) {
@@ -4651,11 +4769,9 @@
                 if (authOverlay) {
                     authOverlay.classList.add('hidden');
                     authOverlay.style.display = 'none'; // Explicitly hide
-                    console.log('Auth overlay hidden');
                 }
                 if (mainContainer) {
                     mainContainer.style.display = 'block';
-                    console.log('Main container shown');
                 }
                 
                 // Show user menu
@@ -5066,18 +5182,22 @@
             // Restore last active tab
             restoreLastActiveTab();
             
-            // Suppress Mapbox errors from Strava embeds (these are harmless)
-            // These errors come from Strava's internal Mapbox usage and don't affect functionality
+            // Suppress Mapbox/WebGL errors from Strava embeds (these are harmless or caused by context limits)
+            // Strava embeds use Mapbox; too many embeds exhaust WebGL contexts on Safari and cause t.actor.send failures
             const originalConsoleError = console.error;
             console.error = function(...args) {
                 const errorMsg = args.join(' ');
-                // Suppress Mapbox-related errors from Strava embeds
                 if (errorMsg.includes('Image "null"') || 
                     errorMsg.includes('Expected value to be of type number, but found null') ||
                     errorMsg.includes('styleimagemissing') ||
                     errorMsg.includes('map.addImage') ||
-                    errorMsg.includes('sprite')) {
-                    return; // Suppress these errors
+                    errorMsg.includes('sprite') ||
+                    errorMsg.includes('too many active WebGL contexts') ||
+                    errorMsg.includes('t.actor.send') ||
+                    errorMsg.includes('history.replaceState() more than 100 times') ||
+                    (errorMsg.includes('SecurityError') && errorMsg.includes('replaceState')) ||
+                    (errorMsg.includes("undefined is not an object") && errorMsg.includes("i[0]"))) {
+                    return; // Suppress Strava/Mapbox iframe noise
                 }
                 originalConsoleError.apply(console, args);
             };
@@ -5542,7 +5662,6 @@
             if (client && currentUser && typeof updateSeasonSettings === 'function' && typeof updateAutoAssignSettings === 'function') {
                 // Authenticated user - save to Supabase only (no localStorage fallback)
                 try {
-                    console.log('Saving settings to Supabase...');
                     // Check if user has coach-admin role before saving settings
                     const hasPermission = typeof hasRole === 'function' ? hasRole('coach-admin') : false;
                     
@@ -5570,9 +5689,7 @@
                                     lengthAdjustmentFactor: 0.1
                                 }
                             };
-                            console.log('Saving season settings to Supabase:', { fitnessScale: seasonData.fitnessScale, skillsScale: seasonData.skillsScale, paceScaleOrder: seasonData.paceScaleOrder, groupPaceOrder: seasonData.groupPaceOrder });
                             const result = await updateSeasonSettings(seasonData);
-                            console.log('Season settings saved to Supabase, returned:', { fitnessScale: result.fitnessScale, skillsScale: result.skillsScale });
                         } catch (error) {
                             // Handle RLS errors gracefully - user may not have coach-admin role yet
                             if (error.message && error.message.includes('row-level security')) {
@@ -5594,7 +5711,6 @@
                                 parameters: data.autoAssignSettings.parameters
                             };
                             await updateAutoAssignSettings(autoAssignData);
-                            console.log('Auto-assign settings saved to Supabase');
                         } catch (error) {
                             // Handle RLS errors gracefully
                             if (error.message && error.message.includes('row-level security')) {
@@ -5609,7 +5725,6 @@
                     if (typeof upsertAllRaces === 'function' && Array.isArray(data.races) && hasPermission) {
                         try {
                             await upsertAllRaces(data.races);
-                            console.log('Races saved to Supabase');
                         } catch (error) {
                             // Handle RLS errors gracefully
                             if (error.message && error.message.includes('row-level security')) {
@@ -5620,7 +5735,6 @@
                         }
                     }
                     
-                    console.log('Settings saved to Supabase successfully');
                 } catch (error) {
                     // Handle network errors more gracefully
                     const isNetworkError = error?.message?.includes('Failed to fetch') || 
@@ -5789,16 +5903,23 @@
                             .filter(id => Number.isFinite(id) && (!hasCoachRoster || validCoachIds.has(id)));
                         normalizedRide.availableCoaches = Array.from(new Set(normalizedRide.availableCoaches)); // Deduplicate
                     }
+                    if (Array.isArray(normalizedRide.availableRiders)) {
+                        normalizedRide.availableRiders = normalizedRide.availableRiders
+                            .map(id => typeof id === 'string' ? parseInt(id, 10) : id)
+                            .filter(id => Number.isFinite(id));
+                    }
+                    if (!normalizedRide.rescheduledFrom && (normalizedRide.rescheduled_from || normalizedRide.settings?.rescheduledFrom)) {
+                        const val = normalizedRide.rescheduled_from || normalizedRide.settings?.rescheduledFrom;
+                        normalizedRide.rescheduledFrom = typeof val === 'string' ? val.substring(0, 10) : val;
+                    }
                     return normalizedRide;
                 });
-                
                 // Debug: Log deleted rides loaded from Supabase
                 const deletedRides = data.rides.filter(r => r.deleted);
-                console.log('📥 loadDataFromSupabase: Loaded', data.rides.length, 'rides,', deletedRides.length, 'deleted:', deletedRides.map(r => ({ id: r.id, date: r.date, deleted: r.deleted })));
                 
                 // Map season settings (getSeasonSettings already returns app format with fitnessScale and skillsScale)
                 if (seasonSettings) {
-                    console.log('Season settings from Supabase:', { 
+                    if (false) console.log('Season settings from Supabase:', { 
                         fitnessScale: seasonSettings.fitnessScale, 
                         skillsScale: seasonSettings.skillsScale,
                         paceScaleOrder: seasonSettings.paceScaleOrder,
@@ -5820,6 +5941,15 @@
                         groupPaceOrder: seasonSettings.groupPaceOrder || 'fastest_to_slowest',
                         csvFieldMappings: seasonSettings.csvFieldMappings || seasonSettings.csv_field_mappings || {}
                     };
+                    if (seasonSettings.lastOpenedRideId !== undefined && seasonSettings.lastOpenedRideId !== null) {
+                        data.seasonSettings.lastOpenedRideId = seasonSettings.lastOpenedRideId;
+                    }
+                    // Restore last-opened practice so it persists between sessions and across users
+                    const lastId = data.seasonSettings.lastOpenedRideId;
+                    if (lastId != null && data.rides && data.rides.length > 0) {
+                        const ride = data.rides.find(r => String(r.id) === String(lastId) && !r.deleted);
+                        if (ride) data.currentRide = ride.id;
+                    }
                     
                     // Load coachRoles and riderRoles from season settings
                     if (Array.isArray(seasonSettings.coachRoles)) {
@@ -5832,7 +5962,6 @@
                     } else {
                         data.riderRoles = [];
                     }
-                    console.log('Mapped season settings:', { fitnessScale: data.seasonSettings.fitnessScale, skillsScale: data.seasonSettings.skillsScale, paceScaleOrder: data.seasonSettings.paceScaleOrder, groupPaceOrder: data.seasonSettings.groupPaceOrder });
                     
                     // Map timeEstimationSettings from seasonSettings
                     if (seasonSettings.timeEstimationSettings) {
@@ -5885,7 +6014,7 @@
                     data.races = [];
                 }
                 
-                console.log('Data loaded from Supabase:', {
+                if (false) console.log('Data loaded from Supabase:', {
                     riders: data.riders.length,
                     coaches: data.coaches.length,
                     rides: data.rides.length,
@@ -6260,7 +6389,6 @@
                     riderRoles: data.riderRoles || []
                 };
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-                console.log('💾 Saved ride to localStorage (backup):', rideData.id || 'new');
             } catch (error) {
                 console.error('Error saving to localStorage:', error);
                 // Continue even if localStorage save fails - try Supabase
@@ -6271,49 +6399,28 @@
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             
             if (client && currentUser && typeof updateRide !== 'undefined' && typeof createRide !== 'undefined') {
-                // Authenticated user - save to Supabase
+                // Authenticated user - save to Supabase (single schema in database.js)
+                // Pass app-shaped rideData so updateRide/buildRideDbData build payload once (availableRiders etc. preserved)
                 try {
-                    // Map app structure to database structure
-                    const dbData = {
-                        date: rideData.date,
-                        time: rideData.time || '',
-                        end_time: rideData.endTime || rideData.end_time || '',
-                        description: rideData.description || '',
-                        meet_location: rideData.meetLocation || rideData.meet_location || '',
-                        location_lat: rideData.locationLat != null ? rideData.locationLat : (rideData.location_lat != null ? rideData.location_lat : null),
-                        location_lng: rideData.locationLng != null ? rideData.locationLng : (rideData.location_lng != null ? rideData.location_lng : null),
-                        goals: rideData.goals || '',
-                        available_coaches: rideData.availableCoaches || rideData.available_coaches || [],
-                        available_riders: rideData.availableRiders || rideData.available_riders || [],
-                        assignments: rideData.assignments || {},
-                        groups: rideData.groups || [],
-                        cancelled: rideData.cancelled || false,
-                        cancellation_reason: rideData.cancellationReason || rideData.cancellation_reason || '',
-                        deleted: rideData.deleted === true ? true : (rideData.deleted === false ? false : false), // Explicitly handle true/false/undefined
-                        rescheduled_from: rideData.rescheduledFrom || rideData.rescheduled_from || null,
-                        published_groups: rideData.publishedGroups || rideData.published_groups || false
-                    };
-                    
-                    console.log('💾 saveRideToDB: Saving ride to Supabase, id:', rideData.id, 'date:', rideData.date, 'deleted in rideData:', rideData.deleted, 'deleted in dbData:', dbData.deleted);
-                    
                     const shouldCreateInDb = rideData.isPersisted !== true;
                     if (!shouldCreateInDb && rideData.id && data.rides.find(r => r.id === rideData.id)) {
                         // Update existing
-                        console.log('💾 saveRideToDB: Updating existing ride, id:', rideData.id, 'deleted:', dbData.deleted);
-                        const updated = await updateRide(rideData.id, dbData);
-                        console.log('💾 saveRideToDB: Updated ride returned, deleted:', updated?.deleted, 'full updated:', updated);
+                        console.log('🟢 saveRideToDB: Sending to Supabase', { rideId: rideData.id, availableRidersLength: Array.isArray(rideData.availableRiders) ? rideData.availableRiders.length : 0, availableRidersFirst5: (rideData.availableRiders || []).slice(0, 5) });
+                        const updated = await updateRide(rideData.id, rideData);
                         // Update local data (merge with existing fields)
                         // Use availableCoaches from rideData (not from updated) to avoid corrupted timestamp IDs
                         const index = data.rides.findIndex(r => r.id === rideData.id);
                         if (index !== -1) {
                             const merged = { ...data.rides[index], ...rideData, ...updated };
-                            // Override availableCoaches and availableRiders with the correct value from rideData
-                            // This prevents database responses from overwriting locally-set values
+                            // Override with rideData so DB response never overwrites what we just saved (e.g. group colorName)
                             if (rideData.availableCoaches !== undefined) {
                                 merged.availableCoaches = rideData.availableCoaches;
                             }
                             if (rideData.availableRiders !== undefined) {
                                 merged.availableRiders = rideData.availableRiders;
+                            }
+                            if (rideData.groups !== undefined) {
+                                merged.groups = rideData.groups;
                             }
                             // Preserve location fields from rideData
                             if (rideData.meetLocation !== undefined) {
@@ -6324,6 +6431,10 @@
                             }
                             if (rideData.locationLng !== undefined) {
                                 merged.locationLng = rideData.locationLng;
+                            }
+                            // Preserve rescheduledFrom - DB may return null if column missing or RLS omits it
+                            if (rideData.rescheduledFrom !== undefined) {
+                                merged.rescheduledFrom = rideData.rescheduledFrom;
                             }
                             data.rides[index] = merged;
                             // Update localStorage again with merged data
@@ -6346,10 +6457,8 @@
                             }
                         }
                     } else {
-                        // Create new
-                        console.log('💾 saveRideToDB: Creating new ride, date:', rideData.date, 'deleted:', dbData.deleted);
-                        const created = await createRide(dbData);
-                        console.log('💾 saveRideToDB: Created ride returned, id:', created?.id, 'deleted:', created?.deleted);
+                        // Create new (pass app-shaped rideData; createRide builds payload)
+                        const created = await createRide(rideData);
                         // Merge with local extra fields and add to local data
                         const newRide = { ...rideData, ...created };
                         const index = data.rides.findIndex(r => r.id === rideData.id || (!rideData.id && r.date === rideData.date && r.time === rideData.time));
@@ -6426,6 +6535,7 @@
             updateMobileHeaderVisibility(tabName);
             
             if (tabName === 'rides') {
+                practicePlannerView = USE_PRACTICE_PLANNER_LANDING ? 'home' : 'planner';
                 renderRides();
             } else if (tabName === 'settings') {
                 loadSeasonSettings();
@@ -9166,14 +9276,15 @@
             list.innerHTML = htmlContent;
         }
 
-        // Ride management
-        async function createRide() {
+        // Ride management - named createRideFromForm to avoid shadowing database.js createRide(rideData)
+        async function createRideFromForm() {
             if (!canCreateEditRides()) {
                 alert('You do not have permission to create rides');
                 return;
             }
 
-            const date = document.getElementById('ride-date').value;
+            const rideDateEl = document.getElementById('ride-date');
+            const date = rideDateEl ? rideDateEl.value : '';
             
             if (!date) {
                 alert('Please select a date');
@@ -9189,9 +9300,9 @@
             };
 
             try {
-                const newRide = saveRideToDB(rideData);
-                data.currentRide = newRide.id;
-                document.getElementById('ride-date').value = '';
+                const newRide = await saveRideToDB(rideData);
+                if (newRide) data.currentRide = newRide.id;
+                if (rideDateEl) rideDateEl.value = '';
                 renderRides();
                 loadCurrentRide();
             } catch (error) {
@@ -9731,7 +9842,6 @@
                 console.log('🔵 isRideRefined: Found refined practice for date', ride.date);
                 return true;
             }
-            console.log('🔵 isRideRefined: No refined practice found for date', ride.date);
             return false;
         }
         
@@ -9998,99 +10108,87 @@
                     return dateA - dateB;
                 });
             
-            // Set the next practice as current, or keep existing if it's still valid (today or future)
-            if (upcomingRides.length > 0) {
+            // When landing is disabled, auto-select next practice (old behavior: go straight to planner)
+            if (!USE_PRACTICE_PLANNER_LANDING && upcomingRides.length > 0) {
                 const nextRide = upcomingRides[0];
                 const currentRide = data.currentRide ? data.rides.find(r => r.id === data.currentRide) : null;
-                let shouldUpdate = false;
-                
-                if (!data.currentRide) {
-                    // No current ride selected, use the next one
-                    shouldUpdate = true;
-                } else if (!currentRide) {
-                    // Current ride ID doesn't exist anymore, use the next one
-                    shouldUpdate = true;
-                } else {
-                    // If current ride is cancelled, keep it (user may want to reinstate it)
-                    if (currentRide.cancelled) {
-                        shouldUpdate = false;
-                    } else {
-                        const currentRideDate = parseISODate(currentRide.date);
-                        if (currentRideDate) {
-                            currentRideDate.setHours(0, 0, 0, 0);
-                            const currentDateKey = formatDateToISO(currentRideDate);
-                            
-                            // Update if current ride is in the past
-                            if (currentRideDate < today) {
-                                shouldUpdate = true;
-                            }
-                            // Update if current ride doesn't match a valid calendar date (when calendar has valid dates)
-                            else if (validDates.size > 0 && !validDates.has(currentDateKey)) {
-                                shouldUpdate = true;
-                            }
-                            // If current ride is today or future and matches calendar, keep it (preserves manual selection)
-                        } else {
-                            // Invalid date, use the next one
-                            shouldUpdate = true;
-                        }
-                    }
-                }
-                
-                if (shouldUpdate) {
-                    data.currentRide = nextRide.id;
-                    saveData();
-                }
-            } else {
-                // No upcoming non-cancelled practices for auto-selection
-                // Check if we should show a cancelled practice
-                const currentRide = data.currentRide ? data.rides.find(r => r.id === data.currentRide) : null;
-                if (currentRide && currentRide.cancelled && !currentRide.deleted) {
-                    // Keep cancelled practice visible so user can reinstate it
+                let shouldSetNext = !data.currentRide || !currentRide;
+                if (!shouldSetNext && currentRide && !currentRide.deleted) {
                     const currentRideDate = parseISODate(currentRide.date);
                     if (currentRideDate) {
                         currentRideDate.setHours(0, 0, 0, 0);
-                        if (currentRideDate < today) {
-                            // Cancelled practice is in the past, clear it
-                            data.currentRide = null;
-                            saveData();
-                            const currentRideElement = document.getElementById('current-ride');
-                            if (currentRideElement) {
-                                currentRideElement.style.display = 'none';
-                            }
-                        }
-                        // Otherwise keep it visible (today or future)
+                        if (currentRideDate < today) shouldSetNext = true;
+                        else if (validDates.size > 0 && !validDates.has(formatDateToISO(currentRideDate))) shouldSetNext = true;
+                    } else shouldSetNext = true;
+                }
+                if (shouldSetNext) {
+                    data.currentRide = nextRide.id;
+                    saveData();
+                }
+                practicePlannerView = 'planner';
+            }
+            
+            // Update "Plan the Next Practice on [DATE]" button label and disabled state
+            const nextRide = upcomingRides.length > 0 ? upcomingRides[0] : null;
+            const nextDateLabel = document.getElementById('next-practice-date-label');
+            const planNextBtn = document.getElementById('plan-next-practice-btn');
+            if (nextDateLabel) {
+                if (nextRide) {
+                    const rideDate = parseISODate(nextRide.date);
+                    nextDateLabel.textContent = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : nextRide.date;
+                } else {
+                    nextDateLabel.textContent = 'No upcoming practice';
+                }
+            }
+            if (planNextBtn) {
+                planNextBtn.disabled = !nextRide;
+            }
+            
+            // Show/hide home, groupMethod, picker, planner based on practicePlannerView
+            const homeEl = document.getElementById('practice-planner-home');
+            const groupMethodEl = document.getElementById('practice-group-method-home');
+            const pickerEl = document.getElementById('practice-calendar-picker');
+            const plannerEl = document.getElementById('current-ride');
+            
+            if (practicePlannerView === 'home') {
+                if (homeEl) homeEl.style.display = '';
+                if (groupMethodEl) groupMethodEl.style.display = 'none';
+                if (pickerEl) pickerEl.style.display = 'none';
+                if (plannerEl) plannerEl.style.display = 'none';
+            } else if (practicePlannerView === 'groupMethod') {
+                if (homeEl) homeEl.style.display = 'none';
+                if (groupMethodEl) groupMethodEl.style.display = '';
+                if (pickerEl) pickerEl.style.display = 'none';
+                if (plannerEl) plannerEl.style.display = 'none';
+            } else if (practicePlannerView === 'picker') {
+                if (homeEl) homeEl.style.display = 'none';
+                if (groupMethodEl) groupMethodEl.style.display = 'none';
+                if (pickerEl) pickerEl.style.display = '';
+                if (plannerEl) plannerEl.style.display = 'none';
+            } else if (practicePlannerView === 'planner') {
+                if (homeEl) homeEl.style.display = 'none';
+                if (groupMethodEl) groupMethodEl.style.display = 'none';
+                if (pickerEl) pickerEl.style.display = 'none';
+                if (data.currentRide) {
+                    const currentRide = data.rides.find(r => r.id === data.currentRide);
+                    if (currentRide && !currentRide.deleted) {
+                        if (plannerEl) plannerEl.style.display = 'block';
+                        loadCurrentRide();
+                    } else {
+                        data.currentRide = null;
+                        if (plannerEl) plannerEl.style.display = 'none';
+                        practicePlannerView = 'home';
+                        if (homeEl) homeEl.style.display = '';
                     }
-                } else if (!currentRide || (currentRide && currentRide.deleted)) {
-                    // Hide the current ride section if it's deleted or doesn't exist
-                    data.currentRide = null;
-                    const currentRideElement = document.getElementById('current-ride');
-                    if (currentRideElement) {
-                        currentRideElement.style.display = 'none';
-                    }
+                } else {
+                    practicePlannerView = 'home';
+                    if (homeEl) homeEl.style.display = '';
+                    if (plannerEl) plannerEl.style.display = 'none';
                 }
             }
             
-            if (data.currentRide) {
-                const currentRide = data.rides.find(r => r.id === data.currentRide);
-                // Only load if ride exists and is not deleted
-                if (currentRide && !currentRide.deleted) {
-                    loadCurrentRide();
-                } else {
-                    // Ride was deleted, clear selection
-                    data.currentRide = null;
-                    saveData();
-                    const currentRideElement = document.getElementById('current-ride');
-                    if (currentRideElement) {
-                        currentRideElement.style.display = 'none';
-                    }
-                    const navSection = document.getElementById('practice-navigation');
-                    if (navSection) navSection.style.display = 'none';
-                }
-            } else {
-                // Hide navigation if no current ride
-                const navSection = document.getElementById('practice-navigation');
-                if (navSection) navSection.style.display = 'none';
-            }
+            const navSection = document.getElementById('practice-navigation');
+            if (navSection) navSection.style.display = practicePlannerView === 'planner' ? '' : 'none';
         }
 
         function updateHeaderEditSeasonButton() {
@@ -10101,7 +10199,141 @@
         function loadRide(rideId) {
             data.currentRide = rideId;
             saveData();
+            practicePlannerView = 'planner';
             loadCurrentRide();
+        }
+
+        async function persistLastOpenedRide() {
+            if (data.currentRide == null) return;
+            if (!data.seasonSettings) data.seasonSettings = {};
+            data.seasonSettings.lastOpenedRideId = data.currentRide;
+            if (typeof updateSeasonSettings === 'function') {
+                try {
+                    await updateSeasonSettings(data.seasonSettings);
+                } catch (e) {
+                    console.warn('Could not persist last-opened practice:', e);
+                }
+            }
+        }
+
+        function openPlanNextPractice() {
+            const validDates = getValidPracticeDates();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const upcomingRides = (data.rides || [])
+                .filter(ride => {
+                    if (!ride.date || ride.deleted || ride.cancelled) return false;
+                    const rideDate = parseISODate(ride.date);
+                    if (!rideDate) return false;
+                    rideDate.setHours(0, 0, 0, 0);
+                    if (rideDate < today) return false;
+                    const dateKey = formatDateToISO(rideDate);
+                    if (ride.rescheduledFrom) return true;
+                    if (validDates.size > 0 && !validDates.has(dateKey)) return false;
+                    return true;
+                })
+                .sort((a, b) => {
+                    const dateA = parseISODate(a.date);
+                    const dateB = parseISODate(b.date);
+                    return (dateA || 0) - (dateB || 0);
+                });
+            if (upcomingRides.length === 0) {
+                alert('No upcoming practices found. Add practices in Team Dashboard first.');
+                return;
+            }
+            data.currentRide = upcomingRides[0].id;
+            saveData();
+            practicePlannerView = 'groupMethod';
+            renderRides();
+        }
+
+        function closeGroupMethodView() {
+            practicePlannerView = 'home';
+            data.currentRide = null;
+            saveData();
+            renderRides();
+        }
+
+        function openBuildNewGroups() {
+            practicePlannerView = 'planner';
+            renderRides();
+        }
+
+        function openCopyGroupsFromPrior() {
+            practicePlannerView = 'planner';
+            renderRides();
+        }
+
+        function openPlanFuturePracticePicker() {
+            practicePlannerView = 'picker';
+            practicePickerMode = 'future';
+            const titleEl = document.getElementById('practice-calendar-picker-title');
+            if (titleEl) titleEl.textContent = 'Select a future practice to plan';
+            renderPracticePickerCalendar();
+            renderRides();
+        }
+
+        function openReviewPriorPracticePicker() {
+            practicePlannerView = 'picker';
+            practicePickerMode = 'past';
+            const titleEl = document.getElementById('practice-calendar-picker-title');
+            if (titleEl) titleEl.textContent = 'Select a past practice to review';
+            renderPracticePickerCalendar();
+            renderRides();
+        }
+
+        function closePracticeCalendarPicker() {
+            practicePlannerView = 'home';
+            practicePickerMode = null;
+            renderRides();
+        }
+
+        function closePracticePlannerView() {
+            practicePlannerView = 'home';
+            data.currentRide = null;
+            saveData();
+            renderRides();
+        }
+
+        async function handlePracticeDateClickForPicker(dateKey) {
+            if (!practicePickerMode || !dateKey) return;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dateObj = parseISODate(dateKey);
+            if (!dateObj) return;
+            dateObj.setHours(0, 0, 0, 0);
+            if (practicePickerMode === 'future' && dateObj < today) return;
+            if (practicePickerMode === 'past' && dateObj >= today) return;
+            let ride = (data.rides || []).find(r => r.date && String(r.date).substring(0, 10) === dateKey && !r.deleted);
+            if (!ride) {
+                ride = {
+                    id: generateId(),
+                    date: dateKey,
+                    time: '',
+                    endTime: '',
+                    meetLocation: '',
+                    availableCoaches: [],
+                    availableRiders: [],
+                    assignments: {},
+                    groups: [],
+                    goals: '',
+                    cancelled: false
+                };
+                data.rides.push(ride);
+                ensureRidesFromSchedule();
+                if (typeof saveRideToDB === 'function') await saveRideToDB(ride);
+            }
+            data.currentRide = ride.id;
+            saveData();
+            practicePlannerView = 'planner';
+            practicePickerMode = null;
+            renderRides();
+        }
+
+        function renderPracticePickerCalendar() {
+            const container = document.getElementById('practice-calendar-picker-calendar');
+            if (!container) return;
+            renderSeasonCalendarToContainer(container, { pickerMode: practicePickerMode });
         }
 
         function loadSeasonSettings() {
@@ -11471,7 +11703,11 @@
             }
 
             buttons.forEach(btn => {
-                btn.textContent = buttonText;
+                if (btn.id === 'season-date-range-button') {
+                    btn.textContent = 'Season dates. . .';
+                } else {
+                    btn.textContent = buttonText;
+                }
             });
         }
 
@@ -11670,6 +11906,7 @@
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid #e0e0e0; margin-top: 12px;">
                                 <button type="button" class="btn-small secondary" onclick="openRosterRefinement(${practice.id})" style="white-space: nowrap;">Refine Roster...</button>
+                                ${(function(){ const ex = getPracticeExceptions(practice); return ex.length > 0 ? `<button type="button" class="btn-small secondary" onclick="openViewExceptionsDialog(${practice.id})" style="white-space: nowrap;">View Exceptions (${ex.length})</button>` : ''; })()}
                                 <div style="flex: 1;"></div>
                                 <div id="practice-actions-${practice.id}" style="display: none; gap: 8px;">
                                     <button class="btn-small" onclick="savePracticeChanges(${practice.id})">Save Changes</button>
@@ -17190,6 +17427,7 @@
 
         // Roster Refinement Functions
         let currentPracticeIdForRoster = null;
+        let currentPracticeIdForExceptions = null;
         let rosterFilterSettings = {
             filterType: '',
             grade: { '9th': true, '10th': true, '11th': true, '12th': true },
@@ -17307,6 +17545,160 @@
             const weekday = rideDate.getDay();
             const recurringPractice = practices.find(p => p.dayOfWeek === weekday);
             return recurringPractice || null;
+        }
+
+        /** Returns list of { dateKey, rideId, dateLabel } for dates in this practice that have a deleted ride (exceptions). */
+        function getPracticeExceptions(practice) {
+            if (!practice || !data.rides || !data.rides.length) return [];
+            const settings = seasonSettingsDraft || data.seasonSettings || {};
+            const startStr = settings.startDate || settings.start_date || '';
+            const endStr = settings.endDate || settings.end_date || '';
+            const startDate = parseISODate(startStr);
+            const endDate = parseISODate(endStr);
+            const exceptions = [];
+            const rides = data.rides;
+
+            function formatRescheduledSuffix(dateKey) {
+                const rescheduledRide = rides.find(r => !r.deleted && r.rescheduledFrom && String(r.rescheduledFrom).substring(0, 10) === dateKey);
+                if (!rescheduledRide || !rescheduledRide.date) return '';
+                const newDate = parseISODate(rescheduledRide.date);
+                if (!newDate) return '';
+                const m = newDate.getMonth() + 1, d = newDate.getDate(), y = String(newDate.getFullYear()).slice(-2);
+                return ` (rescheduled for ${m}/${d}/${y})`;
+            }
+
+            if (practice.specificDate != null && practice.specificDate !== undefined && practice.specificDate !== '') {
+                const dateKey = (typeof practice.specificDate === 'string' && practice.specificDate.length >= 10)
+                    ? practice.specificDate.substring(0, 10) : formatDateToISO(parseISODate(practice.specificDate));
+                const deletedRide = rides.find(r => r.date && String(r.date).substring(0, 10) === dateKey && r.deleted);
+                const rescheduledRide = rides.find(r => !r.deleted && r.rescheduledFrom && String(r.rescheduledFrom).substring(0, 10) === dateKey);
+                // Prefer rescheduled entry (one Restore per date): move ride back; only show deleted if no reschedule
+                if (rescheduledRide) {
+                    const d = parseISODate(dateKey);
+                    let dateLabel = d ? (d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })) : dateKey;
+                    dateLabel += formatRescheduledSuffix(dateKey);
+                    exceptions.push({ dateKey, rideId: rescheduledRide.id, dateLabel, isRescheduled: true });
+                } else if (deletedRide) {
+                    const d = parseISODate(dateKey);
+                    let dateLabel = d ? (d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })) : dateKey;
+                    dateLabel += formatRescheduledSuffix(dateKey);
+                    exceptions.push({ dateKey, rideId: deletedRide.id, dateLabel, isRescheduled: false });
+                }
+                return exceptions;
+            }
+
+            const dayOfWeek = Number(practice.dayOfWeek);
+            if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6 || !startDate || !endDate) return exceptions;
+
+            const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            const seasonEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+            const seenDateKeys = new Set();
+            while (cursor <= seasonEnd) {
+                if (cursor.getDay() === dayOfWeek) {
+                    const dateKey = formatDateToISO(cursor);
+                    const deletedRide = rides.find(r => r.date && String(r.date).substring(0, 10) === dateKey && r.deleted);
+                    const rescheduledRide = rides.find(r => !r.deleted && r.rescheduledFrom && String(r.rescheduledFrom).substring(0, 10) === dateKey);
+                    // Prefer rescheduled entry (one Restore per date)
+                    if (rescheduledRide && !seenDateKeys.has(dateKey)) {
+                        seenDateKeys.add(dateKey);
+                        let dateLabel = cursor.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                        dateLabel += formatRescheduledSuffix(dateKey);
+                        exceptions.push({ dateKey, rideId: rescheduledRide.id, dateLabel, isRescheduled: true });
+                    } else if (deletedRide && !seenDateKeys.has(dateKey)) {
+                        seenDateKeys.add(dateKey);
+                        let dateLabel = cursor.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                        dateLabel += formatRescheduledSuffix(dateKey);
+                        exceptions.push({ dateKey, rideId: deletedRide.id, dateLabel, isRescheduled: false });
+                    }
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            return exceptions;
+        }
+
+        function openViewExceptionsDialog(practiceId) {
+            ensureSeasonDraft();
+            const practices = (seasonSettingsDraft && seasonSettingsDraft.practices) ? seasonSettingsDraft.practices : (data.seasonSettings && data.seasonSettings.practices) || [];
+            const practice = practices.find(p => String(p.id) === String(practiceId));
+            if (!practice) return;
+            const exceptions = getPracticeExceptions(practice);
+            const listEl = document.getElementById('view-exceptions-list');
+            const introEl = document.getElementById('view-exceptions-intro');
+            if (!listEl) return;
+            if (exceptions.length === 0) {
+                listEl.innerHTML = '<li style="padding: 8px 0; color: #666;">No deleted exceptions for this practice.</li>';
+                if (introEl) introEl.textContent = 'There are no removed dates for this practice.';
+            } else {
+                if (introEl) introEl.textContent = 'These dates were removed from the calendar. Click Restore to show them again.';
+                listEl.innerHTML = exceptions.map(ex => `
+                    <li style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
+                        <span>${escapeHtml(ex.dateLabel)}</span>
+                        <button type="button" class="btn-small" onclick="restoreExceptionRide(${JSON.stringify(String(ex.rideId)).replace(/"/g, '&quot;')})">Restore</button>
+                    </li>
+                `).join('');
+            }
+            currentPracticeIdForExceptions = practiceId;
+            const modal = document.getElementById('view-exceptions-modal');
+            if (modal) {
+                modal.classList.add('visible');
+                modal.setAttribute('aria-hidden', 'false');
+            }
+        }
+
+        function closeViewExceptionsDialog() {
+            const modal = document.getElementById('view-exceptions-modal');
+            if (modal) {
+                modal.classList.remove('visible');
+                modal.setAttribute('aria-hidden', 'true');
+            }
+            currentPracticeIdForExceptions = null;
+        }
+
+        async function restoreExceptionRide(rideId) {
+            const ride = (data.rides || []).find(r => String(r.id) === String(rideId));
+            if (!ride) {
+                alert('Could not find that practice. Try refreshing the page and opening View Exceptions again.');
+                return;
+            }
+            if (ride.rescheduledFrom && !ride.deleted) {
+                const originalDateKey = String(ride.rescheduledFrom).substring(0, 10);
+                ride.date = originalDateKey;
+                ride.rescheduledFrom = null;
+                const tombstones = (data.rides || []).filter(r => r.date && String(r.date).substring(0, 10) === originalDateKey && r.deleted);
+                for (const t of tombstones) {
+                    data.rides.splice(data.rides.indexOf(t), 1);
+                    if (typeof deleteRide === 'function') {
+                        try { await deleteRide(t.id); } catch (e) { console.error('Error deleting tombstone:', e); }
+                    }
+                }
+                await saveRideToDB(ride);
+            } else {
+                ride.deleted = false;
+                await saveRideToDB(ride);
+            }
+            renderAllCalendars();
+            if (currentPracticeIdForExceptions != null) {
+                const practices = (seasonSettingsDraft && seasonSettingsDraft.practices) ? seasonSettingsDraft.practices : (data.seasonSettings && data.seasonSettings.practices) || [];
+                const practice = practices.find(p => String(p.id) === String(currentPracticeIdForExceptions));
+                const exceptions = practice ? getPracticeExceptions(practice) : [];
+                const listEl = document.getElementById('view-exceptions-list');
+                const introEl = document.getElementById('view-exceptions-intro');
+                if (listEl) {
+                    if (exceptions.length === 0) {
+                        if (introEl) introEl.textContent = 'All exceptions for this practice have been restored.';
+                        listEl.innerHTML = '<li style="padding: 8px 0; color: #4CAF50;">No remaining deleted dates.</li>';
+                        setTimeout(closeViewExceptionsDialog, 1200);
+                    } else {
+                        if (introEl) introEl.textContent = 'These dates were removed from the calendar. Click Restore to show them again.';
+                        listEl.innerHTML = exceptions.map(ex => `
+                            <li style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
+                                <span>${escapeHtml(ex.dateLabel)}</span>
+                                <button type="button" class="btn-small" onclick="restoreExceptionRide(${JSON.stringify(String(ex.rideId)).replace(/"/g, '&quot;')})">Restore</button>
+                            </li>
+                        `).join('');
+                    }
+                }
+            }
         }
 
         function openRosterRefinement(practiceId) {
@@ -17705,7 +18097,6 @@
         // Debounce calendar rendering to prevent multiple rapid updates
         let calendarRenderTimeout = null;
         function renderAllCalendars() {
-            console.log('📅 CALENDAR: renderAllCalendars() called');
             // Clear any pending render
             if (calendarRenderTimeout) {
                 clearTimeout(calendarRenderTimeout);
@@ -17713,7 +18104,6 @@
             
             // Debounce the render to ensure all updates are complete
             calendarRenderTimeout = setTimeout(() => {
-                console.log('📅 CALENDAR: Executing calendar render (debounced)');
                 // Force complete rebuild by clearing both containers first
                 const ridesContainer = document.getElementById('season-calendar');
                 const settingsContainer = document.getElementById('season-calendar-settings');
@@ -17737,8 +18127,9 @@
             }, 50); // Small delay to batch multiple updates
         }
 
-        function renderSeasonCalendarToContainer(container) {
+        function renderSeasonCalendarToContainer(container, options) {
             if (!container) return;
+            const pickerMode = options && options.pickerMode; // 'future' | 'past'
 
             // Clear container first to ensure fresh render (prevents old practice days from persisting)
             container.innerHTML = '';
@@ -17753,11 +18144,9 @@
                 settings = { ...baseSettings, ...seasonSettingsDraft };
                 // Explicitly use draft practices to ensure we see the latest changes
                 practices = Array.isArray(seasonSettingsDraft.practices) ? seasonSettingsDraft.practices : [];
-                console.log('📅 CALENDAR: Using draft practices, count:', practices.length, 'practices:', practices.map(p => ({ id: p.id, dayOfWeek: p.dayOfWeek, specificDate: p.specificDate })));
             } else {
                 settings = baseSettings;
                 practices = Array.isArray(settings.practices) ? settings.practices : [];
-                console.log('📅 CALENDAR: Using saved practices, count:', practices.length);
             }
             const startDate = parseISODate(settings.startDate);
             const endDate = parseISODate(settings.endDate);
@@ -17785,31 +18174,72 @@
                     });
                     if (matchedPractices.length > 0) {
                         practiceDateMap.set(dateKey, matchedPractices.map(practice => practice.time || ''));
-                        console.log('📅 CALENDAR: Added practice for', dateKey, 'weekday', weekday, 'from practices:', matchedPractices.map(p => p.id));
                     }
                     cursor.setDate(cursor.getDate() + 1);
                 }
                 
-                // Add single practices (with specificDate) to the calendar
+                // Add single practices (with specificDate) to the calendar. Treat as single if specificDate is set (ignore dayOfWeek).
+                const singlePracticeDates = [];
                 practices.forEach(practice => {
-                    if (practice.specificDate && !practice.dayOfWeek) {
+                    if (practice.specificDate != null && practice.specificDate !== undefined && practice.specificDate !== '') {
                         const practiceDate = parseISODate(practice.specificDate);
-                        if (practiceDate && practiceDate >= seasonStart && practiceDate <= seasonEnd) {
+                        if (practiceDate) {
+                            singlePracticeDates.push(practiceDate);
                             const dateKey = formatDateToISO(practiceDate);
-                            const existingTimes = practiceDateMap.get(dateKey) || [];
-                            const practiceTime = practice.time || '';
-                            if (practiceTime && !existingTimes.includes(practiceTime)) {
-                                existingTimes.push(practiceTime);
-                            }
-                            if (existingTimes.length > 0) {
-                                practiceDateMap.set(dateKey, existingTimes);
-            } else {
-                                // Even if no time, mark as practice date
-                                practiceDateMap.set(dateKey, []);
+                            const inRange = practiceDate >= seasonStart && practiceDate <= seasonEnd;
+                            if (inRange) {
+                                const existingTimes = practiceDateMap.get(dateKey) || [];
+                                const practiceTime = practice.time || '';
+                                if (practiceTime && !existingTimes.includes(practiceTime)) {
+                                    existingTimes.push(practiceTime);
+                                }
+                                practiceDateMap.set(dateKey, existingTimes.length > 0 ? existingTimes : []);
                             }
                         }
                     }
                 });
+                // Expand season range to include single practices outside it so they show on the calendar
+                if (singlePracticeDates.length > 0) {
+                    const minSingle = new Date(Math.min(...singlePracticeDates.map(d => d.getTime())));
+                    const maxSingle = new Date(Math.max(...singlePracticeDates.map(d => d.getTime())));
+                    if (minSingle < seasonStart) seasonStart = new Date(minSingle.getFullYear(), minSingle.getMonth(), minSingle.getDate());
+                    if (maxSingle > seasonEnd) seasonEnd = new Date(maxSingle.getFullYear(), maxSingle.getMonth(), maxSingle.getDate());
+                    singlePracticeDates.forEach(practiceDate => {
+                        const dateKey = formatDateToISO(practiceDate);
+                        if (!practiceDateMap.has(dateKey)) {
+                            const practice = practices.find(p => {
+                                const d = parseISODate(p.specificDate);
+                                return d && formatDateToISO(d) === dateKey;
+                            });
+                            const practiceTime = practice && practice.time ? practice.time : '';
+                            practiceDateMap.set(dateKey, practiceTime ? [practiceTime] : []);
+                        }
+                    });
+                }
+
+                // Add rescheduled dates: any non-deleted ride date that isn't in practiceDateMap (e.g. rescheduled to a different weekday)
+                if (Array.isArray(data.rides) && seasonStart && seasonEnd) {
+                    const rescheduledDates = [];
+                    data.rides.forEach(ride => {
+                        if (!ride.date || ride.deleted) return;
+                        const rideDate = parseISODate(ride.date);
+                        if (!rideDate) return;
+                        const dateKey = formatDateToISO(rideDate);
+                        if (!practiceDateMap.has(dateKey)) {
+                            const rideDateNorm = new Date(rideDate.getFullYear(), rideDate.getMonth(), rideDate.getDate());
+                            rescheduledDates.push(rideDateNorm);
+                            const times = ride.time ? [ride.time] : [];
+                            practiceDateMap.set(dateKey, times);
+                        }
+                    });
+                    // Expand season range to include rescheduled dates outside it
+                    if (rescheduledDates.length > 0) {
+                        const minResched = new Date(Math.min(...rescheduledDates.map(d => d.getTime())));
+                        const maxResched = new Date(Math.max(...rescheduledDates.map(d => d.getTime())));
+                        if (minResched < seasonStart) seasonStart = new Date(minResched.getFullYear(), minResched.getMonth(), minResched.getDate());
+                        if (maxResched > seasonEnd) seasonEnd = new Date(maxResched.getFullYear(), maxResched.getMonth(), maxResched.getDate());
+                    }
+                }
             } else {
                 // No season dates set - try to determine range from practices or rides
                 const practiceDates = [];
@@ -17865,9 +18295,9 @@
                         cursor.setDate(cursor.getDate() + 1);
                     }
                     
-                    // Add single practices
+                    // Add single practices (treat as single if specificDate is set)
                     practices.forEach(practice => {
-                        if (practice.specificDate && !practice.dayOfWeek) {
+                        if (practice.specificDate != null && practice.specificDate !== undefined && practice.specificDate !== '') {
                             const practiceDate = parseISODate(practice.specificDate);
                             if (practiceDate && practiceDate >= seasonStart && practiceDate <= seasonEnd) {
                                 const dateKey = formatDateToISO(practiceDate);
@@ -17876,11 +18306,7 @@
                                 if (practiceTime && !existingTimes.includes(practiceTime)) {
                                     existingTimes.push(practiceTime);
                                 }
-                                if (existingTimes.length > 0) {
-                                    practiceDateMap.set(dateKey, existingTimes);
-                                } else {
-                                    practiceDateMap.set(dateKey, []);
-                                }
+                                practiceDateMap.set(dateKey, existingTimes.length > 0 ? existingTimes : []);
                             }
                         }
                     });
@@ -17950,9 +18376,13 @@
             }
             
             // IMPORTANT: Only use data.rides for tracking cancelled/deleted/rescheduled states
-            // Do NOT add new practice dates from data.rides - only use practices array
-            // This prevents old ride dates from showing when practice schedules change
+            // Set window.DEBUG_RESCHEDULE = true in console to debug reschedule flow
+            const debugReschedule = typeof window !== 'undefined' && window.DEBUG_RESCHEDULE === true;
             if (Array.isArray(data.rides)) {
+                const ridesWithRescheduled = data.rides.filter(r => r.rescheduledFrom && !r.deleted);
+                if (debugReschedule) {
+                    console.log('🔄 RESCHEDULE DEBUG: Total rides:', data.rides.length, 'with rescheduledFrom:', ridesWithRescheduled.length, ridesWithRescheduled.length > 0 ? ridesWithRescheduled.map(r => ({ id: r.id, date: r.date, rescheduledFrom: r.rescheduledFrom })) : '(none - rescheduledFrom may be lost after save)');
+                }
                 data.rides.forEach(ride => {
                     if (!ride.date) return;
                     const rideDate = parseISODate(ride.date);
@@ -17962,12 +18392,14 @@
                     if (ride.deleted) {
                         const dateKey = formatDateToISO(rideDate);
                         deletedDates.add(dateKey);
-                        console.log('🗑️ CALENDAR: Found deleted ride for date:', dateKey, 'ride id:', ride.id);
                         return;
                     }
                     
                     // Track rescheduled practices: hide original date, show new date
                     if (ride.rescheduledFrom) {
+                        if (debugReschedule) {
+                            console.log('🔄 RESCHEDULE DEBUG: Processing ride', ride.id, 'date:', ride.date, 'rescheduledFrom:', ride.rescheduledFrom);
+                        }
                         const originalDate = parseISODate(ride.rescheduledFrom);
                         if (originalDate) {
                             const originalKey = formatDateToISO(originalDate);
@@ -17976,6 +18408,22 @@
                             rescheduledOriginalDates.add(originalKey);
                             // Treat original date as deleted so it does not render
                             deletedDates.add(originalKey);
+                            // Rescheduled rides MUST show on new date - add to practiceDateMap if not already there
+                            if (!practiceDateMap.has(newKey)) {
+                                const times = ride.time ? [ride.time] : [];
+                                practiceDateMap.set(newKey, times);
+                                if (debugReschedule) {
+                                    console.log('🔄 RESCHEDULE DEBUG: Added new date to calendar:', newKey);
+                                }
+                                // Expand season range if rescheduled date falls outside
+                                const rideDateNorm = new Date(rideDate.getFullYear(), rideDate.getMonth(), rideDate.getDate());
+                                if (rideDateNorm < seasonStart) seasonStart = new Date(rideDateNorm.getTime());
+                                if (rideDateNorm > seasonEnd) seasonEnd = new Date(rideDateNorm.getTime());
+                            } else if (debugReschedule) {
+                                console.log('🔄 RESCHEDULE DEBUG: New date', newKey, 'already in practiceDateMap');
+                            }
+                        } else if (debugReschedule) {
+                            console.log('🔄 RESCHEDULE DEBUG: Failed to parse rescheduledFrom:', ride.rescheduledFrom);
                         }
                     }
                     
@@ -17988,9 +18436,7 @@
                             cancelledDates.add(dateKey);
                         }
                         
-                        // ONLY add to practiceDateMap if the date is NOT already there from practices array
-                        // This ensures we don't add old ride dates that no longer match current practices
-                        // Only update times if the date already exists in practiceDateMap (from practices array)
+                        // Update times for existing dates; rescheduled new dates already added above
                         if (practiceDateMap.has(dateKey)) {
                         const existingTimes = practiceDateMap.get(dateKey) || [];
                         const rideTime = ride.time || '';
@@ -17999,24 +18445,30 @@
                             practiceDateMap.set(dateKey, existingTimes);
                         }
                         }
-                        // Do NOT add new dates from rides - only use practices array for new dates
                     }
                 });
             }
             
-            console.log('📅 CALENDAR: Before removing deleted dates - practiceDateMap size:', practiceDateMap.size, 'deletedDates size:', deletedDates.size, 'deleted dates:', Array.from(deletedDates).slice(0, 10));
             
-            // Remove deleted dates from practice map so they don't render
+            // Single-practice dates must stay on calendar even if a deleted ride exists (e.g. old ride was deleted; single practice is the source of truth)
+            const singlePracticeDates = new Set();
+            practices.forEach(p => {
+                if (p.specificDate != null && p.specificDate !== undefined && p.specificDate !== '') {
+                    const d = parseISODate(p.specificDate);
+                    if (d) singlePracticeDates.add(formatDateToISO(d));
+                }
+            });
+            // Remove deleted dates from practice map, but never remove a date that is a single practice's specificDate
             deletedDates.forEach(dateKey => {
+                if (singlePracticeDates.has(dateKey)) {
+                    return;
+                }
                 const wasRemoved = practiceDateMap.delete(dateKey);
                 if (wasRemoved) {
-                    console.log('🗑️ CALENDAR: Removed deleted date from practiceDateMap:', dateKey);
                 } else {
-                    console.log('⚠️ CALENDAR: Deleted date not found in practiceDateMap (might not be in schedule):', dateKey);
                 }
             });
             
-            console.log('📅 CALENDAR: Final practiceDateMap size:', practiceDateMap.size, 'dates:', Array.from(practiceDateMap.keys()).slice(0, 10));
 
             if (practiceDateMap.size === 0) {
                 container.className = 'season-calendar-empty';
@@ -18026,8 +18478,24 @@
                 return;
             }
 
-            const firstMonth = new Date(seasonStart.getFullYear(), seasonStart.getMonth(), 1);
-            const lastMonth = new Date(seasonEnd.getFullYear(), seasonEnd.getMonth(), 1);
+            let firstMonth = new Date(seasonStart.getFullYear(), seasonStart.getMonth(), 1);
+            let lastMonth = new Date(seasonEnd.getFullYear(), seasonEnd.getMonth(), 1);
+
+            // In picker mode, hide months that don't apply
+            if (pickerMode) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (pickerMode === 'future') {
+                    // Only show from current month onward
+                    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                    if (monthStart > firstMonth) firstMonth = new Date(monthStart.getTime());
+                } else if (pickerMode === 'past') {
+                    // Only show through end of last month
+                    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+                    const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
+                    if (lastMonthStart < lastMonth) lastMonth = new Date(lastMonthStart.getTime());
+                }
+            }
 
             const months = [];
             const monthCursor = new Date(firstMonth.getTime());
@@ -18037,6 +18505,14 @@
                     month: monthCursor.getMonth()
                 });
                 monthCursor.setMonth(monthCursor.getMonth() + 1);
+            }
+
+            if (months.length === 0) {
+                container.className = 'season-calendar-empty';
+                container.innerHTML = pickerMode === 'future'
+                    ? 'No future practices in the season.'
+                    : 'No past practices in the season.';
+                return;
             }
 
             const weekdaysHeader = DAYS_OF_WEEK.map(day => day.slice(0, 3));
@@ -18095,7 +18571,31 @@
                     }
                     const ariaAttr = ` aria-label="${escapeHtml(ariaLabel)}"`;
 
-                    if (isPracticeOrRescheduled || isRace) {
+                    // In picker mode: hide races, only show relevant practice dates with simplified styling
+                    const isPickerRelevant = pickerMode && (isPractice || isRescheduledNew) && !isRescheduledOriginal && !deletedDates.has(dateKey);
+                    const isPickerSelectable = isPickerRelevant && (() => {
+                        currentDate.setHours(0, 0, 0, 0);
+                        const isPast = currentDate < today;
+                        return (pickerMode === 'future' && !isPast) || (pickerMode === 'past' && isPast);
+                    })();
+
+                    if (pickerMode) {
+                        // Picker: races and non-matching dates = plain cells; matching practices = selectable
+                        if (isRace || !isPickerSelectable) {
+                            cellsHtml += `
+                                <div class="month-cell"${ariaAttr}>
+                                    <div class="day-number">${day}</div>
+                                </div>
+                            `;
+                        } else {
+                            const titleText = isPractice && practiceTimes.length > 0 ? `Practice at ${practiceTimes.map(formatTimeForDisplay).join(', ')}` : 'Practice';
+                            cellsHtml += `
+                                <div class="month-cell practice" title="${escapeHtml(titleText)}" aria-label="Practice on ${currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}" data-date="${dateKey}" onclick="handlePracticeDateClickForPicker('${dateKey}')" style="background: #2196F3; color: white; cursor: pointer;">
+                                    <div class="day-number">${day}</div>
+                                </div>
+                            `;
+                        }
+                    } else if (isPracticeOrRescheduled || isRace) {
                         const isCancelled = cancelledDates.has(dateKey);
                         const isDeleted = deletedDates.has(dateKey);
                         
@@ -18137,19 +18637,22 @@
                             cellClass += ' rescheduled';
                             cellStyle = 'background: #B3E5FC;';
                         } else if (isNext) {
-                            // Orange for next practice
+                            // Orange circle only (styled in CSS)
                             cellClass += ' next';
-                            cellStyle = 'background: #FF9800; color: white;';
+                            cellStyle = '';
                         } else if (isPast) {
-                            // Grey for past practices
+                            // Grey circle only (styled in CSS)
                             cellClass += ' past';
-                            cellStyle = 'background: #E0E0E0; color: #757575;';
+                            cellStyle = '';
                         }
                         
                         const slashStyle = isCancelled ? '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;"><div style="width: 100%; height: 2px; background: #f44336; transform: rotate(-45deg);"></div></div>' : '';
                         
+                        const onClick = `handlePracticeDateClick('${dateKey}', event)`;
+                        const onclickAttr = ` onclick="${onClick}"`;
+                        
                         cellsHtml += `
-                            <div class="month-cell ${cellClass}"${titleAttr}${ariaAttr} data-date="${dateKey}" onclick="handlePracticeDateClick('${dateKey}', event)" style="${cellStyle}">
+                            <div class="month-cell ${cellClass}"${titleAttr}${ariaAttr} data-date="${dateKey}"${onclickAttr} style="${cellStyle}">
                                 <div class="day-number">${day}</div>
                                 ${slashStyle}
                             </div>
@@ -18216,11 +18719,12 @@
             // Store the date for context menu actions
             contextMenuDate = dateString;
             
-            // Determine if this date is cancelled
             const cancelledRide = (data.rides || []).find(r => r.date === dateString && !r.deleted && r.cancelled);
+            const rescheduledRide = (data.rides || []).find(r => r.date === dateString && !r.deleted && r.rescheduledFrom);
             const restoreBtn = document.getElementById('restore-practice-btn');
             if (restoreBtn) {
-                restoreBtn.style.display = cancelledRide ? 'block' : 'none';
+                restoreBtn.style.display = (cancelledRide || rescheduledRide) ? 'block' : 'none';
+                restoreBtn.textContent = rescheduledRide ? 'Move back to original date' : 'Restore Practice';
             }
             
             // Position menu to the right of the clicked calendar cell
@@ -18629,6 +19133,16 @@
         function reschedulePracticeFromContext() {
             if (!contextMenuDate) return;
             
+            // Remove the context menu's document click listener so it doesn't intercept clicks inside the modal (e.g. Reschedule button)
+            if (contextMenuCloseHandler) {
+                document.removeEventListener('click', contextMenuCloseHandler);
+                contextMenuCloseHandler = null;
+            }
+            if (contextMenuTimeout) {
+                clearTimeout(contextMenuTimeout);
+                contextMenuTimeout = null;
+            }
+            
             // Find existing ride to get current values (include cancelled), or the original if rescheduled
             let ride = data.rides.find(r => r.date === contextMenuDate && !r.deleted);
             if (!ride) {
@@ -18644,9 +19158,17 @@
                 document.getElementById('reschedule-end-time').value = ride ? (ride.endTime || defaults.endTime || '') : (defaults.endTime || '');
                 document.getElementById('reschedule-location').value = ride ? (ride.meetLocation || defaults.meetLocation || '') : (defaults.meetLocation || '');
                 
-                modal.classList.add('visible');
-                modal.setAttribute('aria-hidden', 'false');
+                // Blur the context menu button so focus is not retained on a hidden element; avoids aria-hidden + focused descendant
+                document.activeElement && document.activeElement.blur();
                 document.getElementById('practice-context-menu').style.display = 'none';
+                // Set aria-hidden false before showing so the modal is not hidden when focus moves into it
+                modal.setAttribute('aria-hidden', 'false');
+                modal.classList.add('visible');
+                // Move focus into the modal so it's not on an aria-hidden ancestor
+                requestAnimationFrame(() => {
+                    const firstFocusable = modal.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
+                    if (firstFocusable) firstFocusable.focus();
+                });
             }
         }
 
@@ -18740,9 +19262,8 @@
                 ride.deleted = true;
                 ride = existingRideOnNewDate;
             } else {
-                // Store original date for tracking
+                // Store original date for tracking (simpler approach: no tombstone; calendar hides original via rescheduledFrom)
                 ride.rescheduledFrom = originalDateKey;
-                
                 // Update to new date and values
                 ride.date = newDateKey;
                 if (newTime) ride.time = newTime;
@@ -18781,15 +19302,27 @@
 
         async function restoreCancelledPractice() {
             if (!contextMenuDate) return;
-            const ride = data.rides.find(r => r.date === contextMenuDate && !r.deleted && r.cancelled);
+            const ride = data.rides.find(r => r.date === contextMenuDate && !r.deleted && (r.cancelled || r.rescheduledFrom));
             if (ride) {
-                ride.cancelled = false;
-                ride.cancellationReason = '';
-                
-                // Save ride restoration to Supabase
-                await saveRideToDB(ride);
-                
+                if (ride.rescheduledFrom) {
+                    const originalDateKey = String(ride.rescheduledFrom).substring(0, 10);
+                    ride.date = originalDateKey;
+                    ride.rescheduledFrom = null;
+                    const tombstones = (data.rides || []).filter(r => r.date && String(r.date).substring(0, 10) === originalDateKey && r.deleted);
+                    for (const t of tombstones) {
+                        data.rides.splice(data.rides.indexOf(t), 1);
+                        if (typeof deleteRide === 'function') {
+                            try { await deleteRide(t.id); } catch (e) { console.error('Error deleting tombstone:', e); }
+                        }
+                    }
+                    await saveRideToDB(ride);
+                } else {
+                    ride.cancelled = false;
+                    ride.cancellationReason = '';
+                    await saveRideToDB(ride);
+                }
                 renderAllCalendars();
+                renderRides();
             }
             document.getElementById('practice-context-menu').style.display = 'none';
         }
@@ -18988,6 +19521,12 @@
             const rideDate = parseISODate(ride.date);
             const dateDisplay = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ride.date;
             document.getElementById('ride-title').textContent = `Practice: ${dateDisplay}`;
+            
+            const backBtn = document.getElementById('practice-planner-back-btn');
+            if (backBtn) backBtn.style.display = USE_PRACTICE_PLANNER_LANDING ? '' : 'none';
+            
+            // Persist last-opened practice so it reopens for this session and other users
+            persistLastOpenedRide();
             
             // Sync meetLocation from practice settings if not set on ride
             // This ensures location is shown even if ride was created before location was set
@@ -19372,8 +19911,11 @@
                 // Get available coaches and riders
                 // IMPORTANT: Only use coaches explicitly marked as available in attendance list
                 // Filter out coaches with "N/A" level as they are not eligible
+                if (!Array.isArray(ride.availableCoaches)) {
+                    ride.availableCoaches = [];
+                }
                 debugLines.push('=== DEBUG: COACH ATTENDANCE CHECK ===');
-                debugLines.push(`ride.availableCoaches array length: ${ride.availableCoaches ? ride.availableCoaches.length : 0}`);
+                debugLines.push(`ride.availableCoaches array length: ${ride.availableCoaches.length}`);
                 debugLines.push(`ride.availableCoaches IDs: ${ride.availableCoaches ? ride.availableCoaches.join(', ') : 'none'}`);
                 debugLines.push('');
 
@@ -19659,14 +20201,18 @@
                 // Track if we showed the dialog (only when insufficient coaches)
                 let showedDialogForInsufficientCoaches = false;
                 
-                // If targetNumGroups is not specified, only prompt if we can't make compliant groups
+                // If targetNumGroups is not specified, decide group count (or use existing)
                 if (targetNumGroups === null) {
-                    if (canMakeCompliantGroups) {
+                    if (ride.groups && ride.groups.length > 0) {
+                        // Re-running autofill with existing groups: use current group count so we redistribute and assign coaches (no dialog)
+                        targetNumGroups = ride.groups.length;
+                        debugLines.push(`Using existing group count: ${targetNumGroups} (autofill will redistribute into current groups and assign coaches)`);
+                    } else if (canMakeCompliantGroups) {
                         // Can make compliant groups - use normal group count
                         targetNumGroups = normalGroupCount;
                         debugLines.push(`Using normal group count: ${targetNumGroups} (compliant groups can be made)`);
                     } else {
-                        // Cannot make compliant groups - show dialog for user to select number of groups
+                        // No existing groups and cannot make compliant groups - show dialog for user to select number of groups
                         showedDialogForInsufficientCoaches = true;
                         debugLines.push(`Cannot make compliant groups - showing dialog for user to select number of groups`);
                         
@@ -20163,13 +20709,13 @@
                 debugLines.push('');
 
                 // Step 4B: Assign Leaders (optional - groups can exist without leaders)
-                // Skip coach assignment if we had insufficient coaches (they'll remain in unassigned palette)
-                if (hadInsufficientCoaches) {
-                    debugLines.push('Step 4B: Skipping coach assignment (insufficient coaches - coaches will remain in unassigned area)');
+                // Only skip coach assignment when there are no coaches to assign (so we always place attending coaches into groups when possible)
+                if (coachesForAssignment.length === 0) {
+                    debugLines.push('Step 4B: No coaches to assign (coaches list is empty).');
                     debugLines.push('');
-                    debugLines.push('Step 4C: Skipped (insufficient coaches)');
+                    debugLines.push('Step 4C: Skipped (no coaches).');
                     debugLines.push('');
-                    debugLines.push('Step 4D: Skipped (insufficient coaches)');
+                    debugLines.push('Step 4D: Skipped (no coaches).');
                     debugLines.push('');
                 } else {
                     debugLines.push('Step 4B: Assigning ride leaders:');
@@ -20762,6 +21308,69 @@
             renderPracticeAttendanceLists();
         }
 
+        function rideUsesGroupColorNames(ride) {
+            return ride && Array.isArray(ride.groups) && ride.groups.length > 0 && ride.groups.every(g => g.colorName);
+        }
+
+        function getSortedGroupsForPrintOrPublish(ride) {
+            const useColorNames = rideUsesGroupColorNames(ride);
+            return [...ride.groups].sort((a, b) => {
+                if (useColorNames && a.colorName && b.colorName) return (a.colorName || '').localeCompare(b.colorName || '');
+                const numA = parseInt((a.label || '').replace(/\D/g, '')) || 0;
+                const numB = parseInt((b.label || '').replace(/\D/g, '')) || 0;
+                return numA - numB;
+            });
+        }
+
+        function getGroupDisplayTitleForPrint(group, index, useColorNames) {
+            if (useColorNames && group.colorName) return `${group.colorName} Group`;
+            return group.label || `Group ${index + 1}`;
+        }
+
+        /** Returns { displayName, isLeaderChoice, route, stravaUrl } for use in print/export. Handles "Ride Leader's Choice". */
+        function getRouteDisplayForGroup(group) {
+            if (group.routeId === 'leader-choice' || group.routeId === '') {
+                return { displayName: "Ride Leader's Choice", isLeaderChoice: true, route: null, stravaUrl: null };
+            }
+            const route = getRouteById(group.routeId);
+            if (!route) return { displayName: '', isLeaderChoice: false, route: null, stravaUrl: null };
+            let stravaUrl = route.stravaUrl || null;
+            if (!stravaUrl && route.stravaEmbedCode) {
+                const urlMatch = route.stravaEmbedCode.match(/https?:\/\/[^\s"'<>]+strava\.com[^\s"'<>]*/i);
+                if (urlMatch) stravaUrl = urlMatch[0];
+            }
+            return { displayName: route.name || 'Unnamed Route', isLeaderChoice: false, route, stravaUrl };
+        }
+
+        async function toggleGroupColorNames() {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride || !Array.isArray(ride.groups) || ride.groups.length === 0) {
+                alert('Please add at least one group first.');
+                return;
+            }
+            if (rideUsesGroupColorNames(ride)) {
+                ride.groups.forEach(g => { delete g.colorName; });
+            } else {
+                const names = typeof getColorNames === 'function' ? await getColorNames() : [];
+                const colorNames = (names.length > 0 ? names.map(n => n.name) : []).filter(Boolean);
+                if (colorNames.length < ride.groups.length) {
+                    alert('Not enough color names in the list. Add more in Supabase (color_names table) or use fewer groups.');
+                    return;
+                }
+                const shuffled = colorNames.slice().sort(() => Math.random() - 0.5);
+                ride.groups.forEach((g, i) => { g.colorName = shuffled[i]; });
+            }
+            await saveRideToDB(ride);
+            renderAssignments(ride);
+            updateGroupColorNamesButton(ride);
+        }
+
+        function updateGroupColorNamesButton(ride) {
+            const btn = document.getElementById('group-color-names-btn');
+            if (!btn) return;
+            btn.textContent = rideUsesGroupColorNames(ride) ? 'Remove Color Names' : 'Color Names!';
+        }
+
         function clearAssignments() {
             if (!confirm('Clear all assignments? This will delete all groups and remove all rider and coach assignments.')) return;
             
@@ -20791,7 +21400,10 @@
             updateDebugOutput();
         }
 
-        function showGroupValidationErrorModal(title, errors) {
+        function showGroupValidationErrorModal(title, errors, options) {
+            options = options || {};
+            const syncAndRetry = options.syncAndRetry || null;
+
             // Create or get modal element
             let modal = document.getElementById('group-validation-error-modal');
             if (!modal) {
@@ -20815,12 +21427,29 @@
                             <ul id="group-validation-error-list" style="margin: 0; padding-left: 20px; color: #333;">
                             </ul>
                         </div>
-                        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                        <div class="modal-footer" id="group-validation-error-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
                             <button class="btn-small" onclick="closeGroupValidationErrorModal()">OK</button>
                         </div>
                     </div>
                 `;
                 document.body.appendChild(modal);
+            }
+
+            // Show or hide "Mark as not attending and continue" button
+            const footer = modal.querySelector('#group-validation-error-footer');
+            const existingSyncBtn = modal.querySelector('#group-validation-sync-btn');
+            if (existingSyncBtn) existingSyncBtn.remove();
+            if (syncAndRetry && footer) {
+                const syncBtn = document.createElement('button');
+                syncBtn.id = 'group-validation-sync-btn';
+                syncBtn.className = 'btn-small';
+                syncBtn.style.background = '#1976d2';
+                syncBtn.style.color = '#fff';
+                syncBtn.textContent = 'Mark unassigned as not attending and continue';
+                syncBtn.onclick = function() {
+                    runSyncAttendanceAndRetry(syncAndRetry);
+                };
+                footer.insertBefore(syncBtn, footer.firstChild);
             }
             
             // Update title
@@ -20874,6 +21503,33 @@
                 modal.setAttribute('aria-hidden', 'true');
             }
         }
+
+        function runSyncAttendanceAndRetry(syncAndRetry) {
+            const { ride, assignedCoachIds, assignedRiderIds, action } = syncAndRetry;
+            const normalizeId = (id) => { const n = typeof id === 'string' ? parseInt(id, 10) : id; return Number.isFinite(n) ? n : id; };
+            const isAssignedCoach = (id) => { const n = normalizeId(id); return assignedCoachIds.has(n) || assignedCoachIds.has(String(n)); };
+            const isAssignedRider = (id) => { const n = normalizeId(id); return assignedRiderIds.has(n) || assignedRiderIds.has(String(n)); };
+
+            ride.availableCoaches = (ride.availableCoaches || []).filter(isAssignedCoach);
+            ride.availableRiders = (ride.availableRiders || []).filter(isAssignedRider);
+
+            saveRideToDB(ride);
+            if (typeof updateRide === 'function') {
+                try {
+                    const dbData = { available_coaches: ride.availableCoaches, available_riders: ride.availableRiders };
+                    updateRide(ride.id, dbData);
+                } catch (e) {
+                    console.warn('Supabase update after sync attendance:', e);
+                }
+            }
+
+            closeGroupValidationErrorModal();
+            if (action === 'publish') {
+                publishGroupAssignments();
+            } else if (action === 'print') {
+                printGroupAssignments();
+            }
+        }
         
         async function publishGroupAssignments() {
             const ride = data.rides.find(r => r.id === data.currentRide);
@@ -20887,34 +21543,70 @@
                 return;
             }
 
-            // Validate before publishing - check for unassigned attendees first
+            // Validate before publishing - check for unassigned attendees first (only those marked attending)
             const allErrors = [];
             
-            // Check for unassigned riders and coaches
+            const normalizeId = (id) => { const n = typeof id === 'string' ? parseInt(id, 10) : id; return Number.isFinite(n) ? n : id; };
+            const addAssigned = (set, id) => { const n = normalizeId(id); if (Number.isFinite(n)) { set.add(n); set.add(String(n)); } };
+            
             const assignedRiderIds = new Set();
             const assignedCoachIds = new Set();
             ride.groups.forEach(group => {
                 if (Array.isArray(group.riders)) {
-                    group.riders.forEach(riderId => assignedRiderIds.add(riderId));
+                    group.riders.forEach(riderId => addAssigned(assignedRiderIds, riderId));
                 }
-                if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
-                if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
-                if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
-                if (Array.isArray(group.coaches.extraRoam)) {
-                    group.coaches.extraRoam.forEach(id => {
-                        if (id) assignedCoachIds.add(id);
-                    });
+                if (group.coaches) {
+                    if (group.coaches.leader) addAssigned(assignedCoachIds, group.coaches.leader);
+                    if (group.coaches.sweep) addAssigned(assignedCoachIds, group.coaches.sweep);
+                    if (group.coaches.roam) addAssigned(assignedCoachIds, group.coaches.roam);
+                    if (Array.isArray(group.coaches.extraRoam)) {
+                        group.coaches.extraRoam.forEach(id => { if (id != null && id !== '') addAssigned(assignedCoachIds, id); });
+                    }
                 }
             });
             
-            // For refined practices, use filtered riders
+            // Only coaches in ride.availableCoaches (marked attending) need to be assigned; absent coaches are ignored
             const isRefined = isRideRefined(ride);
             const ridersToCheck = isRefined ? getFilteredRiderIdsForRide(ride) : (ride.availableRiders || []);
-            const availableRiderIds = new Set(ridersToCheck.map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
-            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            const availableRiderIds = new Set(ridersToCheck.map(id => normalizeId(id)).filter(id => Number.isFinite(id)));
+            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => normalizeId(id)).filter(id => Number.isFinite(id)));
             
-            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id));
-            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id));
+            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id) && !assignedRiderIds.has(String(id)));
+            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id) && !assignedCoachIds.has(String(id)));
+            
+            // Debug: why are coaches considered unassigned? (helps trace type/source mismatch)
+            console.log('🔴 PUBLISH VALIDATION (unassigned coaches)', {
+                rideId: ride.id,
+                rideDate: ride.date,
+                rideAvailableCoachesRaw: ride.availableCoaches,
+                rideAvailableCoachesLength: (ride.availableCoaches || []).length,
+                rideAvailableCoachesTypes: (ride.availableCoaches || []).slice(0, 5).map(id => ({ id, type: typeof id })),
+                groupsCoachIds: ride.groups.map((g, i) => ({
+                    groupIndex: i,
+                    label: g.label,
+                    leader: g.coaches?.leader,
+                    leaderType: g.coaches?.leader != null ? typeof g.coaches.leader : null,
+                    sweep: g.coaches?.sweep,
+                    roam: g.coaches?.roam,
+                    extraRoam: g.coaches?.extraRoam
+                })),
+                assignedCoachIdsSize: assignedCoachIds.size,
+                assignedCoachIdsSample: Array.from(assignedCoachIds).slice(0, 20),
+                availableCoachIdsSize: availableCoachIds.size,
+                availableCoachIdsSample: Array.from(availableCoachIds).slice(0, 20),
+                unassignedCoachesCount: unassignedCoaches.length,
+                unassignedCoachIds: unassignedCoaches
+            });
+            unassignedCoaches.forEach(id => {
+                const coach = getCoachById(id);
+                console.log('🔴 Unassigned coach detail', {
+                    id,
+                    idType: typeof id,
+                    hasNumber: assignedCoachIds.has(id),
+                    hasString: assignedCoachIds.has(String(id)),
+                    name: coach ? coach.name : null
+                });
+            });
             
             if (unassignedRiders.length > 0) {
                 const riderNames = unassignedRiders.map(id => {
@@ -20960,7 +21652,8 @@
             allErrors.push(...groupErrors);
             
             if (allErrors.length > 0) {
-                showGroupValidationErrorModal('Cannot publish group assignments', allErrors);
+                const syncAndRetry = (groupErrors.length === 0) ? { ride, assignedCoachIds, assignedRiderIds, action: 'publish' } : null;
+                showGroupValidationErrorModal('Cannot publish group assignments', allErrors, syncAndRetry ? { syncAndRetry } : {});
                 return;
             }
 
@@ -21108,34 +21801,55 @@
                 return;
             }
 
-            // Validate before printing - check for unassigned attendees first
+            // Validate before printing - check for unassigned attendees first (only those marked attending)
             const allErrors = [];
             
-            // Check for unassigned riders and coaches
+            const normalizeId = (id) => { const n = typeof id === 'string' ? parseInt(id, 10) : id; return Number.isFinite(n) ? n : id; };
+            const addAssigned = (set, id) => { const n = normalizeId(id); if (Number.isFinite(n)) { set.add(n); set.add(String(n)); } };
+            
             const assignedRiderIds = new Set();
             const assignedCoachIds = new Set();
             ride.groups.forEach(group => {
                 if (Array.isArray(group.riders)) {
-                    group.riders.forEach(riderId => assignedRiderIds.add(riderId));
+                    group.riders.forEach(riderId => addAssigned(assignedRiderIds, riderId));
                 }
-                if (group.coaches.leader) assignedCoachIds.add(group.coaches.leader);
-                if (group.coaches.sweep) assignedCoachIds.add(group.coaches.sweep);
-                if (group.coaches.roam) assignedCoachIds.add(group.coaches.roam);
-                if (Array.isArray(group.coaches.extraRoam)) {
-                    group.coaches.extraRoam.forEach(id => {
-                        if (id) assignedCoachIds.add(id);
-                    });
+                if (group.coaches) {
+                    if (group.coaches.leader) addAssigned(assignedCoachIds, group.coaches.leader);
+                    if (group.coaches.sweep) addAssigned(assignedCoachIds, group.coaches.sweep);
+                    if (group.coaches.roam) addAssigned(assignedCoachIds, group.coaches.roam);
+                    if (Array.isArray(group.coaches.extraRoam)) {
+                        group.coaches.extraRoam.forEach(id => { if (id != null && id !== '') addAssigned(assignedCoachIds, id); });
+                    }
                 }
             });
             
-            // For refined practices, use filtered riders
+            // Only coaches in ride.availableCoaches (marked attending) need to be assigned; absent coaches are ignored
             const isRefined = isRideRefined(ride);
             const ridersToCheck = isRefined ? getFilteredRiderIdsForRide(ride) : (ride.availableRiders || []);
-            const availableRiderIds = new Set(ridersToCheck.map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
-            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id).filter(id => Number.isFinite(id)));
+            const availableRiderIds = new Set(ridersToCheck.map(id => normalizeId(id)).filter(id => Number.isFinite(id)));
+            const availableCoachIds = new Set((ride.availableCoaches || []).map(id => normalizeId(id)).filter(id => Number.isFinite(id)));
             
-            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id));
-            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id));
+            const unassignedRiders = Array.from(availableRiderIds).filter(id => !assignedRiderIds.has(id) && !assignedRiderIds.has(String(id)));
+            const unassignedCoaches = Array.from(availableCoachIds).filter(id => !assignedCoachIds.has(id) && !assignedCoachIds.has(String(id)));
+            
+            // Debug: trace why coaches counted as unassigned (same as publish)
+            console.log('🔴 PRINT VALIDATION (unassigned coaches)', {
+                rideId: ride.id,
+                rideDate: ride.date,
+                rideAvailableCoachesRaw: ride.availableCoaches,
+                rideAvailableCoachesLength: (ride.availableCoaches || []).length,
+                groupsCoachIds: ride.groups.map((g, i) => ({ groupIndex: i, label: g.label, leader: g.coaches?.leader, leaderType: g.coaches?.leader != null ? typeof g.coaches.leader : null, sweep: g.coaches?.sweep, roam: g.coaches?.roam, extraRoam: g.coaches?.extraRoam })),
+                assignedCoachIdsSize: assignedCoachIds.size,
+                assignedCoachIdsSample: Array.from(assignedCoachIds).slice(0, 20),
+                availableCoachIdsSize: availableCoachIds.size,
+                availableCoachIdsSample: Array.from(availableCoachIds).slice(0, 20),
+                unassignedCoachesCount: unassignedCoaches.length,
+                unassignedCoachIds: unassignedCoaches
+            });
+            unassignedCoaches.forEach(id => {
+                const coach = getCoachById(id);
+                console.log('🔴 [Print] Unassigned coach detail', { id, idType: typeof id, hasNumber: assignedCoachIds.has(id), hasString: assignedCoachIds.has(String(id)), name: coach ? coach.name : null });
+            });
             
             if (unassignedRiders.length > 0) {
                 const riderNames = unassignedRiders.map(id => {
@@ -21181,7 +21895,8 @@
             allErrors.push(...groupErrors);
             
             if (allErrors.length > 0) {
-                showGroupValidationErrorModal('Cannot print group assignments', allErrors);
+                const syncAndRetry = (groupErrors.length === 0) ? { ride, assignedCoachIds, assignedRiderIds, action: 'print' } : null;
+                showGroupValidationErrorModal('Cannot print group assignments', allErrors, syncAndRetry ? { syncAndRetry } : {});
                 return;
             }
 
@@ -21231,19 +21946,15 @@
                     }
                 }
 
-                // Sort groups sequentially
-                const sortedGroups = [...ride.groups].sort((a, b) => {
-                    const labelA = a.label || '';
-                    const labelB = b.label || '';
-                    const numA = parseInt(labelA.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(labelB.replace(/\D/g, '')) || 0;
-                    return numA - numB;
-                });
+                // Sort groups (alphabetically by color name when using color names, else by number)
+                const useColorNamesForExport = rideUsesGroupColorNames(ride);
+                const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 // Generate groups HTML with collapsible functionality matching the tab
                 let groupsHtmlWithCollapse = '';
                 sortedGroups.forEach((group, index) => {
                     const groupId = `group-${group.id || index}`;
+                    const groupTitle = getGroupDisplayTitleForPrint(group, index, useColorNamesForExport);
                     const leader = group.coaches?.leader ? getCoachById(group.coaches.leader) : null;
                     const sweep = group.coaches?.sweep ? getCoachById(group.coaches.sweep) : null;
                     const roam = group.coaches?.roam ? getCoachById(group.coaches.roam) : null;
@@ -21252,7 +21963,7 @@
                         : [];
                     
                     const riders = (group.riders || []).map(id => getRiderById(id)).filter(Boolean);
-                    const route = group.routeId ? getRouteById(group.routeId) : null;
+                    const routeDisplay = getRouteDisplayForGroup(group);
                     
                     // Build coaches with their roles
                     const coachesWithRoles = [];
@@ -21262,18 +21973,6 @@
                     extraRoam.forEach(coach => {
                         coachesWithRoles.push({ coach, role: 'Roam+' });
                     });
-
-                    // Get Strava URL if available
-                    let stravaUrl = null;
-                    if (route) {
-                        stravaUrl = route.stravaUrl;
-                        if (!stravaUrl && route.stravaEmbedCode) {
-                            const urlMatch = route.stravaEmbedCode.match(/https?:\/\/[^\s"'<>]+strava\.com[^\s"'<>]*/i);
-                            if (urlMatch) {
-                                stravaUrl = urlMatch[0];
-                            }
-                        }
-                    }
 
                     // Render rider cards (without badges)
                     const riderCardsHtml = riders.map(rider => {
@@ -21296,7 +21995,7 @@
                     groupsHtmlWithCollapse += `
                         <div class="mobile-group-card" style="margin-bottom: 0; border: 1px solid #ddd; border-radius: 0; overflow: hidden; background: white; border-top: ${index === 0 ? '1px solid #ddd' : 'none'};">
                             <button class="mobile-group-header" onclick="toggleMobileGroup('${groupId}')" style="width: 100%; padding: 8px 16px; background: #f5f5f5; border: none; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 600; color: #333;">
-                                <span>${escapeHtml(group.label || ('Group ' + (index + 1)))}</span>
+                                <span>${escapeHtml(groupTitle)}</span>
                                 <span class="mobile-group-toggle" id="toggle-${groupId}" style="font-size: 20px; transition: transform 0.2s;">▲</span>
                             </button>
                             <div class="mobile-group-content" id="${groupId}" style="display: block; padding: 16px;">
@@ -21335,22 +22034,22 @@
                                     </div>
                                 ` : ''}
                                 
-                                ${route ? `
+                                ${routeDisplay.displayName ? `
                                     <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
                                         <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #666;">Route</h4>
                                         <div style="font-size: 14px; color: #333;">
-                                            <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
-                                            ${route.distance || route.elevation || route.estimatedTime ? `
+                                            <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(routeDisplay.displayName)}</div>
+                                            ${routeDisplay.route && (routeDisplay.route.distance || routeDisplay.route.elevation || routeDisplay.route.estimatedTime) ? `
                                                 <div style="font-size: 12px; color: #666; margin-top: 4px;">
-                                                    ${route.distance ? '<span>' + escapeHtml(route.distance) + '</span>' : ''}
-                                                    ${route.distance && (route.elevation || route.estimatedTime) ? ' · ' : ''}
-                                                    ${route.elevation ? '<span>' + escapeHtml(route.elevation) + '</span>' : ''}
-                                                    ${route.elevation && route.estimatedTime ? ' · ' : ''}
-                                                    ${route.estimatedTime ? '<span>' + escapeHtml(route.estimatedTime) + '</span>' : ''}
+                                                    ${routeDisplay.route.distance ? '<span>' + escapeHtml(routeDisplay.route.distance) + '</span>' : ''}
+                                                    ${routeDisplay.route.distance && (routeDisplay.route.elevation || routeDisplay.route.estimatedTime) ? ' · ' : ''}
+                                                    ${routeDisplay.route.elevation ? '<span>' + escapeHtml(routeDisplay.route.elevation) + '</span>' : ''}
+                                                    ${routeDisplay.route.elevation && routeDisplay.route.estimatedTime ? ' · ' : ''}
+                                                    ${routeDisplay.route.estimatedTime ? '<span>' + escapeHtml(routeDisplay.route.estimatedTime) + '</span>' : ''}
                                                 </div>
                                             ` : ''}
-                                            ${stravaUrl ? `
-                                                <a href="${escapeHtml(stravaUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; margin-top: 6px; font-size: 12px; color: #FC4C02; text-decoration: none; font-weight: 500;">
+                                            ${!routeDisplay.isLeaderChoice && routeDisplay.stravaUrl ? `
+                                                <a href="${escapeHtml(routeDisplay.stravaUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; margin-top: 6px; font-size: 12px; color: #FC4C02; text-decoration: none; font-weight: 500;">
                                                     View Full Map on Strava →
                                                 </a>
                                             ` : ''}
@@ -21610,14 +22309,9 @@
 
                 yPos += 5;
 
-                // Sort groups sequentially
-                const sortedGroups = [...ride.groups].sort((a, b) => {
-                    const labelA = a.label || '';
-                    const labelB = b.label || '';
-                    const numA = parseInt(labelA.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(labelB.replace(/\D/g, '')) || 0;
-                    return numA - numB;
-                });
+                // Sort groups (alphabetically by color name when using color names, else by number)
+                const useColorNamesMobile = rideUsesGroupColorNames(ride);
+                const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 // Create bookmarks for each group
                 const bookmarks = [];
@@ -21626,7 +22320,7 @@
                 sortedGroups.forEach((group, index) => {
                     // No page breaks - content flows continuously
 
-                    const groupLabel = group.label || `Group ${index + 1}`;
+                    const groupLabel = getGroupDisplayTitleForPrint(group, index, useColorNamesMobile);
                     
                     // Bookmark target (current position)
                     const bookmarkY = yPos;
@@ -21647,7 +22341,7 @@
                         : [];
                     
                     const riders = (group.riders || []).map(id => getRiderById(id)).filter(Boolean);
-                    const route = group.routeId ? getRouteById(group.routeId) : null;
+                    const routeDisplay = getRouteDisplayForGroup(group);
 
                     // Coaches section - smaller fonts for mobile
                     doc.setFontSize(9);
@@ -21698,8 +22392,8 @@
                         yPos += 5;
                     }
 
-                    // Route information with "View Route" button
-                    if (route) {
+                    // Route information (include "Ride Leader's Choice" when selected, no link)
+                    if (routeDisplay.displayName) {
                         yPos += 2;
                         doc.setFontSize(9);
                         doc.setFont(undefined, 'bold');
@@ -21708,71 +22402,8 @@
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         
-                        // Try to get Strava URL from stored field or extract from embed code
-                        let stravaUrl = route.stravaUrl;
-                        
-                        // Debug: Log what we have
-                        console.log('🔍 Extracting Strava URL for route:', {
-                            routeId: route.id,
-                            routeName: route.name,
-                            hasStravaUrl: !!route.stravaUrl,
-                            stravaUrlValue: route.stravaUrl,
-                            hasEmbedCode: !!route.stravaEmbedCode,
-                            embedCodeLength: route.stravaEmbedCode ? route.stravaEmbedCode.length : 0,
-                            embedCodePreview: route.stravaEmbedCode ? route.stravaEmbedCode.substring(0, 300) : null
-                        });
-                        
-                        if (!stravaUrl && route.stravaEmbedCode) {
-                            // First try: Use the extractRouteUrlFromEmbed function if available
-                            if (typeof extractRouteUrlFromEmbed === 'function') {
-                                try {
-                                    stravaUrl = extractRouteUrlFromEmbed(route.stravaEmbedCode);
-                                    console.log('📋 extractRouteUrlFromEmbed returned:', stravaUrl);
-                                    if (stravaUrl) {
-                                        stravaUrl = stravaUrl.split('?')[0]; // Remove query parameters
-                                    }
-                                } catch (error) {
-                                    console.error('Error calling extractRouteUrlFromEmbed:', error);
-                                }
-                            }
-                            
-                            // If still no URL, try inline extraction methods
-                            if (!stravaUrl) {
-                                // Method 1: Extract route ID from data-embed-id attribute (new Strava embed format)
-                                const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
-                                if (routeIdMatch) {
-                                    stravaUrl = `https://www.strava.com/routes/${routeIdMatch[1]}`;
-                                    console.log('✅ Extracted route ID from data-embed-id:', routeIdMatch[1], '→', stravaUrl);
-                                } else {
-                                    // Method 2: Look for URL in iframe src (old format)
-                                    const iframeSrcMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
-                                    if (iframeSrcMatch) {
-                                        stravaUrl = iframeSrcMatch[1].split('?')[0];
-                                        console.log('✅ Extracted URL from iframe src:', stravaUrl);
-                                    } else {
-                                        // Method 3: Look for route ID patterns in any URL
-                                        const routeIdPatterns = [
-                                            /routes\/(\d+)/i,
-                                            /route\/(\d+)/i,
-                                            /\/r\/(\d+)/i
-                                        ];
-                                        for (const pattern of routeIdPatterns) {
-                                            const match = route.stravaEmbedCode.match(pattern);
-                                            if (match) {
-                                                stravaUrl = `https://www.strava.com/routes/${match[1]}`;
-                                                console.log('✅ Extracted route ID from pattern:', match[1], '→', stravaUrl);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        console.log('🎯 Final stravaUrl:', stravaUrl);
-                        
-                        // Display route name as clickable link (blue, underlined, same size as names)
-                        const routeName = route.name || 'Unnamed Route';
+                        const stravaUrl = routeDisplay.isLeaderChoice ? null : routeDisplay.stravaUrl;
+                        const routeName = routeDisplay.displayName;
                         
                         // Set font size to match rider/leader names (11px)
                         doc.setFontSize(11);
@@ -21861,14 +22492,10 @@
                                 console.error('❌ Error adding link to PDF:', error, error.stack);
                             }
                         } else {
-                            // No URL - just show route name in normal text (wrapped)
+                            // No URL - show route name as plain text (e.g. "Ride Leader's Choice" or when no Strava link)
                             doc.setTextColor(0, 0, 0); // Black
                             doc.text(routeNameLines, margin, yPos);
                             yPos += routeNameLines.length * (doc.getFontSize() * 0.4);
-                            console.warn('⚠️ No Strava URL found for route - route name shown but not clickable:', {
-                                routeId: route.id,
-                                routeName: route.name
-                            });
                         }
                         
                         // Reset formatting
@@ -21885,10 +22512,10 @@
                         
                         yPos += 7; // Space after button
                         
-                        if (route.distance || route.elevation) {
+                        if (routeDisplay.route && (routeDisplay.route.distance || routeDisplay.route.elevation)) {
                             const routeDetails = [];
-                            if (route.distance) routeDetails.push(route.distance);
-                            if (route.elevation) routeDetails.push(route.elevation);
+                            if (routeDisplay.route.distance) routeDetails.push(routeDisplay.route.distance);
+                            if (routeDisplay.route.elevation) routeDetails.push(routeDisplay.route.elevation);
                             doc.text(routeDetails.join(' / '), margin + 5, yPos);
                             yPos += 5;
                         }
@@ -22039,14 +22666,9 @@
 
                 yPos += 4; // Space before groups
 
-                // Sort groups sequentially
-                const sortedGroups = [...ride.groups].sort((a, b) => {
-                    const labelA = a.label || '';
-                    const labelB = b.label || '';
-                    const numA = parseInt(labelA.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(labelB.replace(/\D/g, '')) || 0;
-                    return numA - numB;
-                });
+                // Sort groups (alphabetically by color name when using color names, else by number)
+                const useColorNamesDesktop = rideUsesGroupColorNames(ride);
+                const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 // Calculate 3-column layout with tighter spacing
                 const numColumns = 3;
@@ -22064,7 +22686,7 @@
                         ? group.coaches.extraRoam.map(id => getCoachById(id)).filter(Boolean)
                         : [];
                     const riders = (group.riders || []).map(id => getRiderById(id)).filter(Boolean);
-                    const route = group.routeId ? getRouteById(group.routeId) : null;
+                    const routeDisplay = getRouteDisplayForGroup(group);
                     
                     const coachesList = [];
                     if (leader) coachesList.push(`${leader.name || 'Coach'} (Leader)`);
@@ -22082,16 +22704,15 @@
                     height += 3; // Space before riders
                     height += 4; // "Riders:" label
                     height += riders.length * 4.5; // Riders (increased line height)
-                    if (route) {
+                    if (routeDisplay.displayName) {
                         height += 3; // Space before route
                         height += 4; // "Route:" label
-                        const routeName = route.name || 'Unnamed Route';
-                        const routeNameLines = doc.splitTextToSize(routeName, columnWidth - 4);
+                        const routeNameLines = doc.splitTextToSize(routeDisplay.displayName, columnWidth - 4);
                         height += routeNameLines.length * 4.5; // Route name lines (increased line height)
                     }
                     height += 4; // Bottom padding
                     
-                    return { group, height };
+                    return { group, height, routeDisplay };
                 });
                 
                 // Organize groups into rows (3 per row, aligned at top)
@@ -22106,8 +22727,8 @@
                     rowGroups.forEach((groupData, colIndex) => {
                         const group = groupData.group;
                         const boxX = margin + colIndex * (columnWidth + columnGap);
-                        
-                        const groupLabel = group.label || `Group ${rowIndex + colIndex + 1}`;
+                        const groupIndex = rowIndex + colIndex;
+                        const groupLabel = getGroupDisplayTitleForPrint(group, groupIndex, useColorNamesDesktop);
                         
                         // Get group details
                         const leader = group.coaches?.leader ? getCoachById(group.coaches.leader) : null;
@@ -22118,7 +22739,7 @@
                             : [];
                         
                         const riders = (group.riders || []).map(id => getRiderById(id)).filter(Boolean);
-                        const route = group.routeId ? getRouteById(group.routeId) : null;
+                        const routeDisplay = groupData.routeDisplay || getRouteDisplayForGroup(group);
                         
                         // Build coaches list
                         const coachesList = [];
@@ -22191,8 +22812,8 @@
                             contentY += 4.5;
                         }
 
-                        // Route information (increased size)
-                        if (route) {
+                        // Route information (include "Ride Leader's Choice" when selected, no link)
+                        if (routeDisplay.displayName) {
                             contentY += 3;
                             doc.setFontSize(10);
                             doc.setFont(undefined, 'bold');
@@ -22201,34 +22822,8 @@
                             doc.setFont(undefined, 'normal');
                             doc.setFontSize(10);
                         
-                            const routeName = route.name || 'Unnamed Route';
-                            
-                            // Try to get Strava URL
-                            let stravaUrl = route.stravaUrl;
-                            if (!stravaUrl && route.stravaEmbedCode) {
-                                if (typeof extractRouteUrlFromEmbed === 'function') {
-                                    try {
-                                        stravaUrl = extractRouteUrlFromEmbed(route.stravaEmbedCode);
-                                        if (stravaUrl) {
-                                            stravaUrl = stravaUrl.split('?')[0];
-                                        }
-                                    } catch (error) {
-                                        console.error('Error calling extractRouteUrlFromEmbed:', error);
-                                    }
-                                }
-                                
-                                if (!stravaUrl) {
-                                    const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
-                                    if (routeIdMatch) {
-                                        stravaUrl = `https://www.strava.com/routes/${routeIdMatch[1]}`;
-                                    } else {
-                                        const iframeSrcMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
-                                        if (iframeSrcMatch) {
-                                            stravaUrl = iframeSrcMatch[1].split('?')[0];
-                                        }
-                                    }
-                                }
-                            }
+                            const routeName = routeDisplay.displayName;
+                            const stravaUrl = routeDisplay.isLeaderChoice ? null : routeDisplay.stravaUrl;
                             
                             // Wrap route name if needed (for narrow columns)
                             const routeNameLines = doc.splitTextToSize(routeName, columnWidth - 6);
@@ -22783,7 +23378,7 @@
                 return `
                     <div class="coach-group" style="border: ${groupBorderWidth} solid ${groupBorderColor}; border-radius: 8px; background: ${isCompliant ? 'white' : '#ffebee'}; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 0; margin: 0; overflow: hidden;">
                         <div class="coach-group-header" style="background-color: ${headerColor}; color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border: none !important;">
-                            <span style="font-weight: 600; font-size: 16px; color: white;">${group.label}${headerWarning}</span>
+                            <span style="font-weight: 600; font-size: 16px; color: white;">${group.label}${group.colorName ? ` (${group.colorName})` : ''}${headerWarning}</span>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <select class="group-sort-select" onchange="changeGroupSort(${group.id}, this.value)" title="Sort by" style="padding: 4px 8px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.2); color: white; cursor: pointer;">
                                     <option value="pace" ${sortBy === 'pace' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Pace</option>
@@ -23071,6 +23666,7 @@
             
             // Update publish buttons after container is updated
             updatePublishButtons();
+            updateGroupColorNamesButton(ride);
             
             // Add event delegation for checkboxes in group riders containers
             // This allows checkboxes in groups to toggle rider availability
@@ -23095,63 +23691,42 @@
                         return;
                     }
                     
-                    // Check if the checkbox is inside a group container (.group-riders or .group-coaches)
+                    // Check if the checkbox is in a group container or on the pasteboard (unassigned list)
                     const groupRidersContainer = e.target.closest('.group-riders');
                     const groupCoachesContainer = e.target.closest('.group-coaches');
                     const coachInlineItem = e.target.closest('.coach-inline-item');
+                    const isPasteboard = !!e.target.closest('[data-unassigned-list="true"]');
                     
-                    if (attendanceType === 'rider' && groupRidersContainer) {
-                        // Handle rider checkbox in group
-                        console.log('🔵 Group rider checkbox clicked:', {
-                            riderId: e.target.dataset.riderId,
-                            checked: e.target.checked,
-                            groupId: groupRidersContainer.getAttribute('data-group-id')
-                        });
-                        
+                    if (attendanceType === 'rider' && (groupRidersContainer || isPasteboard)) {
+                        // Handle rider checkbox in group or on pasteboard (uncheck = mark absent, removes from pasteboard and syncs to attendance list)
                         setTimeout(() => {
                             const riderId = parseInt(e.target.dataset.riderId, 10);
                             const isAvailable = e.target.checked;
                             
                             if (Number.isFinite(riderId)) {
-                                console.log('🔵 Calling toggleRiderAvailability from group checkbox:', { riderId, isAvailable });
                                 toggleRiderAvailability(riderId, isAvailable);
                             } else {
-                                console.error('🔴 Invalid riderId in group checkbox:', e.target.dataset.riderId);
+                                console.error('🔴 Invalid riderId in attendance checkbox:', e.target.dataset.riderId);
                             }
                         }, 0);
-                    } else if (attendanceType === 'coach' && (groupCoachesContainer || coachInlineItem)) {
-                        // Handle coach checkbox in group
-                        const groupId = groupCoachesContainer 
-                            ? groupCoachesContainer.getAttribute('data-group-id')
-                            : (coachInlineItem ? coachInlineItem.getAttribute('data-group-id') : null);
-                        
-                        console.log('🔵 Group coach checkbox clicked:', {
-                            coachId: e.target.dataset.coachId,
-                            checked: e.target.checked,
-                            groupId: groupId
-                        });
-                        
+                    } else if (attendanceType === 'coach' && (groupCoachesContainer || coachInlineItem || isPasteboard)) {
+                        // Handle coach checkbox in group or on pasteboard (uncheck = mark absent, removes from pasteboard and syncs to attendance list)
                         setTimeout(() => {
                             const coachId = parseInt(e.target.dataset.coachId, 10);
                             const isAvailable = e.target.checked;
                             
                             if (Number.isFinite(coachId)) {
-                                console.log('🔵 Calling toggleCoachAvailability from group checkbox:', { coachId, isAvailable });
                                 toggleCoachAvailability(coachId, isAvailable);
                             } else {
-                                console.error('🔴 Invalid coachId in group checkbox:', e.target.dataset.coachId);
+                                console.error('🔴 Invalid coachId in attendance checkbox:', e.target.dataset.coachId);
                             }
                         }, 0);
-                    } else {
-                        // Not in a group container, let attendance list handler deal with it
-                        return;
                     }
                 };
                 
                 // Store reference to handler for future removal
                 assignmentsContainer._groupCheckboxHandler = groupCheckboxHandler;
                 assignmentsContainer.addEventListener('click', groupCheckboxHandler);
-                console.log('🔵 Attached event delegation listener to assignments container for group checkboxes');
             }
             
             // Allow clicking names in assignment cards to toggle attendance checkboxes
@@ -23237,17 +23812,10 @@
         
         function ensureRideAttendanceDefaults(ride) {
             if (!ride) return;
-            
-            const hasArray = Array.isArray(ride.availableRiders);
-            const hasValues = hasArray && ride.availableRiders.length > 0;
-            const isInitialized = ride.attendanceInitialized === true;
-            
-            if (hasValues) {
+            // If the ride already has an availableRiders array (from DB or prior save), never overwrite it.
+            // This preserves attendance changes (e.g. marking absent then attending again) across refresh.
+            if (Array.isArray(ride.availableRiders)) {
                 ride.attendanceInitialized = true;
-                return;
-            }
-            
-            if (isInitialized && hasArray) {
                 return;
             }
             
@@ -23882,7 +24450,7 @@
             }
         }
         
-        function toggleRiderAvailability(riderId, isAvailable) {
+        async function toggleRiderAvailability(riderId, isAvailable) {
             try {
             const ride = data.rides.find(r => r.id === data.currentRide);
                 if (!ride) {
@@ -23973,7 +24541,7 @@
                     normalizedRiderId
                 });
             
-            saveRideToDB(ride);
+            await saveRideToDB(ride);
             renderAssignments(ride);
             renderPracticeAttendanceLists();
             } catch (error) {
@@ -24578,15 +25146,57 @@
         }
 
         function updateRoutePreviews() {
-            // Find all route preview containers and populate them with Strava embed code
+            // Populate route preview containers; use cached image when available, else cap live Strava embeds to avoid WebGL exhaustion (Safari)
             const previewContainers = document.querySelectorAll('.route-preview-container');
+            let liveEmbedCount = 0;
             previewContainers.forEach(container => {
                 const routeId = container.getAttribute('data-route-id');
                 if (!routeId) return;
                 
                 const route = getRouteById(routeId);
-                if (route && route.stravaEmbedCode) {
-                    container.innerHTML = route.stravaEmbedCode;
+                if (!route) {
+                    container.style.display = 'none';
+                    return;
+                }
+                if (route.cachedPreviewDataUrl) {
+                    container.style.display = '';
+                    container.innerHTML = `<img src="${escapeHtml(route.cachedPreviewDataUrl)}" alt="${escapeHtml(route.name || 'Route')}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">`;
+                    let stravaUrl = route.stravaUrl || '';
+                    if (!stravaUrl && route.stravaEmbedCode) {
+                        const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
+                        if (routeIdMatch) stravaUrl = 'https://www.strava.com/routes/' + routeIdMatch[1];
+                        else {
+                            const iframeMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
+                            if (iframeMatch) stravaUrl = iframeMatch[1].split('?')[0];
+                        }
+                    }
+                    if (stravaUrl) {
+                        const link = document.createElement('a');
+                        link.href = stravaUrl;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.style.cssText = 'position: absolute; bottom: 6px; right: 6px; font-size: 11px; color: #fc4c02;';
+                        link.textContent = 'View on Strava';
+                        container.style.position = 'relative';
+                        container.appendChild(link);
+                    }
+                } else if (route.stravaEmbedCode) {
+                    container.style.display = '';
+                    if (liveEmbedCount < MAX_STRAVA_EMBEDS) {
+                        container.innerHTML = route.stravaEmbedCode;
+                        liveEmbedCount++;
+                    } else {
+                        let stravaUrl = route.stravaUrl || '';
+                        if (!stravaUrl) {
+                            const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
+                            if (routeIdMatch) stravaUrl = 'https://www.strava.com/routes/' + routeIdMatch[1];
+                            else {
+                                const iframeMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
+                                if (iframeMatch) stravaUrl = iframeMatch[1].split('?')[0];
+                            }
+                        }
+                        container.innerHTML = `<div style="padding: 12px; background: #f0f0f0; color: #666; font-size: 12px; text-align: center; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box;">${escapeHtml(route.name || 'Route')}<br><span style="font-size: 11px;">Map hidden to keep page responsive.</span>${stravaUrl ? `<br><a href="${escapeHtml(stravaUrl)}" target="_blank" rel="noopener" style="color: #fc4c02;">View on Strava</a>` : ''}</div>`;
+                    }
                 } else {
                     container.style.display = 'none';
                 }
@@ -27349,6 +27959,10 @@
             if (listBtn) listBtn.classList.toggle('active', mode === 'list');
         }
 
+        // Safari (and other browsers) limit WebGL contexts (~8). Each Strava route embed uses Mapbox = 1 context.
+        // Cap live embeds so the Routes tab stays responsive; extra routes show a placeholder.
+        const MAX_STRAVA_EMBEDS = 0; // Temporarily disable all live Strava embeds (WebGL/Safari); cached preview images still show when uploaded
+
         function renderRoutes() {
             const container = document.getElementById('routes-grid');
             if (!container) return;
@@ -27446,9 +28060,11 @@
                 return;
             }
 
-            // Render Strava routes first
-            stravaRoutes.forEach(route => {
-                renderRouteCard(route, container);
+            // Render Strava routes first (only first MAX_STRAVA_EMBEDS without cached preview get a live map to avoid WebGL exhaustion on Safari)
+            let liveEmbedIndex = 0;
+            stravaRoutes.forEach((route) => {
+                const stravaIndex = route.cachedPreviewDataUrl ? -1 : liveEmbedIndex++;
+                renderRouteCard(route, container, false, stravaIndex);
             });
 
             // Add separator if both types exist
@@ -27464,7 +28080,7 @@
             });
         }
 
-        function renderRouteCard(route, container, isManual = false) {
+        function renderRouteCard(route, container, isManual = false, stravaIndex = 0) {
             const routeCard = document.createElement('div');
             // Force manual routes to span full width to appear below Strava routes
             if (isManual) {
@@ -27474,50 +28090,78 @@
             }
 
             if (route.stravaEmbedCode && !isManual) {
-                // Embed container - no card, no header, no description, just the map
-                // Scale to 70% of standard size (405px * 0.7 = 283.5px, rounded to 284px)
+                // Embed container - same size for cached image, live map, or placeholder (avoids WebGL exhaustion on Safari)
                 const embedContainer = document.createElement('div');
                 embedContainer.style.cssText = 'width: 420px; height: 284px; border: none; border-radius: 0; overflow: hidden; position: relative;';
-                
-                // Wrapper to scale the embed content to 70%
+
+                if (route.cachedPreviewDataUrl) {
+                // Cached preview image – no WebGL, no live embed
+                const img = document.createElement('img');
+                img.src = route.cachedPreviewDataUrl;
+                img.alt = route.name || 'Route map';
+                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; display: block;';
+                img.loading = 'lazy';
+                embedContainer.appendChild(img);
+                let stravaUrl = route.stravaUrl || '';
+                if (!stravaUrl && route.stravaEmbedCode) {
+                    const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
+                    if (routeIdMatch) stravaUrl = 'https://www.strava.com/routes/' + routeIdMatch[1];
+                    else {
+                        const iframeMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
+                        if (iframeMatch) stravaUrl = iframeMatch[1].split('?')[0];
+                    }
+                }
+                if (stravaUrl) {
+                    const link = document.createElement('a');
+                    link.href = stravaUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.style.cssText = 'position: absolute; bottom: 8px; right: 8px; font-size: 11px; color: #fc4c02;';
+                    link.textContent = 'View on Strava';
+                    embedContainer.appendChild(link);
+                }
+                } else if (stravaIndex < MAX_STRAVA_EMBEDS) {
+                // Live Strava embed (uses Mapbox/WebGL) – only first MAX_STRAVA_EMBEDS to stay under browser WebGL limit
                 const embedWrapper = document.createElement('div');
                 embedWrapper.style.cssText = 'transform: scale(0.7); transform-origin: top left; width: 142.86%; height: 142.86%; position: absolute; top: 0; left: 0;';
-                
-                // Create inner container for the embed (standard size)
                 const innerContainer = document.createElement('div');
                 innerContainer.style.cssText = 'width: 100%; height: 405px; position: relative;';
-                
-                // Insert embed code as raw HTML
                 innerContainer.innerHTML = route.stravaEmbedCode;
-                
-                // If there are script tags, we need to execute them
                 const scripts = innerContainer.querySelectorAll('script');
                 scripts.forEach(oldScript => {
                     const newScript = document.createElement('script');
-                    // Copy all attributes
                     Array.from(oldScript.attributes).forEach(attr => {
                         newScript.setAttribute(attr.name, attr.value);
                     });
-                    // Copy script content
                     newScript.textContent = oldScript.textContent;
-                    // Replace old script with new one (which will execute)
                     oldScript.parentNode.replaceChild(newScript, oldScript);
                 });
-
-                // Check if we need to load Strava embed.js
                 if (innerContainer.querySelector('[data-embed-type="route"]') && 
                     !document.querySelector('script[src="https://strava-embeds.com/embed.js"]')) {
                     const stravaScript = document.createElement('script');
                     stravaScript.src = 'https://strava-embeds.com/embed.js';
-                    // Suppress Mapbox errors from Strava embeds
-                    stravaScript.onerror = () => {
-                        console.warn('Strava embed script failed to load');
-                    };
+                    stravaScript.onerror = () => { console.warn('Strava embed script failed to load'); };
                     document.head.appendChild(stravaScript);
                 }
-                
                 embedWrapper.appendChild(innerContainer);
                 embedContainer.appendChild(embedWrapper);
+                } else {
+                // Placeholder for extra Strava routes – no WebGL (keeps Safari responsive)
+                const placeholder = document.createElement('div');
+                placeholder.style.cssText = 'width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f0f0f0; color: #666; font-size: 13px; text-align: center; padding: 16px; box-sizing: border-box;';
+                let stravaUrl = route.stravaUrl || '';
+                if (!stravaUrl && route.stravaEmbedCode) {
+                    const routeIdMatch = route.stravaEmbedCode.match(/data-embed-id\s*=\s*["']?(\d+)["']?/i);
+                    if (routeIdMatch) stravaUrl = 'https://www.strava.com/routes/' + routeIdMatch[1];
+                    else {
+                        const iframeMatch = route.stravaEmbedCode.match(/src\s*=\s*["']([^"']*strava\.com[^"']*)["']/i);
+                        if (iframeMatch) stravaUrl = iframeMatch[1].split('?')[0];
+                    }
+                }
+                placeholder.innerHTML = `<span style="margin-bottom: 8px;">${escapeHtml(route.name || 'Route')}</span><span style="font-size: 11px; margin-bottom: 8px;">Map hidden to keep the page responsive.</span>${stravaUrl ? `<a href="${escapeHtml(stravaUrl)}" target="_blank" rel="noopener" style="color: #fc4c02;">View on Strava</a>` : ''}`;
+                embedContainer.appendChild(placeholder);
+                }
+
                 routeCard.appendChild(embedContainer);
                 
                 // Add route info line below the map
@@ -27686,6 +28330,14 @@
             document.getElementById('route-elevation').value = route ? (route.elevation || '') : '';
             document.getElementById('route-time').value = route ? (route.estimatedTime || '') : '';
             document.getElementById('route-embed-code').value = route ? (route.stravaEmbedCode || '') : '';
+            addRouteCachedPreviewDataUrl = route ? (route.cachedPreviewDataUrl || null) : null;
+            const cachedPreviewFileInput = document.getElementById('route-cached-preview-file');
+            if (cachedPreviewFileInput) cachedPreviewFileInput.value = '';
+            const cachedPreviewStatus = document.getElementById('route-cached-preview-status');
+            if (cachedPreviewStatus) {
+                cachedPreviewStatus.style.display = addRouteCachedPreviewDataUrl ? 'inline' : 'none';
+                cachedPreviewStatus.textContent = addRouteCachedPreviewDataUrl ? 'Current route has a cached preview (upload a new image to replace).' : '';
+            }
             
             // Update placeholder text based on route type
             const nameInput = document.getElementById('route-name');
@@ -28381,6 +29033,37 @@
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             hideEmbedCodeTooltip();
+            addRouteCachedPreviewDataUrl = null;
+            const cachedPreviewFileInput = document.getElementById('route-cached-preview-file');
+            if (cachedPreviewFileInput) cachedPreviewFileInput.value = '';
+            const cachedPreviewStatus = document.getElementById('route-cached-preview-status');
+            if (cachedPreviewStatus) { cachedPreviewStatus.style.display = 'none'; cachedPreviewStatus.textContent = ''; }
+        }
+
+        function onRouteCachedPreviewFileChange(event) {
+            const input = event && event.target;
+            const statusEl = document.getElementById('route-cached-preview-status');
+            if (!input || !input.files || !input.files.length) {
+                addRouteCachedPreviewDataUrl = null;
+                if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+                return;
+            }
+            const file = input.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                addRouteCachedPreviewDataUrl = null;
+                if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = 'Please choose an image file.'; }
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function() {
+                addRouteCachedPreviewDataUrl = reader.result;
+                if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = 'Preview image selected.'; }
+            };
+            reader.onerror = function() {
+                addRouteCachedPreviewDataUrl = null;
+                if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = 'Could not read file.'; }
+            };
+            reader.readAsDataURL(file);
         }
 
         // Store original settings when modal opens for discard functionality
@@ -28621,6 +29304,7 @@
                         description: descriptionInput.value.trim() || null,
                         stravaEmbedCode: isManual ? null : embedCode,
                         stravaUrl: isManual ? null : stravaUrl,
+                        cachedPreviewDataUrl: addRouteCachedPreviewDataUrl || null,
                         distance: distanceInput.value.trim() || null,
                         elevation: elevationInput.value.trim() || null,
                         estimatedTime: timeInput ? timeInput.value.trim() || null : null,
