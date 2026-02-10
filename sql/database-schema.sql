@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS riders (
     gender TEXT,
     racing_group TEXT,
     fitness TEXT DEFAULT '5',
+    extra_data JSONB,
     photo TEXT,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS coaches (
     email TEXT,
     level TEXT DEFAULT '1' CHECK (level IS NULL OR level IN ('1', '2', '3', 'N/A')),
     fitness TEXT DEFAULT '5',
+    extra_data JSONB,
     photo TEXT,
     notes TEXT,
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- Link to auth user if coach has account
@@ -100,6 +102,7 @@ CREATE TABLE IF NOT EXISTS season_settings (
     start_date DATE,
     end_date DATE,
     practices JSONB DEFAULT '[]',
+    csv_field_mappings JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
@@ -109,6 +112,15 @@ CREATE TABLE IF NOT EXISTS auto_assign_settings (
     id TEXT PRIMARY KEY DEFAULT 'current',
     parameters JSONB DEFAULT '[]',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Admin edit lock (single row)
+CREATE TABLE IF NOT EXISTS admin_edit_locks (
+    id TEXT PRIMARY KEY DEFAULT 'current',
+    user_id UUID,
+    email TEXT,
+    user_name TEXT,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 

@@ -452,13 +452,12 @@
                 html += '<div class="group-section">';
                 html += '<div class="section-title">Ride Groups</div>';
 
-                // Sort groups sequentially by label (Group 1, Group 2, etc.)
+                // Sort groups: by color name (A–Z) when using color names, else by group number
+                const useColorNames = ride.groups.length > 0 && ride.groups.every(g => g.colorName);
                 const sortedGroups = [...ride.groups].sort((a, b) => {
-                    const labelA = a.label || '';
-                    const labelB = b.label || '';
-                    // Extract numbers from labels for comparison
-                    const numA = parseInt(labelA.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(labelB.replace(/\D/g, '')) || 0;
+                    if (useColorNames && a.colorName && b.colorName) return (a.colorName || '').localeCompare(b.colorName || '');
+                    const numA = parseInt((a.label || '').replace(/\D/g, '')) || 0;
+                    const numB = parseInt((b.label || '').replace(/\D/g, '')) || 0;
                     return numA - numB;
                 });
 
@@ -468,10 +467,11 @@
                         return rider ? rider.name : null;
                     }).filter(Boolean);
 
+                    const groupTitle = useColorNames && group.colorName ? `${group.colorName} Group` : (group.label || 'Group');
                     if (groupRiders.length > 0) {
                         html += `
                             <div class="group-card">
-                                <div class="group-label">${escapeHtml(group.label || 'Group')}</div>
+                                <div class="group-label">${escapeHtml(groupTitle)}</div>
                                 <ul class="riders-list">
                         `;
                         

@@ -1020,6 +1020,9 @@
             background: transparent;
             border: none;
             border-radius: 0;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
         }
         
         /* Position calendar 5px below the tabs divider and 10px above button */
@@ -1044,11 +1047,13 @@
         .season-calendar {
             display: flex;
             gap: 8px;
-            overflow-x: auto;
             padding-bottom: 4px;
+            width: 100%;
+            min-width: min-content;
         }
 
         .season-month {
+            flex: 1 1 220px;
             min-width: 220px;
             background: #fff;
             border: 1px solid #dce3ec;
@@ -1128,6 +1133,20 @@
             border: 2px solid #757575;
             color: #757575;
             text-decoration: line-through;
+        }
+
+        .month-cell.practice.past .day-number {
+            background: transparent;
+            border: 2px solid #9E9E9E;
+            color: #333;
+            font-weight: normal;
+        }
+
+        .month-cell.practice.next .day-number {
+            background: #FF9800;
+            color: #ffffff;
+            width: 26px;
+            height: 26px;
         }
 
         .month-cell.empty {

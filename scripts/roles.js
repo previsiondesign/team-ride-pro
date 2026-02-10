@@ -33,14 +33,18 @@ function isAuthenticatedUser() {
     return isAuthenticated() && getCurrentUserRole() !== null;
 }
 
+function isReadOnlyAppMode() {
+    return typeof window !== 'undefined' && window.isReadOnlyMode === true;
+}
+
 // Check if user can edit rider records
 function canEditRiders() {
-    return isCoach();
+    return isCoach() && !isReadOnlyAppMode();
 }
 
 // Check if user can edit coach records
 function canEditCoaches() {
-    return isCoach();
+    return isCoach() && !isReadOnlyAppMode();
 }
 
 // Check if user can edit their own coach record
@@ -60,7 +64,7 @@ function canViewSeasonSetup() {
 
 // Check if user can create/edit rides
 function canCreateEditRides() {
-    return isCoach();
+    return isCoach() && !isReadOnlyAppMode();
 }
 
 // Check if user can view practice scheduler
