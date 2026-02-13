@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -511,12 +511,14 @@
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <label for="routes-sort-by" style="font-size: 14px; color: #666;">Sort By:</label>
                             <select id="routes-sort-by" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;" onchange="renderRoutes()">
+                                <option value="name-asc">Name (A to Z)</option>
+                                <option value="name-desc">Name (Z to A)</option>
+                                <option value="start-asc">Start Location (A to Z)</option>
+                                <option value="start-desc">Start Location (Z to A)</option>
                                 <option value="distance-asc">Distance (shortest to longest)</option>
                                 <option value="distance-desc">Distance (longest to shortest)</option>
                                 <option value="elevation-asc">Elev Gain (least to most)</option>
                                 <option value="elevation-desc">Elev Gain (most to least)</option>
-                                <option value="time-asc">Duration (shortest to longest)</option>
-                                <option value="time-desc">Duration (longest to shortest)</option>
                             </select>
                         </div>
                     </div>
@@ -1349,9 +1351,8 @@
                 <div id="routes-manager-list" style="max-height: 500px; overflow-y: auto;">
                     <!-- Routes list will be loaded dynamically -->
                 </div>
-                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px;">
-                    <button class="btn-small" onclick="openAddRouteModal(null)" style="background-color: #fc5200; color: white; border-color: #fc5200;">Add Strava Route</button>
-                    <button class="btn-small" onclick="openAddRouteModal(null, true)">Add Route</button>
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: center;">
+                    <button class="btn-small" onclick="openAddRouteModal(null)">Add New Route</button>
                 </div>
             </div>
         </div>
@@ -1359,31 +1360,44 @@
 
     <div id="add-route-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal" style="max-width: 700px;">
-            <div class="modal-header" id="add-route-modal-header" style="background-color: #fc5200; color: white;">
-                <span id="add-route-modal-title">Add Strava Route</span>
+            <div class="modal-header" id="add-route-modal-header">
+                <span id="add-route-modal-title">Add New Route</span>
             </div>
             <div class="modal-body">
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <div style="position: relative;">
-                        <label for="route-embed-code" class="field-label" style="display: flex; align-items: center; gap: 6px;">
-                            Strava Embed Code
-                            <span class="info-icon" style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #666; color: white; font-size: 11px; font-weight: bold; cursor: help; user-select: none;" onmouseenter="showEmbedCodeTooltip(event)" onmouseleave="hideEmbedCodeTooltip()">i</span>
-                        </label>
-                        <div id="embed-code-tooltip" style="position: absolute; background-color: #333; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; z-index: 10000; pointer-events: none; display: none; max-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); white-space: normal; line-height: 1.4;">To get the embed code: Go to your Strava route page → Click the "Share" button → Copy the embed code</div>
-                        <textarea id="route-embed-code" class="modal-field-input" rows="6" placeholder="Paste the Strava embed iframe code here..."></textarea>
-                        <div id="fetch-route-data-container" style="margin-top: 12px;">
-                            <button type="button" id="fetch-route-data-btn" class="btn-small" onclick="fetchRouteDataFromEmbed()" disabled>
-                                🔍 Auto-fill Route Info from Strava
-                            </button>
-                            <span id="fetch-route-status" style="margin-left: 8px; font-size: 12px; color: #666;"></span>
-                            <div style="margin-top: 6px; font-size: 11px; color: #888; font-style: italic;">
-                                ⏱️ Note: Initial autofill may take up to 30 seconds if the server is sleeping.
+                    <!-- Use Strava Route toggle button -->
+                    <div id="strava-toggle-section">
+                        <button type="button" id="strava-toggle-btn" class="btn-small" onclick="toggleStravaRouteSection()" style="background-color: #fc5200; color: white; border-color: #fc5200; width: 100%; padding: 10px 16px; font-size: 14px; font-weight: 600;">Use Strava Route</button>
+                    </div>
+                    <!-- Strava embed code section (hidden by default) -->
+                    <div id="strava-embed-section" style="display: none;">
+                        <div style="position: relative;">
+                            <label for="route-embed-code" class="field-label" style="display: flex; align-items: center; gap: 6px;">
+                                Strava Embed Code
+                                <span class="info-icon" style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #666; color: white; font-size: 11px; font-weight: bold; cursor: help; user-select: none;" onmouseenter="showEmbedCodeTooltip(event)" onmouseleave="hideEmbedCodeTooltip()">i</span>
+                            </label>
+                            <div id="embed-code-tooltip" style="position: absolute; background-color: #333; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; z-index: 10000; pointer-events: none; display: none; max-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); white-space: normal; line-height: 1.4;">To get the embed code: Go to your Strava route page → Click the "Share" button → Copy the embed code</div>
+                            <textarea id="route-embed-code" class="modal-field-input" rows="6" placeholder="Paste the Strava embed iframe code here..."></textarea>
+                            <div id="fetch-route-data-container" style="margin-top: 12px;">
+                                <button type="button" id="fetch-route-data-btn" class="btn-small" onclick="fetchRouteDataFromEmbed()" disabled>
+                                    Auto-fill Route Info from Strava
+                                </button>
+                                <span id="fetch-route-status" style="margin-left: 8px; font-size: 12px; color: #666;"></span>
+                                <div style="margin-top: 6px; font-size: 11px; color: #888; font-style: italic;">
+                                    Note: Initial autofill may take up to 30 seconds if the server is sleeping.
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div>
                         <label for="route-name" class="field-label">Route Name</label>
-                        <input type="text" id="route-name" class="modal-field-input" placeholder="Will be auto-filled from Strava, or enter manually">
+                        <input type="text" id="route-name" class="modal-field-input" placeholder="Enter route name">
+                    </div>
+                    <div>
+                        <label for="route-start-location" class="field-label">Start Location</label>
+                        <select id="route-start-location" class="modal-field-input">
+                            <option value="">-- Select start location --</option>
+                        </select>
                     </div>
                     <div class="form-row">
                         <div style="flex:1;">
@@ -1394,18 +1408,6 @@
                             <label for="route-elevation" class="field-label">Elevation Gain (Optional)</label>
                             <input type="text" id="route-elevation" class="modal-field-input" placeholder="Will be auto-filled from Strava">
                         </div>
-                    </div>
-                    <div>
-                        <label for="route-time" class="field-label" style="display: flex; align-items: center; gap: 8px;">
-                            <span>Approximate time range to complete route</span>
-                            <button type="button" onclick="openTimeEstimationSettings()" style="background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #666;" title="Time estimation settings">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
-                                </svg>
-                            </button>
-                        </label>
-                        <input type="text" id="route-time" class="modal-field-input" placeholder="Will be calculated from distance and elevation" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
                     </div>
                     <div>
                         <label class="field-label">Most appropriate Relative Pace Range</label>
@@ -1462,71 +1464,6 @@
         </div>
     </div>
 
-    <!-- Time Estimation Settings Modal -->
-    <div id="time-estimation-settings-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal" style="max-width: 600px;">
-            <div class="modal-header">
-                <span>Time Estimation Settings</span>
-            </div>
-            <div class="modal-body">
-                <div style="display: flex; flex-direction: column; gap: 16px;">
-                    <p style="font-size: 14px; color: #666; margin: 0;">Adjust the speed parameters used to calculate route completion time estimates. Changes apply to all routes.</p>
-                    
-                    <div style="border-top: 1px solid #e0e0e0; padding-top: 16px;">
-                        <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 12px 0;">Base Speeds (mph)</h3>
-                        <div class="form-row">
-                            <div style="flex: 1;">
-                                <label for="time-settings-fast-speed" class="field-label">Faster Rider Base Speed</label>
-                                <input type="number" id="time-settings-fast-speed" class="modal-field-input" step="0.1" min="1" max="20" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Base speed for faster riders (mph)</small>
-                            </div>
-                            <div style="flex: 1;">
-                                <label for="time-settings-slow-speed" class="field-label">Slower Rider Base Speed</label>
-                                <input type="number" id="time-settings-slow-speed" class="modal-field-input" step="0.1" min="1" max="20" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Base speed for slower riders (mph)</small>
-                            </div>
-                        </div>
-                        <div class="form-row" style="margin-top: 12px;">
-                            <div style="flex: 1;">
-                                <label for="time-settings-fast-min" class="field-label">Faster Rider Minimum Speed</label>
-                                <input type="number" id="time-settings-fast-min" class="modal-field-input" step="0.1" min="1" max="20" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Minimum speed regardless of conditions (mph)</small>
-                            </div>
-                            <div style="flex: 1;">
-                                <label for="time-settings-slow-min" class="field-label">Slower Rider Minimum Speed</label>
-                                <input type="number" id="time-settings-slow-min" class="modal-field-input" step="0.1" min="1" max="20" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Minimum speed regardless of conditions (mph)</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="border-top: 1px solid #e0e0e0; padding-top: 16px;">
-                        <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 12px 0;">Adjustments</h3>
-                        <div class="form-row">
-                            <div style="flex: 1;">
-                                <label for="time-settings-elevation" class="field-label">Elevation Adjustment</label>
-                                <input type="number" id="time-settings-elevation" class="modal-field-input" step="0.1" min="0" max="5" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Speed reduction (mph) per 1000 ft of elevation gain</small>
-                            </div>
-                            <div style="flex: 1;">
-                                <label for="time-settings-length" class="field-label">Length Adjustment Factor</label>
-                                <input type="number" id="time-settings-length" class="modal-field-input" step="0.01" min="0" max="1" onchange="previewTimeEstimationSettings()">
-                                <small style="color: #666; font-size: 12px;">Speed reduction (mph) per mile over 10 miles</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="border-top: 1px solid #e0e0e0; padding-top: 16px;">
-                        <button class="btn-small secondary" onclick="resetTimeEstimationSettings()">Reset to Defaults</button>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
-                <button class="btn-small secondary" onclick="discardTimeEstimationSettings()">Discard Changes</button>
-                <button class="btn-small" onclick="saveTimeEstimationSettings()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Save Changes</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Practice Context Menu -->
     <div id="practice-context-menu" class="context-menu" style="display: none; position: absolute; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10000; min-width: 180px;">

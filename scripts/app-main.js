@@ -72,6 +72,7 @@
         let isDeveloperMode = false;
         window.isDeveloperMode = false;
         let unassignedPaletteVisibility = 'auto'; // 'auto' | 'show' | 'hide'
+        let showAllRouteLocationsForRide = null; // ride ID for which "show all locations" is active (null = default location-filtered)
         let unassignedPaletteHeight = 300;
         let addRouteCachedPreviewDataUrl = null;
 
@@ -3702,6 +3703,17 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        // Convert ASCII text to Unicode Mathematical Bold characters for use in <option> elements
+        function toBoldUnicode(str) {
+            return str.replace(/[A-Za-z0-9]/g, ch => {
+                const code = ch.charCodeAt(0);
+                if (code >= 65 && code <= 90) return String.fromCodePoint(0x1D400 + (code - 65));   // A-Z
+                if (code >= 97 && code <= 122) return String.fromCodePoint(0x1D41A + (code - 97));   // a-z
+                if (code >= 48 && code <= 57) return String.fromCodePoint(0x1D7CE + (code - 48));     // 0-9
+                return ch;
+            });
         }
 
         function mapAbilityToFitness(ability) {
@@ -9364,9 +9376,9 @@
         
         // ============ BACKUP MANAGEMENT ============
         
-        // Create a complete backup of all data
-        function getAllDataForBackup() {
-            return {
+        // Create a complete backup of all data (FULL snapshot)
+        async function getAllDataForBackup() {
+            const backupData = {
                 riders: data.riders || [],
                 coaches: data.coaches || [],
                 rides: data.rides || [],
@@ -9377,9 +9389,40 @@
                 coachRoles: data.coachRoles || [],
                 riderRoles: data.riderRoles || [],
                 timeEstimationSettings: data.timeEstimationSettings || {},
+                currentRide: data.currentRide || null,
                 backupTimestamp: new Date().toISOString(),
-                backupVersion: '1.0'
+                backupVersion: '2.0'
             };
+
+            // Fetch additional tables from Supabase for a FULL picture
+            const client = getSupabaseClient();
+            if (client) {
+                try {
+                    // Fetch all rider feedback
+                    const { data: feedback } = await client.from('rider_feedback').select('*');
+                    backupData.riderFeedback = feedback || [];
+                } catch (e) { console.warn('Backup: could not fetch rider_feedback', e); backupData.riderFeedback = []; }
+
+                try {
+                    // Fetch all ride notes
+                    const { data: notes } = await client.from('ride_notes').select('*');
+                    backupData.rideNotes = notes || [];
+                } catch (e) { console.warn('Backup: could not fetch ride_notes', e); backupData.rideNotes = []; }
+
+                try {
+                    // Fetch all rider availability records
+                    const { data: avail } = await client.from('rider_availability').select('*');
+                    backupData.riderAvailability = avail || [];
+                } catch (e) { console.warn('Backup: could not fetch rider_availability', e); backupData.riderAvailability = []; }
+
+                try {
+                    // Fetch color names
+                    const { data: colors } = await client.from('color_names').select('*').order('sort_order', { ascending: true });
+                    backupData.colorNames = colors || [];
+                } catch (e) { console.warn('Backup: could not fetch color_names', e); backupData.colorNames = []; }
+            }
+
+            return backupData;
         }
         
         // Create automatic backup (on login/logout)
@@ -9390,7 +9433,7 @@
                     return;
                 }
                 
-                const backupData = getAllDataForBackup();
+                const backupData = await getAllDataForBackup();
                 const backupName = `Auto Backup - ${backupType === 'auto_login' ? 'Login' : 'Logout'} - ${new Date().toLocaleString()}`;
                 
                 await createBackup(backupName, backupData, backupType);
@@ -9418,7 +9461,7 @@
                     return; // User cancelled
                 }
                 
-                const backupData = getAllDataForBackup();
+                const backupData = await getAllDataForBackup();
                 
                 await createBackup(backupName, backupData, 'manual');
                 alert('Backup created successfully!');
@@ -9505,7 +9548,7 @@
                 
                 const backupData = backup.backup_data;
                 
-                // Restore all data
+                // Restore all data (core)
                 data.riders = backupData.riders || [];
                 data.coaches = backupData.coaches || [];
                 data.rides = backupData.rides || [];
@@ -9516,12 +9559,20 @@
                 data.coachRoles = backupData.coachRoles || [];
                 data.riderRoles = backupData.riderRoles || [];
                 data.timeEstimationSettings = backupData.timeEstimationSettings || {};
+                if (backupData.currentRide !== undefined) data.currentRide = backupData.currentRide;
+
+                // Restore additional tables (v2.0+ backups)
+                if (Array.isArray(backupData.riderFeedback)) data.riderFeedback = backupData.riderFeedback;
+                if (Array.isArray(backupData.rideNotes)) data.rideNotes = backupData.rideNotes;
+                if (Array.isArray(backupData.riderAvailability)) data.riderAvailability = backupData.riderAvailability;
+                if (Array.isArray(backupData.colorNames)) data.colorNames = backupData.colorNames;
                 
                 // Save to localStorage immediately
                 saveData();
                 
                 if (!isDeveloperMode) {
-                    // Save to Supabase (this will update all tables)
+                    // Save ALL data to Supabase (riders, coaches, rides, routes, etc.)
+                    alert('Restoring data to Supabase — this may take a moment. Do NOT close the page.');
                     await saveAllDataToSupabase();
                 } else {
                     console.log('Developer mode: backup restore applied locally only (not written to Supabase).');
@@ -9561,21 +9612,175 @@
         }
         
         // Save all data to Supabase (used during restore)
+        // This performs a FULL sync: upserts all local data into Supabase tables.
         async function saveAllDataToSupabase() {
-            // This function would need to call individual save functions for each data type
-            // For now, we'll rely on the existing save mechanisms
-            // In a full implementation, you'd want to:
-            // 1. Save all riders
-            // 2. Save all coaches
-            // 3. Save all rides
-            // 4. Save all routes
-            // 5. Save season settings
-            // 6. Save auto-assign settings
-            // etc.
-            
-            console.log('Saving all data to Supabase after restore...');
-            // The existing save mechanisms will handle this on next interaction
-            // For immediate save, we'd need to implement batch save functions
+            const client = getSupabaseClient();
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            if (!client || !currentUser) {
+                console.warn('saveAllDataToSupabase: Supabase client or user not available. Data saved to localStorage only.');
+                return;
+            }
+
+            const errors = [];
+            let progress = 0;
+            const totalSteps = 9; // riders, coaches, rides, routes, races, season settings, auto-assign, color_names, rider_feedback/ride_notes/rider_availability
+
+            function logProgress(step) {
+                progress++;
+                console.log(`saveAllDataToSupabase [${progress}/${totalSteps}]: ${step}`);
+            }
+
+            // --- 1. Riders ---
+            try {
+                logProgress('Saving riders...');
+                if (Array.isArray(data.riders) && data.riders.length > 0 && typeof updateRider === 'function' && typeof createRider === 'function') {
+                    for (const rider of data.riders) {
+                        try {
+                            if (rider.id) {
+                                await updateRider(rider.id, rider);
+                            } else {
+                                const created = await createRider(rider);
+                                rider.id = created.id;
+                            }
+                        } catch (e) {
+                            errors.push(`Rider ${rider.name || rider.id}: ${e.message}`);
+                        }
+                    }
+                }
+            } catch (e) { errors.push(`Riders batch: ${e.message}`); }
+
+            // --- 2. Coaches ---
+            try {
+                logProgress('Saving coaches...');
+                if (Array.isArray(data.coaches) && data.coaches.length > 0 && typeof updateCoach === 'function' && typeof createCoach === 'function') {
+                    for (const coach of data.coaches) {
+                        try {
+                            if (coach.id) {
+                                await updateCoach(coach.id, coach);
+                            } else {
+                                const created = await createCoach(coach);
+                                coach.id = created.id;
+                            }
+                        } catch (e) {
+                            errors.push(`Coach ${coach.name || coach.id}: ${e.message}`);
+                        }
+                    }
+                }
+            } catch (e) { errors.push(`Coaches batch: ${e.message}`); }
+
+            // --- 3. Rides ---
+            try {
+                logProgress('Saving rides...');
+                if (Array.isArray(data.rides) && data.rides.length > 0) {
+                    for (const ride of data.rides) {
+                        try {
+                            await saveRideToDB(ride);
+                        } catch (e) {
+                            errors.push(`Ride ${ride.date || ride.id}: ${e.message}`);
+                        }
+                    }
+                }
+            } catch (e) { errors.push(`Rides batch: ${e.message}`); }
+
+            // --- 4. Routes ---
+            try {
+                logProgress('Saving routes...');
+                if (Array.isArray(data.routes) && data.routes.length > 0 && typeof updateRoute === 'function' && typeof createRoute === 'function') {
+                    for (const route of data.routes) {
+                        try {
+                            if (route.id) {
+                                await updateRoute(route.id, route);
+                            } else {
+                                const created = await createRoute(route);
+                                route.id = created.id;
+                            }
+                        } catch (e) {
+                            errors.push(`Route ${route.name || route.id}: ${e.message}`);
+                        }
+                    }
+                }
+            } catch (e) { errors.push(`Routes batch: ${e.message}`); }
+
+            // --- 5. Races ---
+            try {
+                logProgress('Saving races...');
+                if (Array.isArray(data.races) && data.races.length > 0 && typeof updateRace === 'function' && typeof createRace === 'function') {
+                    for (const race of data.races) {
+                        try {
+                            if (race.id) {
+                                await updateRace(race.id, race);
+                            } else {
+                                const created = await createRace(race);
+                                race.id = created.id;
+                            }
+                        } catch (e) {
+                            errors.push(`Race ${race.name || race.id}: ${e.message}`);
+                        }
+                    }
+                }
+            } catch (e) { errors.push(`Races batch: ${e.message}`); }
+
+            // --- 6. Season Settings ---
+            try {
+                logProgress('Saving season settings...');
+                if (data.seasonSettings && typeof saveSeasonSettings === 'function') {
+                    await saveSeasonSettings(data.seasonSettings);
+                }
+            } catch (e) { errors.push(`Season settings: ${e.message}`); }
+
+            // --- 7. Auto-Assign Settings ---
+            try {
+                logProgress('Saving auto-assign settings...');
+                if (data.autoAssignSettings && typeof saveAutoAssignSettings === 'function') {
+                    await saveAutoAssignSettings(data.autoAssignSettings);
+                }
+            } catch (e) { errors.push(`Auto-assign settings: ${e.message}`); }
+
+            // --- 8. Color Names ---
+            try {
+                logProgress('Saving color names...');
+                if (Array.isArray(data.colorNames) && data.colorNames.length > 0) {
+                    // Bulk upsert color names
+                    const { error: colorError } = await client
+                        .from('color_names')
+                        .upsert(data.colorNames.map(cn => ({
+                            id: cn.id,
+                            name: cn.name,
+                            sort_order: cn.sort_order !== undefined ? cn.sort_order : cn.sortOrder
+                        })), { onConflict: 'id' });
+                    if (colorError) errors.push(`Color names: ${colorError.message}`);
+                }
+            } catch (e) { errors.push(`Color names: ${e.message}`); }
+
+            // --- 9. Rider Feedback, Ride Notes, Rider Availability ---
+            try {
+                logProgress('Saving rider feedback, ride notes, rider availability...');
+                if (Array.isArray(data.riderFeedback) && data.riderFeedback.length > 0) {
+                    const { error: fbError } = await client
+                        .from('rider_feedback')
+                        .upsert(data.riderFeedback, { onConflict: 'id' });
+                    if (fbError) errors.push(`Rider feedback: ${fbError.message}`);
+                }
+                if (Array.isArray(data.rideNotes) && data.rideNotes.length > 0) {
+                    const { error: notesError } = await client
+                        .from('ride_notes')
+                        .upsert(data.rideNotes, { onConflict: 'ride_id' });
+                    if (notesError) errors.push(`Ride notes: ${notesError.message}`);
+                }
+                if (Array.isArray(data.riderAvailability) && data.riderAvailability.length > 0) {
+                    const { error: availError } = await client
+                        .from('rider_availability')
+                        .upsert(data.riderAvailability, { onConflict: 'ride_id,rider_id' });
+                    if (availError) errors.push(`Rider availability: ${availError.message}`);
+                }
+            } catch (e) { errors.push(`Feedback/notes/availability: ${e.message}`); }
+
+            if (errors.length > 0) {
+                console.error('saveAllDataToSupabase completed with errors:', errors);
+                alert(`Restore saved to Supabase with ${errors.length} error(s). Check the console (F12) for details.\n\nFirst error: ${errors[0]}`);
+            } else {
+                console.log('saveAllDataToSupabase: All data saved to Supabase successfully.');
+            }
         }
         
         // ============ TAB STATE PERSISTENCE ============
@@ -11300,9 +11505,19 @@
             // Ensure data is up to date before exporting
             saveData();
             
+            // Fetch additional tables from Supabase for a FULL export
+            let riderFeedback = [], rideNotes = [], riderAvailability = [], colorNames = [];
+            const client = getSupabaseClient();
+            if (client) {
+                try { const { data: fb } = await client.from('rider_feedback').select('*'); riderFeedback = fb || []; } catch (e) { console.warn('Export: rider_feedback fetch failed', e); }
+                try { const { data: rn } = await client.from('ride_notes').select('*'); rideNotes = rn || []; } catch (e) { console.warn('Export: ride_notes fetch failed', e); }
+                try { const { data: ra } = await client.from('rider_availability').select('*'); riderAvailability = ra || []; } catch (e) { console.warn('Export: rider_availability fetch failed', e); }
+                try { const { data: cn } = await client.from('color_names').select('*').order('sort_order', { ascending: true }); colorNames = cn || []; } catch (e) { console.warn('Export: color_names fetch failed', e); }
+            }
+            
             // Build complete export with all data
             const exportData = {
-                version: '2.0',
+                version: '3.0',
                 exportedAt: new Date().toISOString(),
                 data: {
                     riders: data.riders || [],
@@ -11315,7 +11530,11 @@
                     autoAssignSettings: data.autoAssignSettings || null,
                     timeEstimationSettings: data.timeEstimationSettings || null,
                     coachRoles: data.coachRoles || [],
-                    riderRoles: data.riderRoles || []
+                    riderRoles: data.riderRoles || [],
+                    riderFeedback: riderFeedback,
+                    rideNotes: rideNotes,
+                    riderAvailability: riderAvailability,
+                    colorNames: colorNames
                 }
             };
 
@@ -11327,7 +11546,7 @@
             // Create a wrapper object to identify encrypted backups
             const encryptedWrapper = {
                 encrypted: true,
-                version: '2.0',
+                version: '3.0',
                 data: encryptedData
             };
             
@@ -11447,7 +11666,7 @@
                 if (!file) return;
 
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = async (e) => {
                     try {
                         const importedData = JSON.parse(e.target.result);
                         
@@ -11455,9 +11674,10 @@
                             throw new Error('Invalid file format');
                         }
 
-                        // Check if this is a full backup (version 2.0) or old season settings format
+                        // Check if this is a full backup (version 2.0/3.0) or old season settings format
+                        const isFullBackup = (importedData.version === '2.0' || importedData.version === '3.0') && importedData.data;
                         let dataToImport = null;
-                        if (importedData.version === '2.0' && importedData.data) {
+                        if (isFullBackup) {
                             // Full backup format - restore all data
                             if (!confirm('This is a complete backup file. This will REPLACE ALL existing data (riders, coaches, rides, assignments, settings, etc.). This action cannot be undone. Continue?')) {
                                 return;
@@ -11469,44 +11689,34 @@
                         }
 
                         // If it's a full backup, restore everything
-                        if (importedData.version === '2.0' && importedData.data) {
-                            // Restore all data
-                            if (Array.isArray(dataToImport.riders)) {
-                                data.riders = dataToImport.riders;
-                            }
-                            if (Array.isArray(dataToImport.coaches)) {
-                                data.coaches = dataToImport.coaches;
-                            }
-                            if (Array.isArray(dataToImport.rides)) {
-                                data.rides = dataToImport.rides;
-                            }
-                            if (Array.isArray(dataToImport.routes)) {
-                                data.routes = dataToImport.routes;
-                            }
-                            if (Array.isArray(dataToImport.races)) {
-                                data.races = dataToImport.races;
-                            }
-                            if (dataToImport.currentRide !== undefined) {
-                                data.currentRide = dataToImport.currentRide;
-                            }
-                            if (dataToImport.seasonSettings) {
-                                data.seasonSettings = dataToImport.seasonSettings;
-                            }
-                            if (dataToImport.autoAssignSettings) {
-                                data.autoAssignSettings = dataToImport.autoAssignSettings;
-                            }
-                            if (dataToImport.timeEstimationSettings) {
-                                data.timeEstimationSettings = dataToImport.timeEstimationSettings;
-                            }
-                            if (Array.isArray(dataToImport.coachRoles)) {
-                                data.coachRoles = dataToImport.coachRoles;
-                            }
-                            if (Array.isArray(dataToImport.riderRoles)) {
-                                data.riderRoles = dataToImport.riderRoles;
-                            }
+                        if (isFullBackup) {
+                            // Restore all core data
+                            if (Array.isArray(dataToImport.riders)) data.riders = dataToImport.riders;
+                            if (Array.isArray(dataToImport.coaches)) data.coaches = dataToImport.coaches;
+                            if (Array.isArray(dataToImport.rides)) data.rides = dataToImport.rides;
+                            if (Array.isArray(dataToImport.routes)) data.routes = dataToImport.routes;
+                            if (Array.isArray(dataToImport.races)) data.races = dataToImport.races;
+                            if (dataToImport.currentRide !== undefined) data.currentRide = dataToImport.currentRide;
+                            if (dataToImport.seasonSettings) data.seasonSettings = dataToImport.seasonSettings;
+                            if (dataToImport.autoAssignSettings) data.autoAssignSettings = dataToImport.autoAssignSettings;
+                            if (dataToImport.timeEstimationSettings) data.timeEstimationSettings = dataToImport.timeEstimationSettings;
+                            if (Array.isArray(dataToImport.coachRoles)) data.coachRoles = dataToImport.coachRoles;
+                            if (Array.isArray(dataToImport.riderRoles)) data.riderRoles = dataToImport.riderRoles;
+
+                            // Restore additional tables (v2.0+/v3.0 backups)
+                            if (Array.isArray(dataToImport.riderFeedback)) data.riderFeedback = dataToImport.riderFeedback;
+                            if (Array.isArray(dataToImport.rideNotes)) data.rideNotes = dataToImport.rideNotes;
+                            if (Array.isArray(dataToImport.riderAvailability)) data.riderAvailability = dataToImport.riderAvailability;
+                            if (Array.isArray(dataToImport.colorNames)) data.colorNames = dataToImport.colorNames;
 
                             // Save to localStorage
                             saveData();
+
+                            // Save to Supabase if authenticated
+                            if (!isDeveloperMode) {
+                                alert('Restoring data to Supabase — this may take a moment. Do NOT close the page.');
+                                await saveAllDataToSupabase();
+                            }
 
                             // Reload season settings into UI
                             loadSeasonSettings();
@@ -20534,13 +20744,11 @@
                                         <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #666;">Route</h4>
                                         <div style="font-size: 14px; color: #333;">
                                             <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(routeDisplay.displayName)}</div>
-                                            ${routeDisplay.route && (routeDisplay.route.distance || routeDisplay.route.elevation || routeDisplay.route.estimatedTime) ? `
+                                            ${routeDisplay.route && (routeDisplay.route.distance || routeDisplay.route.elevation) ? `
                                                 <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                                     ${routeDisplay.route.distance ? '<span>' + escapeHtml(routeDisplay.route.distance) + '</span>' : ''}
-                                                    ${routeDisplay.route.distance && (routeDisplay.route.elevation || routeDisplay.route.estimatedTime) ? ' · ' : ''}
+                                                    ${routeDisplay.route.distance && routeDisplay.route.elevation ? ' · ' : ''}
                                                     ${routeDisplay.route.elevation ? '<span>' + escapeHtml(routeDisplay.route.elevation) + '</span>' : ''}
-                                                    ${routeDisplay.route.elevation && routeDisplay.route.estimatedTime ? ' · ' : ''}
-                                                    ${routeDisplay.route.estimatedTime ? '<span>' + escapeHtml(routeDisplay.route.estimatedTime) + '</span>' : ''}
                                                 </div>
                                             ` : ''}
                                             ${!routeDisplay.isLeaderChoice && routeDisplay.stravaUrl ? `
@@ -21927,7 +22135,7 @@
                                 <span style="font-size: 12px; color: #666;">${groupSectionsState.route ? '▼' : '▶'}</span>
                             </div>
                             <div data-section="route" style="${groupSectionsState.route ? '' : 'display: none;'}">
-                                <select onchange="updateGroupRoute(${group.id}, this.value)" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                                <select onchange="handleRouteSelectChange(${group.id}, this.value, '${ride.id}', this)" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                                     <option value="">-- Select Route --</option>
                                     ${renderRouteOptions(group.routeId, group, ride)}
                                 </select>
@@ -23463,180 +23671,117 @@
             // updateRoutePreviews is called inside renderAssignments
         }
 
+        function handleRouteSelectChange(groupId, value, rideId, selectEl) {
+            if (value === '__toggle_all_locations__') {
+                // Toggle the location filter, then re-render
+                toggleRouteLocationFilter(rideId);
+                return;
+            }
+            if (value === '__toggle_this_location__') {
+                // Toggle back to filtered, then re-render
+                toggleRouteLocationFilter(rideId);
+                return;
+            }
+            // Normal route selection
+            updateGroupRoute(groupId, value);
+        }
+
+        function toggleRouteLocationFilter(rideId) {
+            // Normalize rideId for comparison (could be string or number)
+            const numericId = typeof rideId === 'string' ? parseInt(rideId, 10) : rideId;
+            if (showAllRouteLocationsForRide === numericId) {
+                showAllRouteLocationsForRide = null;
+            } else {
+                showAllRouteLocationsForRide = numericId;
+            }
+            const ride = data.rides.find(r => r.id === numericId || String(r.id) === String(rideId));
+            if (ride) {
+                renderAssignments(ride);
+            }
+        }
+
         function renderRouteOptions(selectedRouteId, group, ride) {
             const routes = data.routes || [];
             if (routes.length === 0) {
                 return '<option value="">No routes available</option>';
             }
-            
-            // If no group or ride provided, render all routes normally
+
+            // Format: DISTANCE/ELEVATION - ROUTENAME [location suffix]
+            function routeOptionHtml(route, suffix) {
+                const selected = selectedRouteId && String(route.id) === String(selectedRouteId) ? 'selected' : '';
+                const dist = route.distance ? escapeHtml(route.distance) : '';
+                const elev = route.elevation ? escapeHtml(route.elevation) : '';
+                const name = toBoldUnicode(escapeHtml(route.name || 'Unnamed Route'));
+                let prefix = '';
+                if (dist && elev) prefix = `${dist}/${elev} – `;
+                else if (dist) prefix = `${dist} – `;
+                else if (elev) prefix = `${elev} – `;
+                let routeText = prefix + name;
+                if (suffix) routeText += suffix;
+                return `<option value="${route.id}" ${selected}>${routeText}</option>`;
+            }
+
+            // If no group or ride provided, render all routes (simple mode)
             if (!group || !ride) {
-                let html = routes.map(route => {
-                    const selected = selectedRouteId && String(route.id) === String(selectedRouteId) ? 'selected' : '';
-                    let routeText = escapeHtml(route.name || 'Unnamed Route');
-                    
-                    // Add distance, elevation, and time if available
-                    const details = [];
-                    if (route.distance) details.push(route.distance);
-                    if (route.elevation) details.push(route.elevation);
-                    if (route.estimatedTime) details.push(route.estimatedTime);
-                    if (details.length > 0) {
-                        routeText += ` (${details.join(' / ')})`;
-                    }
-                    
-                    return `<option value="${route.id}" ${selected}>${routeText}</option>`;
-                }).join('');
-                
-                // Add "Ride Leader's Choice" option at the bottom
+                let html = routes.map(route => routeOptionHtml(route, '')).join('');
                 const leaderChoiceSelected = selectedRouteId && String(selectedRouteId) === 'leader-choice' ? 'selected' : '';
                 html += `<option value="leader-choice" ${leaderChoiceSelected}>Ride Leader's Choice</option>`;
-                
                 return html;
             }
-            
-            // Parse practice time
-            const practiceStartTime = ride.startTime || ride.time || '';
-            const practiceEndTime = ride.endTime || '';
-            let practiceDurationMinutes = null;
-            let practiceStartMinutes = null;
-            
-            if (practiceStartTime && practiceEndTime) {
-                // Parse time strings (format: "HH:MM")
-                const startParts = practiceStartTime.split(':');
-                const endParts = practiceEndTime.split(':');
-                if (startParts.length === 2 && endParts.length === 2) {
-                    const startMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
-                    const endMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
-                    practiceDurationMinutes = endMins - startMins;
-                    practiceStartMinutes = startMins;
-                }
-            }
-            
-            // Get group riders' fitness and skills ranges
-            const groupRiders = (group.riders || [])
-                .map(id => getRiderById(id))
-                .filter(Boolean);
-            
-            let groupFitnessMin = null;
-            let groupFitnessMax = null;
-            let groupSkillsMin = null;
-            let groupSkillsMax = null;
-            
-            if (groupRiders.length > 0) {
-                const fitnessScale = getFitnessScale();
-                const skillsScale = getSkillsScale();
-                
-                const fitnesses = groupRiders.map(r => Math.max(1, Math.min(fitnessScale, parseInt(r.fitness || Math.ceil(fitnessScale / 2), 10))));
-                const skills = groupRiders.map(r => Math.max(1, Math.min(skillsScale, parseInt(r.skills || Math.ceil(skillsScale / 2), 10))));
-                
-                groupFitnessMin = Math.min(...fitnesses);
-                groupFitnessMax = Math.max(...fitnesses);
-                groupSkillsMin = Math.min(...skills);
-                groupSkillsMax = Math.max(...skills);
-            }
-            
-            // Categorize routes
-            const matchingRoutes = [];
-            const otherRoutes = [];
-            
-            routes.forEach(route => {
-                let matchesTime = false;
-                let matchesFitnessSkills = false;
-                
-                // Check time match
-                if (practiceDurationMinutes !== null && practiceStartMinutes !== null && route.estimatedTime) {
-                    // Parse route time range
-                    const timeRangeMatch = route.estimatedTime.match(/(.+?)\s*-\s*(.+)/);
-                    if (timeRangeMatch) {
-                        const time1Str = timeRangeMatch[1].trim();
-                        const time2Str = timeRangeMatch[2].trim();
-                        const time1Seconds = parseTime(time1Str);
-                        const time2Seconds = parseTime(time2Str);
-                        const time1Minutes = time1Seconds / 60; // Convert seconds to minutes
-                        const time2Minutes = time2Seconds / 60;
-                        const routeMidpointMinutes = (time1Minutes + time2Minutes) / 2;
-                        const routeMaxMinutes = Math.max(time1Minutes, time2Minutes);
-                        
-                        // Check: midpoint fits within practice time AND upper end is not more than 30 min longer
-                        if (routeMidpointMinutes <= practiceDurationMinutes && 
-                            routeMaxMinutes <= practiceDurationMinutes + 30) {
-                            matchesTime = true;
-                        }
+
+            // Determine practice location for route filtering
+            const practiceLocation = (ride.meetLocation || '').trim().toLowerCase();
+            const rideIdNum = typeof ride.id === 'string' ? parseInt(ride.id, 10) : ride.id;
+            const showAllLocations = showAllRouteLocationsForRide === rideIdNum;
+
+            // Split routes by location match
+            let localRoutes = [];
+            let otherLocationRoutes = [];
+
+            if (practiceLocation && !showAllLocations) {
+                routes.forEach(route => {
+                    const routeLoc = (route.startLocation || '').trim().toLowerCase();
+                    if (!routeLoc || routeLoc === practiceLocation) {
+                        localRoutes.push(route);
                     }
-                }
-                
-                // Check fitness/skills match
-                if (groupFitnessMin !== null && groupFitnessMax !== null && 
-                    groupSkillsMin !== null && groupSkillsMax !== null) {
-                    const fitnessScale = getFitnessScale();
-                    const skillsScale = getSkillsScale();
-                    
-                    const routeFitnessMin = route.fitnessMin !== undefined ? route.fitnessMin : 1;
-                    const routeFitnessMax = route.fitnessMax !== undefined ? route.fitnessMax : fitnessScale;
-                    const routeSkillsMin = route.skillsMin !== undefined ? route.skillsMin : 1;
-                    const routeSkillsMax = route.skillsMax !== undefined ? route.skillsMax : skillsScale;
-                    
-                    // Check if ranges overlap
-                    const fitnessOverlaps = !(routeFitnessMax < groupFitnessMin || routeFitnessMin > groupFitnessMax);
-                    const skillsOverlaps = !(routeSkillsMax < groupSkillsMin || routeSkillsMin > groupSkillsMax);
-                    
-                    if (fitnessOverlaps && skillsOverlaps) {
-                        matchesFitnessSkills = true;
+                });
+            } else if (practiceLocation && showAllLocations) {
+                routes.forEach(route => {
+                    const routeLoc = (route.startLocation || '').trim().toLowerCase();
+                    if (!routeLoc || routeLoc === practiceLocation) {
+                        localRoutes.push(route);
+                    } else {
+                        otherLocationRoutes.push(route);
                     }
-                }
-                
-                // Route matches if both time and fitness/skills match
-                if (matchesTime && matchesFitnessSkills) {
-                    matchingRoutes.push(route);
-                } else {
-                    otherRoutes.push(route);
-                }
-            });
-            
-            // Build HTML: matching routes first, then separator, then others
+                });
+            } else {
+                localRoutes = routes.slice();
+            }
+
+            // Build HTML — flat list, no time/fitness separators
             let html = '';
-            
-            // Matching routes
-            matchingRoutes.forEach(route => {
-                const selected = selectedRouteId && String(route.id) === String(selectedRouteId) ? 'selected' : '';
-                let routeText = escapeHtml(route.name || 'Unnamed Route');
-                
-                const details = [];
-                if (route.distance) details.push(route.distance);
-                if (route.elevation) details.push(route.elevation);
-                if (route.estimatedTime) details.push(route.estimatedTime);
-                if (details.length > 0) {
-                    routeText += ` (${details.join(' / ')})`;
-                }
-                
-                html += `<option value="${route.id}" ${selected}>${routeText}</option>`;
-            });
-            
-            // Separator if there are both matching and other routes
-            if (matchingRoutes.length > 0 && otherRoutes.length > 0) {
-                html += `<option disabled>──────────</option>`;
+            localRoutes.forEach(route => { html += routeOptionHtml(route, ''); });
+
+            // Other-location routes (only when showAllLocations is true)
+            if (otherLocationRoutes.length > 0) {
+                html += `<option disabled>── Other Locations ──</option>`;
+                otherLocationRoutes.forEach(route => { html += routeOptionHtml(route, ` [${escapeHtml(route.startLocation || '')}]`); });
             }
-            
-            // Other routes
-            otherRoutes.forEach(route => {
-                const selected = selectedRouteId && String(route.id) === String(selectedRouteId) ? 'selected' : '';
-                let routeText = escapeHtml(route.name || 'Unnamed Route');
-                
-                const details = [];
-                if (route.distance) details.push(route.distance);
-                if (route.elevation) details.push(route.elevation);
-                if (route.estimatedTime) details.push(route.estimatedTime);
-                if (details.length > 0) {
-                    routeText += ` (${details.join(' / ')})`;
-                }
-                
-                html += `<option value="${route.id}" ${selected}>${routeText}</option>`;
-            });
-            
-            // Add "Ride Leader's Choice" option at the bottom
+
+            // Ride Leader's Choice
             const leaderChoiceSelected = selectedRouteId && String(selectedRouteId) === 'leader-choice' ? 'selected' : '';
             html += `<option value="leader-choice" ${leaderChoiceSelected}>Ride Leader's Choice</option>`;
-            
+
+            // Location toggle option at the bottom
+            if (practiceLocation) {
+                html += `<option disabled>──────────</option>`;
+                if (showAllLocations) {
+                    html += `<option value="__toggle_this_location__">↩ Show only routes from this location</option>`;
+                } else {
+                    html += `<option value="__toggle_all_locations__">📍 Load routes from all locations</option>`;
+                }
+            }
+
             return html;
         }
 
@@ -25634,13 +25779,11 @@
                                             <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">Route:</strong>
                                             <div style="font-size: 14px; color: #333;">
                                                 <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
-                                                ${route.distance || route.elevation || route.estimatedTime ? `
+                                                ${route.distance || route.elevation ? `
                                                     <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                                         ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
-                                                        ${route.distance && (route.elevation || route.estimatedTime) ? ' · ' : ''}
+                                                        ${route.distance && route.elevation ? ' · ' : ''}
                                                         ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
-                                                        ${route.elevation && route.estimatedTime ? ' · ' : ''}
-                                                        ${route.estimatedTime ? `<span>${escapeHtml(route.estimatedTime)}</span>` : ''}
                                                     </div>
                                                 ` : ''}
                                                 ${stravaUrl ? `
@@ -26081,13 +26224,11 @@
                                             <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">Route:</strong>
                                             <div style="font-size: 14px; color: #333;">
                                                 <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
-                                                ${route.distance || route.elevation || route.estimatedTime ? `
+                                                ${route.distance || route.elevation ? `
                                                     <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                                         ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
-                                                        ${route.distance && (route.elevation || route.estimatedTime) ? ' · ' : ''}
+                                                        ${route.distance && route.elevation ? ' · ' : ''}
                                                         ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
-                                                        ${route.elevation && route.estimatedTime ? ' · ' : ''}
-                                                        ${route.estimatedTime ? `<span>${escapeHtml(route.estimatedTime)}</span>` : ''}
                                                     </div>
                                                 ` : ''}
                                                 ${stravaUrl ? `
@@ -26458,6 +26599,22 @@
         // Cap live embeds so the Routes tab stays responsive; extra routes show a placeholder.
         const MAX_STRAVA_EMBEDS = 0; // Temporarily disable all live Strava embeds (WebGL/Safari); cached preview images still show when uploaded
 
+        function setRoutesSortBy(value) {
+            const sortBySelect = document.getElementById('routes-sort-by');
+            if (sortBySelect) {
+                // Add the option if it doesn't exist (for name/start sorts not in the dropdown)
+                let option = sortBySelect.querySelector(`option[value="${value}"]`);
+                if (!option) {
+                    option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value; // hidden, not important
+                    sortBySelect.appendChild(option);
+                }
+                sortBySelect.value = value;
+            }
+            renderRoutes();
+        }
+
         function renderRoutes() {
             const container = document.getElementById('routes-grid');
             if (!container) return;
@@ -26491,20 +26648,27 @@
                     let compareA, compareB;
                     
                     try {
-                    if (sortBy.startsWith('distance-')) {
+                    if (sortBy.startsWith('name-')) {
+                        compareA = (a.name || '').toLowerCase();
+                        compareB = (b.name || '').toLowerCase();
+                        const isAscending = sortBy.endsWith('-asc');
+                        return isAscending ? compareA.localeCompare(compareB) : compareB.localeCompare(compareA);
+                    } else if (sortBy.startsWith('start-')) {
+                        compareA = (a.startLocation || '').toLowerCase();
+                        compareB = (b.startLocation || '').toLowerCase();
+                        const isAscending = sortBy.endsWith('-asc');
+                        return isAscending ? compareA.localeCompare(compareB) : compareB.localeCompare(compareA);
+                    } else if (sortBy.startsWith('distance-')) {
                         compareA = parseDistance(a.distance || '0');
                         compareB = parseDistance(b.distance || '0');
                     } else if (sortBy.startsWith('elevation-')) {
                         compareA = parseElevation(a.elevation || '0');
                         compareB = parseElevation(b.elevation || '0');
-                    } else if (sortBy.startsWith('time-')) {
-                        compareA = parseTimeMidpoint(a.estimatedTime || '0:00');
-                        compareB = parseTimeMidpoint(b.estimatedTime || '0:00');
                     } else {
                         return 0;
                     }
                     
-                    // Determine sort direction
+                    // Determine sort direction (for numeric sorts)
                     const isAscending = sortBy.endsWith('-asc');
                         const result = isAscending ? compareA - compareB : compareB - compareA;
                         return result;
@@ -26524,26 +26688,35 @@
                     const name = escapeHtml(route.name || 'Untitled Route');
                     const isStrava = route.stravaEmbedCode ? true : false;
                     const stravaIcon = isStrava ? '<img src="assets/strava_logo.png" alt="Strava" style="height: 16px; width: auto; vertical-align: middle; margin-right: 8px;">' : '';
+                    const start = escapeHtml(route.startLocation || '—');
                     const distance = escapeHtml(route.distance || 'N/A');
                     const elevation = escapeHtml(route.elevation || 'N/A');
-                    const duration = escapeHtml(route.estimatedTime || 'N/A');
                     return `<tr>
                         <td>${stravaIcon}${name}</td>
+                        <td>${start}</td>
                         <td>${distance}</td>
                         <td>${elevation}</td>
-                        <td>${duration}</td>
                     </tr>`;
                 }).join('');
+
+                // Build sortable column headers with arrow indicators
+                function sortHeader(label, colKey) {
+                    const isSorted = sortBy.startsWith(colKey + '-');
+                    const isAsc = sortBy === colKey + '-asc';
+                    const arrow = isSorted ? (isAsc ? ' ▲' : ' ▼') : '';
+                    const nextDir = isSorted && !isAsc ? 'asc' : (isSorted && isAsc ? 'desc' : 'asc');
+                    return `<th style="cursor: pointer; user-select: none; white-space: nowrap;" onclick="setRoutesSortBy('${colKey}-${nextDir}')">${label}${arrow}</th>`;
+                }
 
                 container.innerHTML = `
                     <div class="routes-list-table">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Route Name</th>
-                                    <th>Distance</th>
-                                    <th>Elevation Gain</th>
-                                    <th>Duration</th>
+                                    ${sortHeader('Route Name', 'name')}
+                                    ${sortHeader('Start', 'start')}
+                                    ${sortHeader('Distance', 'distance')}
+                                    ${sortHeader('Elevation Gain', 'elevation')}
                                 </tr>
                             </thead>
                             <tbody>
@@ -26673,9 +26846,7 @@
                 const fitnessRange = (fitnessMin === 1 && fitnessMax === fitnessScale) ? 'ALL' : `${fitnessMin}-${fitnessMax}`;
                 const skillsRange = (skillsMin === 1 && skillsMax === skillsScale) ? 'ALL' : `${skillsMin}-${skillsMax}`;
                 
-                const durationText = route.estimatedTime || 'N/A';
-                
-                routeInfoLine.textContent = `Relative Pace Range: ${fitnessRange} | Bike Skills Range: ${skillsRange} | Duration: ${durationText}`;
+                routeInfoLine.textContent = `Relative Pace Range: ${fitnessRange} | Bike Skills Range: ${skillsRange}`;
                 routeCard.appendChild(routeInfoLine);
             } else {
                 // For manual routes, show route info card instead of embed
@@ -26683,15 +26854,13 @@
                 routeInfoCard.style.cssText = 'padding: 20px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px;';
                 routeInfoCard.innerHTML = `
                     <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
-                    ${route.distance || route.elevation || route.estimatedTime ? `
-                        <div style="font-size: 14px; color: #666; margin-bottom: 8px;">
-                            ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
-                            ${route.distance && (route.elevation || route.estimatedTime) ? ' · ' : ''}
-                            ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
-                            ${route.elevation && route.estimatedTime ? ' · ' : ''}
-                            ${route.estimatedTime ? `<span>${escapeHtml(route.estimatedTime)}</span>` : ''}
-                        </div>
-                    ` : ''}
+                    ${route.distance || route.elevation ? `
+                                        <div style="font-size: 14px; color: #666; margin-bottom: 8px;">
+                                            ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
+                                            ${route.distance && route.elevation ? ' · ' : ''}
+                                            ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
+                                        </div>
+                                    ` : ''}
                     ${route.description ? `
                         <div style="font-size: 13px; color: #666; margin-top: 8px; line-height: 1.4;">${escapeHtml(route.description)}</div>
                     ` : ''}
@@ -26712,9 +26881,7 @@
                 const fitnessRange = (fitnessMin === 1 && fitnessMax === fitnessScale) ? 'ALL' : `${fitnessMin}-${fitnessMax}`;
                 const skillsRange = (skillsMin === 1 && skillsMax === skillsScale) ? 'ALL' : `${skillsMin}-${skillsMax}`;
                 
-                const durationText = route.estimatedTime || 'N/A';
-                
-                routeInfoLine.textContent = `Relative Pace Range: ${fitnessRange} | Bike Skills Range: ${skillsRange} | Duration: ${durationText}`;
+                routeInfoLine.textContent = `Relative Pace Range: ${fitnessRange} | Bike Skills Range: ${skillsRange}`;
                 routeCard.appendChild(routeInfoLine);
             }
             
@@ -26741,19 +26908,19 @@
                                         ${isStrava ? '<img src="assets/strava_logo.png" alt="Strava" style="height: 16px; width: auto; flex-shrink: 0;">' : ''}
                                         <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;">${escapeHtml(route.name || 'Unnamed Route')}</span>
                                     </div>
-                                    ${route.distance || route.elevation || route.estimatedTime ? `
+                                    ${route.startLocation || route.distance || route.elevation ? `
                                         <div style="font-size: 12px; color: #666;">
+                                            ${route.startLocation ? `<span style="font-weight: 500;">${escapeHtml(route.startLocation)}</span>` : ''}
+                                            ${route.startLocation && (route.distance || route.elevation) ? ' · ' : ''}
                                             ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
-                                            ${route.distance && (route.elevation || route.estimatedTime) ? ' · ' : ''}
+                                            ${route.distance && route.elevation ? ' · ' : ''}
                                             ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
-                                            ${route.elevation && route.estimatedTime ? ' · ' : ''}
-                                            ${route.estimatedTime ? `<span>${escapeHtml(route.estimatedTime)}</span>` : ''}
                                         </div>
                                     ` : ''}
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn-small secondary" onclick="openAddRouteModal(${route.id}, ${!route.stravaEmbedCode})">Edit</button>
+                                <button class="btn-small secondary" onclick="openAddRouteModal(${route.id})">Edit</button>
                                 <button class="btn-small danger" onclick="deleteRouteHandler(${route.id}); openRoutesManagerModal();">Delete</button>
                             </div>
                         </div>
@@ -26772,12 +26939,84 @@
             modal.setAttribute('aria-hidden', 'true');
         }
 
+        function toggleStravaRouteSection() {
+            const section = document.getElementById('strava-embed-section');
+            const toggleSection = document.getElementById('strava-toggle-section');
+            const headerEl = document.getElementById('add-route-modal-header');
+            const nameInput = document.getElementById('route-name');
+            const distanceInput = document.getElementById('route-distance');
+            const elevationInput = document.getElementById('route-elevation');
+            const modal = document.getElementById('add-route-modal');
+            if (!section) return;
+            const isShowing = section.style.display !== 'none';
+            if (isShowing) {
+                // Hide Strava section
+                section.style.display = 'none';
+                if (toggleSection) toggleSection.querySelector('button').textContent = 'Use Strava Route';
+                if (headerEl) { headerEl.style.backgroundColor = ''; headerEl.style.color = ''; }
+                if (modal) modal.setAttribute('data-is-manual-route', 'true');
+                if (nameInput) nameInput.placeholder = 'Enter route name';
+                if (distanceInput) distanceInput.placeholder = 'Enter distance (e.g., 15.5 mi)';
+                if (elevationInput) elevationInput.placeholder = 'Enter elevation gain (e.g., 1,200 ft)';
+            } else {
+                // Show Strava section
+                section.style.display = 'block';
+                if (toggleSection) toggleSection.querySelector('button').textContent = 'Hide Strava Route';
+                if (headerEl) { headerEl.style.backgroundColor = '#fc5200'; headerEl.style.color = 'white'; }
+                if (modal) modal.setAttribute('data-is-manual-route', 'false');
+                if (nameInput) nameInput.placeholder = 'Will be auto-filled from Strava, or enter manually';
+                if (distanceInput) distanceInput.placeholder = 'Will be auto-filled from Strava';
+                if (elevationInput) elevationInput.placeholder = 'Will be auto-filled from Strava';
+            }
+        }
+
+        function getUniqueStartLocations() {
+            const locations = new Map();
+            if (data.seasonSettings && Array.isArray(data.seasonSettings.practices)) {
+                data.seasonSettings.practices.forEach(practice => {
+                    if (practice.meetLocation) {
+                        const key = practice.meetLocation.trim().toLowerCase();
+                        if (!locations.has(key)) {
+                            locations.set(key, practice.meetLocation.trim());
+                        }
+                    }
+                });
+            }
+            if (Array.isArray(data.rides)) {
+                data.rides.forEach(ride => {
+                    if (ride.meetLocation) {
+                        const key = ride.meetLocation.trim().toLowerCase();
+                        if (!locations.has(key)) {
+                            locations.set(key, ride.meetLocation.trim());
+                        }
+                    }
+                });
+            }
+            return Array.from(locations.values()).sort();
+        }
+
+        function populateRouteStartLocationDropdown(selectedValue) {
+            const select = document.getElementById('route-start-location');
+            if (!select) return;
+            const locations = getUniqueStartLocations();
+            select.innerHTML = '<option value="">-- Select start location --</option>';
+            locations.forEach(loc => {
+                const option = document.createElement('option');
+                option.value = loc;
+                option.textContent = loc;
+                if (selectedValue && loc.toLowerCase() === selectedValue.trim().toLowerCase()) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
         function openAddRouteModal(routeId, isManualRoute = false) {
             const modal = document.getElementById('add-route-modal');
             const titleEl = document.getElementById('add-route-modal-title');
             const headerEl = document.getElementById('add-route-modal-header');
-            const embedCodeSection = document.querySelector('#add-route-modal [for="route-embed-code"]')?.closest('div[style*="position: relative"]');
-            const fetchContainer = document.getElementById('fetch-route-data-container');
+            const stravaSection = document.getElementById('strava-embed-section');
+            const stravaToggleSection = document.getElementById('strava-toggle-section');
             
             if (!modal) return;
 
@@ -26787,35 +27026,32 @@
             const isEdit = routeId !== null;
             const route = isEdit ? (data.routes || []).find(r => r.id === routeId) : null;
             
-            // Determine if this is a manual route (non-Strava)
+            // Determine if this route has Strava data
+            const hasStrava = route && route.stravaEmbedCode;
             const isManual = isManualRoute || (route && !route.stravaEmbedCode);
             
-            // Show/hide embed code section based on route type
-            if (embedCodeSection) {
-                embedCodeSection.style.display = isManual ? 'none' : 'block';
+            // Show/hide Strava section
+            if (stravaSection) {
+                stravaSection.style.display = hasStrava ? 'block' : 'none';
             }
-            if (fetchContainer) {
-                fetchContainer.style.display = isManual ? 'none' : 'block';
+            if (stravaToggleSection) {
+                stravaToggleSection.querySelector('button').textContent = hasStrava ? 'Hide Strava Route' : 'Use Strava Route';
             }
             
             // Update header styling
             if (headerEl) {
-                if (isManual) {
-                    headerEl.style.backgroundColor = '';
-                    headerEl.style.color = '';
-                } else {
+                if (hasStrava) {
                     headerEl.style.backgroundColor = '#fc5200';
                     headerEl.style.color = 'white';
+                } else {
+                    headerEl.style.backgroundColor = '';
+                    headerEl.style.color = '';
                 }
             }
             
             // Update title
             if (titleEl) {
-                if (isEdit) {
-                    titleEl.textContent = isManual ? 'Edit Route' : 'Edit Strava Route';
-                } else {
-                    titleEl.textContent = isManual ? 'Add Route' : 'Add Strava Route';
-                }
+                titleEl.textContent = isEdit ? 'Edit Route' : 'Add New Route';
             }
 
             // Populate or clear form
@@ -26823,7 +27059,6 @@
             document.getElementById('route-description').value = route ? (route.description || '') : '';
             document.getElementById('route-distance').value = route ? (route.distance || '') : '';
             document.getElementById('route-elevation').value = route ? (route.elevation || '') : '';
-            document.getElementById('route-time').value = route ? (route.estimatedTime || '') : '';
             document.getElementById('route-embed-code').value = route ? (route.stravaEmbedCode || '') : '';
             addRouteCachedPreviewDataUrl = route ? (route.cachedPreviewDataUrl || null) : null;
             const cachedPreviewFileInput = document.getElementById('route-cached-preview-file');
@@ -26834,22 +27069,22 @@
                 cachedPreviewStatus.textContent = addRouteCachedPreviewDataUrl ? 'Current route has a cached preview (upload a new image to replace).' : '';
             }
             
+            // Populate start location dropdown
+            populateRouteStartLocationDropdown(route ? (route.startLocation || '') : '');
+            
             // Update placeholder text based on route type
             const nameInput = document.getElementById('route-name');
             const distanceInput = document.getElementById('route-distance');
             const elevationInput = document.getElementById('route-elevation');
-            const timeInput = document.getElementById('route-time');
             
             if (isManual) {
                 if (nameInput) nameInput.placeholder = 'Enter route name';
                 if (distanceInput) distanceInput.placeholder = 'Enter distance (e.g., 15.5 mi)';
                 if (elevationInput) elevationInput.placeholder = 'Enter elevation gain (e.g., 1,200 ft)';
-                if (timeInput) timeInput.placeholder = 'Enter estimated time (e.g., 2:04:20 or 2h 4m)';
             } else {
                 if (nameInput) nameInput.placeholder = 'Will be auto-filled from Strava, or enter manually';
                 if (distanceInput) distanceInput.placeholder = 'Will be auto-filled from Strava';
                 if (elevationInput) elevationInput.placeholder = 'Will be auto-filled from Strava';
-                if (timeInput) timeInput.placeholder = 'Will be calculated from distance and elevation';
             }
             
             // Initialize fitness range slider (default to full range: 1 to current fitness scale)
@@ -26899,47 +27134,6 @@
             // Update max attributes and regenerate scale labels
             updateInputMaxAttributes();
             updateRouteSliderLabels();
-            
-            // Add event listeners for auto-calculating time when distance/elevation change
-            const distanceInputEl = document.getElementById('route-distance');
-            const elevationInputEl = document.getElementById('route-elevation');
-            const timeInputEl = document.getElementById('route-time');
-            
-            // Remove existing listeners by cloning and replacing
-            if (distanceInputEl) {
-                const newDistanceInput = distanceInputEl.cloneNode(true);
-                distanceInputEl.parentNode.replaceChild(newDistanceInput, distanceInputEl);
-            }
-            if (elevationInputEl) {
-                const newElevationInput = elevationInputEl.cloneNode(true);
-                elevationInputEl.parentNode.replaceChild(newElevationInput, elevationInputEl);
-            }
-            
-            // Add new listeners
-            const updatedDistanceInput = document.getElementById('route-distance');
-            const updatedElevationInput = document.getElementById('route-elevation');
-            const updatedTimeInput = document.getElementById('route-time');
-            
-            function updateTimeFromDistanceElevation() {
-                const distance = updatedDistanceInput ? updatedDistanceInput.value.trim() : '';
-                const elevation = updatedElevationInput ? updatedElevationInput.value.trim() : '';
-                if (distance && updatedTimeInput) {
-                    const calculatedTime = calculateEstimatedTime(distance, elevation);
-                    if (calculatedTime) {
-                        // Always update since field is readonly and calculated
-                        updatedTimeInput.value = calculatedTime;
-                    }
-                }
-            }
-            
-            if (updatedDistanceInput) {
-                updatedDistanceInput.addEventListener('input', updateTimeFromDistanceElevation);
-                updatedDistanceInput.addEventListener('blur', updateTimeFromDistanceElevation);
-            }
-            if (updatedElevationInput) {
-                updatedElevationInput.addEventListener('input', updateTimeFromDistanceElevation);
-                updatedElevationInput.addEventListener('blur', updateTimeFromDistanceElevation);
-            }
             
             // Store route ID for editing and route type
             if (isEdit) {
@@ -27055,81 +27249,6 @@
             return null;
         }
 
-        // Calculate estimated time based on distance and elevation
-        // Uses configurable mountain biking speeds, adjusted for elevation and route length
-        function calculateEstimatedTime(distanceStr, elevationStr) {
-            if (!distanceStr) return null;
-            
-            // Get settings (with defaults)
-            const settings = data.timeEstimationSettings || {
-                fastSpeedBase: 12.5,
-                slowSpeedBase: 10,
-                fastSpeedMin: 5.5,
-                slowSpeedMin: 4,
-                elevationAdjustment: 0.5,
-                lengthAdjustmentFactor: 0.1
-            };
-            
-            // Parse distance (handle formats like "22.6 mi", "15.5 km", etc.)
-            const distanceMatch = distanceStr.match(/(\d+\.?\d*)\s*(mi|km|miles|kilometers?)/i);
-            if (!distanceMatch) return null;
-            
-            let distanceMiles = parseFloat(distanceMatch[1]);
-            const unit = distanceMatch[2].toLowerCase();
-            if (unit === 'km' || unit === 'kilometers' || unit === 'kilometer') {
-                distanceMiles = distanceMiles * 0.621371; // Convert km to miles
-            }
-            
-            // Parse elevation (handle formats like "3,079 ft", "1000 m", etc.)
-            let elevationFeet = 0;
-            if (elevationStr) {
-                const elevMatch = elevationStr.match(/([\d,]+\.?\d*)\s*(ft|feet|m|meters?)/i);
-                if (elevMatch) {
-                    elevationFeet = parseFloat(elevMatch[1].replace(/,/g, ''));
-                    const elevUnit = elevMatch[2].toLowerCase();
-                    if (elevUnit === 'm' || elevUnit === 'meters' || elevUnit === 'meter') {
-                        elevationFeet = elevationFeet * 3.28084; // Convert meters to feet
-                    }
-                }
-            }
-            
-            // Calculate adjustments
-            const elevationAdjustment = (elevationFeet / 1000) * settings.elevationAdjustment;
-            const lengthAdjustment = Math.max(0, (distanceMiles - 10) * settings.lengthAdjustmentFactor);
-            
-            // Calculate speeds with adjustments
-            const fastSpeed = Math.max(settings.fastSpeedMin, settings.fastSpeedBase - elevationAdjustment - lengthAdjustment);
-            const slowSpeed = Math.max(settings.slowSpeedMin, settings.slowSpeedBase - elevationAdjustment - lengthAdjustment);
-            
-            // Calculate time in hours
-            const fastTimeHours = distanceMiles / fastSpeed;
-            const slowTimeHours = distanceMiles / slowSpeed;
-            
-            // Convert to HH:MM format, rounded to nearest 5 minutes
-            function formatTime(hours) {
-                const totalMinutes = Math.round(hours * 60);
-                // Round to nearest 5 minutes
-                const roundedMinutes = Math.round(totalMinutes / 5) * 5;
-                const h = Math.floor(roundedMinutes / 60);
-                const m = roundedMinutes % 60;
-                
-                if (h > 0) {
-                    return `${h}:${String(m).padStart(2, '0')}`;
-                } else {
-                    return `0:${String(m).padStart(2, '0')}`;
-                }
-            }
-            
-            const fastTime = formatTime(fastTimeHours);
-            const slowTime = formatTime(slowTimeHours);
-            
-            // Return range format: "fastTime - slowTime" or just one time if they're close
-            if (fastTime === slowTime) {
-                return fastTime;
-            } else {
-                return `${fastTime} - ${slowTime}`;
-            }
-        }
 
         async function fetchRouteDataFromEmbed() {
             const embedCodeInput = document.getElementById('route-embed-code');
@@ -27189,15 +27308,6 @@
                     const elevationInput = document.getElementById('route-elevation');
                     if (elevationInput) {
                         elevationInput.value = data.elevation;
-                    }
-                }
-                
-                // Calculate estimated time based on distance and elevation (instead of using Strava's time)
-                const calculatedTime = calculateEstimatedTime(data.distance || '', data.elevation || '');
-                if (calculatedTime) {
-                    const timeInput = document.getElementById('route-time');
-                    if (timeInput) {
-                        timeInput.value = calculatedTime;
                     }
                 }
                 
@@ -27562,198 +27672,14 @@
         }
 
         // Store original settings when modal opens for discard functionality
-        let timeEstimationSettingsOriginal = null;
-
-        function openTimeEstimationSettings() {
-            const modal = document.getElementById('time-estimation-settings-modal');
-            if (!modal) {
-                console.error('Time estimation settings modal not found');
-                return;
-            }
-            
-            // Load current settings
-            const settings = data.timeEstimationSettings || {
-                fastSpeedBase: 12.5,
-                slowSpeedBase: 10,
-                fastSpeedMin: 5.5,
-                slowSpeedMin: 4,
-                elevationAdjustment: 0.5,
-                lengthAdjustmentFactor: 0.1
-            };
-            
-            // Store original settings for discard functionality
-            timeEstimationSettingsOriginal = JSON.parse(JSON.stringify(settings));
-            
-            const fastSpeedInput = document.getElementById('time-settings-fast-speed');
-            const slowSpeedInput = document.getElementById('time-settings-slow-speed');
-            const fastMinInput = document.getElementById('time-settings-fast-min');
-            const slowMinInput = document.getElementById('time-settings-slow-min');
-            const elevationInput = document.getElementById('time-settings-elevation');
-            const lengthInput = document.getElementById('time-settings-length');
-            
-            if (fastSpeedInput) fastSpeedInput.value = settings.fastSpeedBase;
-            if (slowSpeedInput) slowSpeedInput.value = settings.slowSpeedBase;
-            if (fastMinInput) fastMinInput.value = settings.fastSpeedMin;
-            if (slowMinInput) slowMinInput.value = settings.slowSpeedMin;
-            if (elevationInput) elevationInput.value = settings.elevationAdjustment;
-            if (lengthInput) lengthInput.value = settings.lengthAdjustmentFactor;
-            
-            modal.classList.add('visible');
-            modal.setAttribute('aria-hidden', 'false');
-        }
-
-        function closeTimeEstimationSettings() {
-            const modal = document.getElementById('time-estimation-settings-modal');
-            if (!modal) return;
-            modal.classList.remove('visible');
-            modal.setAttribute('aria-hidden', 'true');
-            timeEstimationSettingsOriginal = null;
-        }
-
-        function saveTimeEstimationSettings() {
-            // Save current values (updateTimeEstimationSettings already saves to data and localStorage)
-            updateTimeEstimationSettings();
-            closeTimeEstimationSettings();
-        }
-
-        function discardTimeEstimationSettings() {
-            if (!timeEstimationSettingsOriginal) {
-                closeTimeEstimationSettings();
-                return;
-            }
-            
-            // Restore original values
-            const fastSpeedInput = document.getElementById('time-settings-fast-speed');
-            const slowSpeedInput = document.getElementById('time-settings-slow-speed');
-            const fastMinInput = document.getElementById('time-settings-fast-min');
-            const slowMinInput = document.getElementById('time-settings-slow-min');
-            const elevationInput = document.getElementById('time-settings-elevation');
-            const lengthInput = document.getElementById('time-settings-length');
-            
-            if (fastSpeedInput) fastSpeedInput.value = timeEstimationSettingsOriginal.fastSpeedBase;
-            if (slowSpeedInput) slowSpeedInput.value = timeEstimationSettingsOriginal.slowSpeedBase;
-            if (fastMinInput) fastMinInput.value = timeEstimationSettingsOriginal.fastSpeedMin;
-            if (slowMinInput) slowMinInput.value = timeEstimationSettingsOriginal.slowSpeedMin;
-            if (elevationInput) elevationInput.value = timeEstimationSettingsOriginal.elevationAdjustment;
-            if (lengthInput) lengthInput.value = timeEstimationSettingsOriginal.lengthAdjustmentFactor;
-            
-            // Restore data object
-            data.timeEstimationSettings = JSON.parse(JSON.stringify(timeEstimationSettingsOriginal));
-            saveData();
-            
-            // Recalculate time for current route if modal is open
-            const routeModal = document.getElementById('add-route-modal');
-            if (routeModal && !routeModal.classList.contains('hidden')) {
-                const distanceInput = document.getElementById('route-distance');
-                const elevationInput = document.getElementById('route-elevation');
-                const timeInput = document.getElementById('route-time');
-                
-                if (distanceInput && distanceInput.value.trim()) {
-                    const calculatedTime = calculateEstimatedTime(distanceInput.value.trim(), elevationInput ? elevationInput.value.trim() : '');
-                    if (calculatedTime && timeInput) {
-                        timeInput.value = calculatedTime;
-                    }
-                }
-            }
-            
-            closeTimeEstimationSettings();
-        }
-
-        function previewTimeEstimationSettings() {
-            // Preview changes without saving - just update the time estimate if route modal is open
-            const routeModal = document.getElementById('add-route-modal');
-            if (routeModal && !routeModal.classList.contains('hidden')) {
-                const distanceInput = document.getElementById('route-distance');
-                const elevationInput = document.getElementById('route-elevation');
-                const timeInput = document.getElementById('route-time');
-                
-                if (distanceInput && distanceInput.value.trim()) {
-                    // Temporarily update settings for preview
-                    const tempSettings = {
-                        fastSpeedBase: parseFloat(document.getElementById('time-settings-fast-speed').value) || 12.5,
-                        slowSpeedBase: parseFloat(document.getElementById('time-settings-slow-speed').value) || 10,
-                        fastSpeedMin: parseFloat(document.getElementById('time-settings-fast-min').value) || 5.5,
-                        slowSpeedMin: parseFloat(document.getElementById('time-settings-slow-min').value) || 4,
-                        elevationAdjustment: parseFloat(document.getElementById('time-settings-elevation').value) || 0.5,
-                        lengthAdjustmentFactor: parseFloat(document.getElementById('time-settings-length').value) || 0.1
-                    };
-                    
-                    // Temporarily set settings for calculation
-                    const originalSettings = data.timeEstimationSettings;
-                    data.timeEstimationSettings = tempSettings;
-                    
-                    const calculatedTime = calculateEstimatedTime(distanceInput.value.trim(), elevationInput ? elevationInput.value.trim() : '');
-                    
-                    // Restore original settings
-                    data.timeEstimationSettings = originalSettings;
-                    
-                    if (calculatedTime && timeInput) {
-                        timeInput.value = calculatedTime;
-                    }
-                }
-            }
-        }
-
-        function updateTimeEstimationSettings() {
-            const settings = {
-                fastSpeedBase: parseFloat(document.getElementById('time-settings-fast-speed').value) || 12.5,
-                slowSpeedBase: parseFloat(document.getElementById('time-settings-slow-speed').value) || 10,
-                fastSpeedMin: parseFloat(document.getElementById('time-settings-fast-min').value) || 5.5,
-                slowSpeedMin: parseFloat(document.getElementById('time-settings-slow-min').value) || 4,
-                elevationAdjustment: parseFloat(document.getElementById('time-settings-elevation').value) || 0.5,
-                lengthAdjustmentFactor: parseFloat(document.getElementById('time-settings-length').value) || 0.1
-            };
-            
-            data.timeEstimationSettings = settings;
-            saveData();
-            
-            // Recalculate time for current route if modal is open
-            const routeModal = document.getElementById('add-route-modal');
-            if (routeModal && !routeModal.classList.contains('hidden')) {
-                const distanceInput = document.getElementById('route-distance');
-                const elevationInput = document.getElementById('route-elevation');
-                const timeInput = document.getElementById('route-time');
-                
-                if (distanceInput && distanceInput.value.trim()) {
-                    const calculatedTime = calculateEstimatedTime(distanceInput.value.trim(), elevationInput ? elevationInput.value.trim() : '');
-                    if (calculatedTime && timeInput) {
-                        timeInput.value = calculatedTime;
-                    }
-                }
-            }
-        }
-
-        function resetTimeEstimationSettings() {
-            const defaults = {
-                fastSpeedBase: 12.5,
-                slowSpeedBase: 10,
-                fastSpeedMin: 5.5,
-                slowSpeedMin: 4,
-                elevationAdjustment: 0.5,
-                lengthAdjustmentFactor: 0.1
-            };
-            
-            document.getElementById('time-settings-fast-speed').value = defaults.fastSpeedBase;
-            document.getElementById('time-settings-slow-speed').value = defaults.slowSpeedBase;
-            document.getElementById('time-settings-fast-min').value = defaults.fastSpeedMin;
-            document.getElementById('time-settings-slow-min').value = defaults.slowSpeedMin;
-            document.getElementById('time-settings-elevation').value = defaults.elevationAdjustment;
-            document.getElementById('time-settings-length').value = defaults.lengthAdjustmentFactor;
-            
-            previewTimeEstimationSettings();
-        }
-
         async function saveRoute() {
             const modal = document.getElementById('add-route-modal');
             const isEdit = modal && modal.hasAttribute('data-editing-route-id');
             const routeId = isEdit ? parseInt(modal.getAttribute('data-editing-route-id'), 10) : null;
-            const isManual = modal && modal.getAttribute('data-is-manual-route') === 'true';
-
             const nameInput = document.getElementById('route-name');
             const descriptionInput = document.getElementById('route-description');
             const distanceInput = document.getElementById('route-distance');
             const elevationInput = document.getElementById('route-elevation');
-            const timeInput = document.getElementById('route-time');
             const embedCodeInput = document.getElementById('route-embed-code');
             const fitnessMinInput = document.getElementById('route-fitness-min');
             const fitnessMaxInput = document.getElementById('route-fitness-max');
@@ -27772,15 +27698,27 @@
                 return;
             }
 
-            // Only require embed code for Strava routes
-            if (!isManual && !embedCode) {
-                alert('Please paste the Strava embed code');
+            // Require start location for all routes
+            const startLocationSelect = document.getElementById('route-start-location');
+            const startLocationValue = startLocationSelect ? startLocationSelect.value.trim() : '';
+            if (!startLocationValue) {
+                alert('Please select a start location for this route.');
+                return;
+            }
+
+            // Determine if Strava section is visible (user chose to use Strava)
+            const stravaSection = document.getElementById('strava-embed-section');
+            const isStravaVisible = stravaSection && stravaSection.style.display !== 'none';
+
+            // Only require embed code if Strava section is shown
+            if (isStravaVisible && !embedCode) {
+                alert('Please paste the Strava embed code, or hide the Strava section.');
                 return;
             }
 
             // Extract Strava URL from embed code if it exists
             let stravaUrl = null;
-            if (embedCode && !isManual) {
+            if (embedCode && isStravaVisible) {
                 stravaUrl = extractRouteUrlFromEmbed(embedCode);
                 // Clean up URL - remove query parameters that might break the link
                 if (stravaUrl) {
@@ -27797,16 +27735,16 @@
             const routeData = {
                         name: name,
                         description: descriptionInput.value.trim() || null,
-                        stravaEmbedCode: isManual ? null : embedCode,
-                        stravaUrl: isManual ? null : stravaUrl,
+                        stravaEmbedCode: isStravaVisible ? embedCode : null,
+                        stravaUrl: isStravaVisible ? stravaUrl : null,
                         cachedPreviewDataUrl: addRouteCachedPreviewDataUrl || null,
                         distance: distanceInput.value.trim() || null,
                         elevation: elevationInput.value.trim() || null,
-                        estimatedTime: timeInput ? timeInput.value.trim() || null : null,
                         fitnessMin: fitnessMin,
                         fitnessMax: fitnessMax,
                         skillsMin: skillsMin,
-                        skillsMax: skillsMax
+                        skillsMax: skillsMax,
+                        startLocation: startLocationValue || null
                     };
 
             // Check if database functions are available and user is authenticated

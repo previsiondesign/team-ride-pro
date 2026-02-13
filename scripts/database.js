@@ -1276,7 +1276,8 @@ async function getAllRoutes() {
         fitnessMin: route.fitness_min || 1,
         fitnessMax: route.fitness_max || null,
         skillsMin: route.skills_min || 1,
-        skillsMax: route.skills_max || null
+        skillsMax: route.skills_max || null,
+        startLocation: route.start_location || null
     }));
 }
 
@@ -1308,7 +1309,8 @@ async function getRouteById(id) {
         fitnessMin: data.fitness_min || 1,
         fitnessMax: data.fitness_max || null,
         skillsMin: data.skills_min || 1,
-        skillsMax: data.skills_max || null
+        skillsMax: data.skills_max || null,
+        startLocation: data.start_location || null
     };
 }
 
@@ -1330,7 +1332,8 @@ async function createRoute(route) {
             fitness_min: route.fitnessMin || 1,
             fitness_max: route.fitnessMax || null,
             skills_min: route.skillsMin || 1,
-            skills_max: route.skillsMax || null
+            skills_max: route.skillsMax || null,
+            start_location: route.startLocation || null
         })
         .select()
         .single();
@@ -1350,7 +1353,8 @@ async function createRoute(route) {
         fitnessMin: data.fitness_min || 1,
         fitnessMax: data.fitness_max || null,
         skillsMin: data.skills_min || 1,
-        skillsMax: data.skills_max || null
+        skillsMax: data.skills_max || null,
+        startLocation: data.start_location || null
     };
 }
 
@@ -1373,6 +1377,7 @@ async function updateRoute(id, route) {
             fitness_max: route.fitnessMax || null,
             skills_min: route.skillsMin || 1,
             skills_max: route.skillsMax || null,
+            start_location: route.startLocation || null,
             updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -1393,7 +1398,8 @@ async function updateRoute(id, route) {
         fitnessMin: data.fitness_min || 1,
         fitnessMax: data.fitness_max || null,
         skillsMin: data.skills_min || 1,
-        skillsMax: data.skills_max || null
+        skillsMax: data.skills_max || null,
+        startLocation: data.start_location || null
     };
 }
 
