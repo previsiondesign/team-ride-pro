@@ -2628,7 +2628,7 @@
                 }));
                 
                 // Route to assignments view
-                window.location.href = 'teamridepro_v2.html?view=assignments';
+                window.location.href = 'teamridepro_v3.html?view=assignments';
                 
             } catch (error) {
                 console.error('Error verifying code:', error);
@@ -2808,9 +2808,9 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 const viewParam = urlParams.get('view');
                 if (viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach') {
-                    window.location.href = 'teamridepro_v2.html?view=assignments';
+                    window.location.href = 'teamridepro_v3.html?view=assignments';
                 } else {
-                    window.location.href = 'teamridepro_v2.html';
+                    window.location.href = 'teamridepro_v3.html';
                 }
                 return;
                 }
