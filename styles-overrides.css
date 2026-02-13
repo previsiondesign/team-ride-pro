@@ -1,0 +1,124 @@
+/* Unavailable rider styling in groups - high specificity to override other styles */
+.rider-card.rider-unavailable,
+.rider-card.rider-unavailable *,
+.rider-card.rider-unavailable .card-body,
+.rider-card.rider-unavailable .card-body strong,
+.rider-card.rider-unavailable .badge-single,
+.rider-card.rider-unavailable .badge-single *,
+.rider-card.rider-unavailable .avatar-placeholder {
+    color: #999 !important;
+    font-style: italic !important;
+    text-decoration: line-through !important;
+    opacity: 0.6 !important;
+}
+.rider-card.rider-unavailable .avatar-image {
+    opacity: 0.5 !important;
+    filter: grayscale(50%) !important;
+}
+/* Ensure checkbox remains visible */
+.rider-card.rider-unavailable .attendance-checkbox input {
+    opacity: 1 !important;
+}
+
+/* Responsive columns for pasteboard lists */
+.unassigned-list-container {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+    gap: 8px !important;
+    align-content: start !important;
+    grid-auto-flow: row !important; /* Flow top to bottom, left to right */
+}
+
+/* On narrow screens, force single column */
+/* Since pasteboard is in 2-column grid, each list gets ~half width */
+/* Force single column when screen is narrow enough that each list < 600px */
+@media (max-width: 1200px) {
+    .unassigned-list-container {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Resizable divider for pasteboard */
+.pasteboard-divider {
+    width: 8px;
+    background: #ffe8a1;
+    cursor: col-resize;
+    border-radius: 4px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.pasteboard-divider:hover {
+    background: #ffc107;
+}
+
+.pasteboard-divider::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #856404;
+    transform: translateX(-50%);
+}
+
+/* Practice Planner home - large choice buttons */
+.practice-planner-home {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 0;
+}
+.practice-planner-home-btn {
+    display: block;
+    width: 100%;
+    padding: 24px 28px;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    border: 2px solid #2196F3;
+    border-radius: 8px;
+    background: #2196F3;
+    color: white;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.practice-planner-home-btn:hover {
+    background: #1976D2;
+    border-color: #1976D2;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+.practice-planner-home-btn.primary {
+    border-color: #2196F3;
+    background: #2196F3;
+    color: white;
+}
+.practice-planner-home-btn.primary:hover {
+    background: #1976D2;
+    border-color: #1976D2;
+}
+.practice-planner-home-btn:disabled,
+.practice-planner-home-btn.primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.practice-planner-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.practice-planner-back-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+}
+.practice-planner-back-btn:hover {
+    background: #f5f5f5;
+}

@@ -1647,6 +1647,55 @@ async function clearAdminEditLock(userId) {
     }
 }
 
+// ============ ADMIN TAKE OVER REQUEST ============
+
+async function getTakeOverRequest() {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    const { data, error } = await client
+        .from('admin_take_over_requests')
+        .select('*')
+        .eq('id', 'current')
+        .maybeSingle();
+    if (error) {
+        console.warn('Error fetching take over request:', error);
+        return null;
+    }
+    return data || null;
+}
+
+async function createTakeOverRequest(requesterInfo) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    const { error } = await client
+        .from('admin_take_over_requests')
+        .upsert([{
+            id: 'current',
+            requesting_user_id: requesterInfo.user_id,
+            requesting_user_name: requesterInfo.user_name || null,
+            requesting_user_email: requesterInfo.user_email || null,
+            status: 'pending',
+            response_message: null,
+            created_at: new Date().toISOString(),
+            responded_at: null
+        }], { onConflict: 'id' });
+    if (error) throw error;
+}
+
+async function respondToTakeOverRequest(status, responseMessage = null) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client not initialized');
+    const { error } = await client
+        .from('admin_take_over_requests')
+        .update({
+            status,
+            response_message: responseMessage || null,
+            responded_at: new Date().toISOString()
+        })
+        .eq('id', 'current');
+    if (error) throw error;
+}
+
 // ============ SIMPLIFIED LOGIN LOOKUP ============
 
 // Normalize phone number by removing all non-digit characters

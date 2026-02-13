@@ -119,23 +119,33 @@ Consider adding rate limiting to prevent abuse:
 
 ### 401 Unauthorized Error
 
-If you're getting `401 Unauthorized` when calling the Edge Function:
+If you're getting `401 Unauthorized` when calling the Edge Function, **JWT verification is enabled** and needs to be disabled:
 
-1. **Check Edge Function Configuration**:
-   - Go to Supabase Dashboard → Edge Functions → `send-verification-code`
-   - Look for settings like "Require authentication" or "Public access"
-   - Ensure anonymous access is enabled (the function should accept requests with the `anon` key)
+**Solution: Disable JWT Verification**
 
-2. **Verify Anon Key**:
-   - Check that `scripts/supabase-config.js` has the correct anon key
-   - The anon key should be exposed on `window.SUPABASE_ANON_KEY`
-   - Check browser console for debugging logs showing if the key is being retrieved
+Supabase Edge Functions require JWT verification by default. For anonymous access (needed for verification codes), you must disable it:
 
-3. **Check Function Logs**:
-   - Go to Supabase Dashboard → Edge Functions → `send-verification-code` → Logs
-   - See if the function is receiving the request or if it's being blocked at the gateway
+1. **Using Supabase CLI** (Recommended):
+   ```bash
+   supabase functions deploy send-verification-code --no-verify-jwt
+   ```
 
-4. **Note**: Supabase Edge Functions should accept requests with the `anon` key by default, but some configurations might require explicit setup.
+2. **Using config.toml**:
+   Add to `supabase/config.toml`:
+   ```toml
+   [functions.send-verification-code]
+   verify_jwt = false
+   ```
+   Then deploy:
+   ```bash
+   supabase functions deploy send-verification-code
+   ```
+
+**Note**: The Dashboard UI does not have a toggle for this. You must use the CLI.
+
+**Other Checks:**
+- Verify Anon Key: Check browser console for debug logs showing if the key is being retrieved
+- Check Function Logs: Go to Supabase Dashboard → Edge Functions → `send-verification-code` → Logs
 
 ### "Edge Function not found" Error
 - Make sure the function is deployed: `supabase functions deploy send-verification-code`

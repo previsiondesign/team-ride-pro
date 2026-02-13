@@ -2,7 +2,7 @@
 
 ## Summary
 
-This document provides a comprehensive review of all user content, settings, and preferences in the Team Practice Pro application to ensure everything is properly synced with Supabase.
+This document provides a comprehensive review of all user content, settings, and preferences in the Team Ride Pro application to ensure everything is properly synced with Supabase.
 
 ## Review Date
 Completed: [Current Date]

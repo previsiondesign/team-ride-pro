@@ -147,25 +147,46 @@ serve(async (req) => {
 
 ### 1. Create the Edge Function
 
+**Option A: Using Supabase Dashboard (Quick Start)**
+
 1. In Supabase Dashboard → Edge Functions → Create a new function
 2. Name it: `send-verification-code`
 3. Paste the code above
-4. **Important**: Make sure the function allows anonymous access:
-   - After creating the function, check the function settings
-   - Ensure "Require authentication" is **OFF** or unchecked
-   - Edge Functions should accept requests with the `anon` key in headers
-5. Deploy
+4. Deploy the function
 
-### 1a. Verify Anonymous Access (If Getting 401 Errors)
+**Option B: Using Supabase CLI (Recommended for Production)**
 
-If you're getting 401 Unauthorized errors, the Edge Function might be configured to require authentication. To fix:
+1. Create the function file locally:
+   ```bash
+   supabase functions new send-verification-code
+   ```
+2. Paste the code into the generated file
+3. **Important**: Deploy with JWT verification disabled (required for anonymous access):
+   ```bash
+   supabase functions deploy send-verification-code --no-verify-jwt
+   ```
 
-1. Go to Supabase Dashboard → Edge Functions → `send-verification-code`
-2. Check the function settings/permissions
-3. Ensure the function accepts requests with the `anon` key
-4. Some Supabase projects require explicit configuration - check if there's a "Public" or "Allow anonymous" setting
+### 1a. Disable JWT Verification (Required for Anonymous Access)
 
-**Alternative**: If anonymous access isn't available, you may need to use the Supabase client's `functions.invoke()` method which handles authentication automatically, but this requires the user to be authenticated first (which defeats the purpose for simplified login).
+Supabase Edge Functions require JWT verification by default. Since users aren't authenticated yet during the verification code flow, you **must** disable JWT verification.
+
+**If using Supabase CLI:**
+```bash
+supabase functions deploy send-verification-code --no-verify-jwt
+```
+
+**If using `config.toml` (for project-wide configuration):**
+Add this to your `supabase/config.toml` file:
+```toml
+[functions.send-verification-code]
+verify_jwt = false
+```
+Then deploy:
+```bash
+supabase functions deploy send-verification-code
+```
+
+**Note**: The Dashboard UI no longer has a toggle for this setting. You must use the CLI or config file.
 
 ### 2. Set Environment Variables (Secrets)
 
