@@ -33,7 +33,7 @@ function initSupabase() {
     if (typeof supabase !== 'undefined') {
         supabaseClient = supabase.createClient(url, key, {
             auth: {
-                storage: window.sessionStorage,
+                storage: window.localStorage,
                 persistSession: true,
                 autoRefreshToken: true
             }

@@ -3485,10 +3485,22 @@
             }
 
             setupAutoLogoutOnClose();
+
+            // Register page lifecycle handlers so data is saved when tab goes to background
+            // (e.g., Mac desktop switch) and reloaded when it comes back
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            window.addEventListener('focus', handleWindowFocus);
         }
 
         function setupAutoLogoutOnClose() {
             const handleClose = () => {
+                // Flush data to localStorage synchronously (survives page unload)
+                try {
+                    if (data && typeof JSON !== 'undefined') {
+                        localStorage.setItem('teamRideProData', JSON.stringify(data));
+                    }
+                } catch (e) {}
+
                 // Clear intervals synchronously first
                 if (adminEditLockInterval) { clearInterval(adminEditLockInterval); adminEditLockInterval = null; }
                 if (takeOverCheckInterval) { clearInterval(takeOverCheckInterval); takeOverCheckInterval = null; }
@@ -3503,11 +3515,11 @@
                     const key = window.SUPABASE_ANON_KEY || (typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '');
                     if (!url || !key) return;
 
-                    // Retrieve auth token from sessionStorage for the Authorization header
+                    // Retrieve auth token from localStorage for the Authorization header
                     let token = key;
                     try {
                         const projectRef = new URL(url).hostname.split('.')[0];
-                        const sessionStr = sessionStorage.getItem('sb-' + projectRef + '-auth-token');
+                        const sessionStr = localStorage.getItem('sb-' + projectRef + '-auth-token');
                         if (sessionStr) {
                             const session = JSON.parse(sessionStr);
                             if (session && session.access_token) token = session.access_token;
@@ -3528,7 +3540,13 @@
                 }
             };
             window.addEventListener('beforeunload', handleClose);
-            window.addEventListener('pagehide', handleClose);
+            // Only release lock on true page unload, not on pagehide from Mac desktop switches
+            // (Safari fires pagehide with persisted=true when caching the page for bfcache/desktop switch)
+            window.addEventListener('pagehide', (event) => {
+                if (!event.persisted) {
+                    handleClose();
+                }
+            });
         }
         
         function enableRiderViewMode() {
@@ -3692,13 +3710,7 @@
         let isReloading = false;
         
         // Flush any pending ride saves before reloading
-        async function flushPendingSaves() {
-            // Clear any pending debounced save
-            if (window.rideSaveTimeout) {
-                clearTimeout(window.rideSaveTimeout);
-                window.rideSaveTimeout = null;
-            }
-            
+        async function flushPendingRideSavesAsync() {
             // Save current ride if it exists and has changes
             if (data.currentRide) {
                 const ride = data.rides.find(r => r.id === data.currentRide);
@@ -3711,12 +3723,31 @@
                 }
             }
         }
-        
+
+        function flushPendingSaves() {
+            // Clear any pending debounced save
+            if (window.rideSaveTimeout) {
+                clearTimeout(window.rideSaveTimeout);
+                window.rideSaveTimeout = null;
+            }
+            // Synchronously write current data to localStorage so it survives tab freeze/close
+            try {
+                const STORAGE_KEY_FLUSH = 'teamRideProData';
+                if (data && typeof JSON !== 'undefined') {
+                    localStorage.setItem(STORAGE_KEY_FLUSH, JSON.stringify(data));
+                }
+            } catch (e) {
+                console.warn('flushPendingSaves: localStorage write failed', e);
+            }
+        }
+
         function handleVisibilityChange() {
-            // Only reload if page becomes visible and it's been at least 5 seconds since last check
-            if (!document.hidden && !isReloading) {
+            if (document.hidden) {
+                // Page going to background (e.g., Mac desktop switch) -- flush pending saves
+                flushPendingSaves();
+            } else if (!isReloading) {
+                // Page became visible again -- reload from Supabase to pick up any changes
                 const now = Date.now();
-                // Only reload if it's been at least 5 seconds since last check (avoid rapid reloads)
                 if (now - lastVisibilityCheck > 5000) {
                     lastVisibilityCheck = now;
                     loadApplicationData();
