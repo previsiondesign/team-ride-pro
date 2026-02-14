@@ -1027,6 +1027,12 @@
         .badge-skills-2 { background: #e1bee7; color: #7b1fa2; }
         .badge-skills-3 { background: #ce93d8; color: #8e24aa; }
         .badge-skills-4 { background: #ba68c8; color: #9c27b0; }
+        .badge-climbing { background: #4CAF50; color: white; }
+        .badge-climbing-1 { background: #81C784; color: white; }
+        .badge-climbing-2 { background: #66BB6A; color: white; }
+        .badge-climbing-3 { background: #4CAF50; color: white; }
+        .badge-climbing-4 { background: #388E3C; color: white; }
+        .badge-climbing-5 { background: #2E7D32; color: white; }
         .badge-level { background: #ede7f6; color: #4527a0; }
         .badge-pace-label { background: #e0f7fa; color: #006064; }
         .badge-gender { background: #fce4ec; color: #ad1457; }

@@ -93,12 +93,13 @@
         <div class="sidebar-sort">
             <label for="sidebar-riders-sort">Sort:</label>
             <select id="sidebar-riders-sort" onchange="changeSidebarSort('riders', this.value)">
-                <option value="pace">Pace</option>
+                <option value="pace">Endurance</option>
                 <option value="firstName">First Name</option>
                 <option value="lastName">Last Name</option>
                 <option value="grade">Grade</option>
                 <option value="gender">Gender</option>
-                <option value="skills">Bike Skills</option>
+                <option value="skills">Descending</option>
+                <option value="climbing">Climbing</option>
             </select>
         </div>
         <div id="sidebar-riders-list" class="sidebar-list rider-drop-list"
@@ -126,7 +127,7 @@
         <div class="sidebar-sort">
             <label for="sidebar-coaches-sort">Sort:</label>
             <select id="sidebar-coaches-sort" onchange="changeSidebarSort('coaches', this.value)">
-                <option value="pace">Pace</option>
+                <option value="pace">Endurance</option>
                 <option value="firstName">First Name</option>
                 <option value="lastName">Last Name</option>
                 <option value="level">Coach Level</option>
@@ -237,23 +238,35 @@
                 <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                     <h3 style="margin-bottom: 12px; color: #555;">Rating Scales</h3>
                     <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Relative Pace Scale (1 to X):</label>
+                        <label class="field-label" style="min-width: 200px;">Endurance Scale (1 to X):</label>
                         <input type="number" id="fitness-scale" min="3" max="20" style="width: 100px;" onchange="updateScaleSettings()" oninput="updateScaleSettings()" onblur="updateScaleSettings()">
                         <span style="color: #666; margin-left: 8px;">Current: 1-<span id="fitness-scale-display"></span></span>
                     </div>
                     <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Pace Scale Sorting</label>
+                        <label class="field-label" style="min-width: 200px;">Endurance Scale Sorting</label>
                         <select id="pace-scale-order" style="width: 220px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings()">
                             <option value="fastest_to_slowest">Fastest to Slowest</option>
                             <option value="slowest_to_fastest">Slowest to Fastest</option>
                         </select>
                     </div>
                     <div style="margin-bottom: 12px;">
-                        <button class="btn-small secondary" onclick="flipPaceValuesOnce()">One-time Flip Pace Values</button>
-                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Fixes inverted pace values without changing the sorting setting</span>
+                        <button class="btn-small secondary" onclick="flipPaceValuesOnce()">One-time Flip Endurance Values</button>
+                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Fixes inverted endurance values without changing the sorting setting</span>
                     </div>
                     <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Bike Skills Scale:</label>
+                        <label class="field-label" style="min-width: 200px;">Climbing Scale:</label>
+                        <select id="climbing-scale" style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings(); updateClimbingDescriptions();">
+                            <option value="">-- Select --</option>
+                            <option value="3">3 Levels</option>
+                            <option value="5">5 Levels</option>
+                        </select>
+                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="climbing-scale-display"></span></span>
+                    </div>
+                    <div id="climbing-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;">
+                        <!-- Descriptions will be populated here -->
+                    </div>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Descending Scale:</label>
                         <select id="skills-scale" style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings(); updateBikeSkillsDescriptions();">
                             <option value="">-- Select --</option>
                             <option value="3">3 Levels</option>
@@ -265,7 +278,7 @@
                         <!-- Descriptions will be populated here -->
                     </div>
                     <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 13px; color: #856404;">
-                        <strong>Note:</strong> Changing scales will automatically convert all existing fitness and skills ratings to the new scale.
+                        <strong>Note:</strong> Changing scales will automatically convert all existing fitness, climbing, and skills ratings to the new scale.
                     </div>
                     <div style="margin-top: 12px;">
                         <button class="btn-small" onclick="syncScaleSettings()" style="padding: 8px 16px; font-size: 14px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Update Scales</button>
@@ -353,14 +366,15 @@
                             <option value="gender">Gender</option>
                             <option value="grade">Grade</option>
                             <option value="racingGroup">Racing Group</option>
-                            <option value="pace">Pace</option>
-                            <option value="skills">Bike Skills</option>
+                            <option value="pace">Endurance</option>
+                            <option value="skills">Descending</option>
+                            <option value="climbing">Climbing</option>
                         </select>
                         <select id="coach-group-by" onchange="groupCoaches(this.value)" style="display: none;">
                             <option value="">None</option>
                             <option value="name">Name</option>
                             <option value="level">Coach Level</option>
-                            <option value="pace">Pace</option>
+                            <option value="pace">Endurance</option>
                         </select>
                     </div>
                 </div>
@@ -1006,7 +1020,9 @@
                         <div class="modal-field-label">OTB Skills 101 Classroom Completed</div>
                         <div class="modal-field-label">OTB Skills 101 Outdoor Completed</div>
                         <div class="modal-field-label">NICA Leader Summit Completed</div>
-                        <div class="modal-field-label">Relative Pace (1-10)</div>
+                        <div class="modal-field-label">Endurance (1-10)</div>
+                        <div class="modal-field-label">Climbing</div>
+                        <div class="modal-field-label">Descending</div>
                         <div class="modal-field-label">Notes</div>
                     </div>
                     <div class="modal-inputs-column">
@@ -1093,7 +1109,10 @@
                             <input type="number" id="edit-coach-fitness" min="1" class="modal-field-input">
                         </div>
                         <div class="modal-form-row">
-                            <label for="edit-coach-skills" class="field-label">Bike Skills</label>
+                            <input type="number" id="edit-coach-climbing" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <label for="edit-coach-skills" class="field-label">Descending</label>
                             <input type="number" id="edit-coach-skills" min="1" class="modal-field-input">
                         </div>
                         <div class="modal-form-row">
@@ -1167,8 +1186,9 @@
                         <div class="modal-field-label">Medical Insurance Company</div>
                         <div class="modal-field-label">Medical Insurance Account #</div>
                         <div class="modal-field-label">Allergies/Medical Needs</div>
-                        <div class="modal-field-label">Relative Pace (1-10)</div>
-                        <div class="modal-field-label">Bike Skills (1-4)</div>
+                        <div class="modal-field-label">Endurance (1-10)</div>
+                        <div class="modal-field-label">Climbing</div>
+                        <div class="modal-field-label">Descending (1-4)</div>
                         <div class="modal-field-label">Notes</div>
                     </div>
                     <div class="modal-inputs-column">
@@ -1252,6 +1272,9 @@
                         </div>
                         <div class="modal-form-row">
                             <input type="number" id="edit-rider-fitness" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="number" id="edit-rider-climbing" min="1" class="modal-field-input">
                         </div>
                         <div class="modal-form-row">
                             <input type="number" id="edit-rider-skills" min="1" class="modal-field-input">
@@ -1453,7 +1476,7 @@
                         </div>
                     </div>
                     <div>
-                        <label class="field-label">Most appropriate Relative Pace Range</label>
+                        <label class="field-label">Most appropriate Endurance Range</label>
                         <div id="route-fitness-slider-container" style="position: relative; padding: 5px 0;">
                             <div id="route-fitness-slider-track" style="position: relative; height: 6px; background: #e0e0e0; border-radius: 3px; margin: 8px 0;">
                                 <div id="route-fitness-slider-range" style="position: absolute; height: 100%; background: #2196F3; border-radius: 3px; left: 0%; width: 100%; top: 0;"></div>
@@ -1471,7 +1494,7 @@
                         </div>
                     </div>
                     <div>
-                        <label class="field-label">Most appropriate Bike Skills Range</label>
+                        <label class="field-label">Most appropriate Descending Range</label>
                         <div id="route-skills-slider-container" style="position: relative; padding: 5px 0;">
                             <div id="route-skills-slider-track" style="position: relative; height: 6px; background: #e0e0e0; border-radius: 3px; margin: 8px 0;">
                                 <div id="route-skills-slider-range" style="position: absolute; height: 100%; background: #2196F3; border-radius: 3px; left: 0%; width: 100%; top: 0;"></div>
@@ -1485,6 +1508,24 @@
                             </div>
                             <div style="text-align: center; margin-top: 4px; font-size: 12px; font-weight: 600; color: #2196F3;">
                                 <span id="route-skills-min-value">1</span> - <span id="route-skills-max-value">3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="field-label">Most appropriate Climbing Range</label>
+                        <div id="route-climbing-slider-container" style="position: relative; padding: 5px 0;">
+                            <div id="route-climbing-slider-track" style="position: relative; height: 6px; background: #e0e0e0; border-radius: 3px; margin: 8px 0;">
+                                <div id="route-climbing-slider-range" style="position: absolute; height: 100%; background: #2196F3; border-radius: 3px; left: 0%; width: 100%; top: 0;"></div>
+                                <div id="route-climbing-min-handle" class="slider-handle" data-slider="climbing" data-type="min" style="position: absolute; left: 0%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <div id="route-climbing-max-handle" class="slider-handle" data-slider="climbing" data-type="max" style="position: absolute; left: 100%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <input type="range" id="route-climbing-min" min="1" max="3" value="1" step="1" style="display: none;" oninput="updateClimbingRange()">
+                                <input type="range" id="route-climbing-max" min="2" max="3" value="3" step="1" style="display: none;" oninput="updateClimbingRange()">
+                            </div>
+                            <div id="route-climbing-labels" style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #666;">
+                                <!-- Labels will be generated dynamically -->
+                            </div>
+                            <div style="text-align: center; margin-top: 4px; font-size: 12px; font-weight: 600; color: #2196F3;">
+                                <span id="route-climbing-min-value">1</span> - <span id="route-climbing-max-value">3</span>
                             </div>
                         </div>
                     </div>
@@ -1706,7 +1747,7 @@
             <div class="modal-body">
                 <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
                     <strong>Instructions:</strong> Check the boxes for fields you want to import, and select which CSV column maps to each field. 
-                    Program-dependent fields (Pace, Bike Skills, Ride Group, Photo, Notes) can be mapped but cannot be unchecked.
+                    Program-dependent fields (Endurance, Climbing, Descending, Ride Group, Photo, Notes) can be mapped but cannot be unchecked.
                     Select "-- None --" to leave a field blank or use default values.
                 </div>
                 

@@ -97,6 +97,11 @@
             return (scale === 3 || scale === 5) ? scale : 3;
         }
 
+        function getClimbingScale() {
+            const scale = (data.seasonSettings && data.seasonSettings.climbingScale) ? data.seasonSettings.climbingScale : 3;
+            return (scale === 3 || scale === 5) ? scale : 3;
+        }
+
         function normalizePaceScaleOrder(value, fallback = 'fastest_to_slowest') {
             if (value === 'fastest_to_slowest' || value === 'slowest_to_fastest') {
                 return value;
@@ -279,7 +284,7 @@
                 return;
             }
             
-            let html = '<div style="font-weight: 600; margin-bottom: 8px; color: #333;">Bike Skills Level Descriptions:</div>';
+            let html = '<div style="font-weight: 600; margin-bottom: 8px; color: #333;">Descending Level Descriptions:</div>';
             descriptions.forEach(desc => {
                 html += `
                     <div style="margin-bottom: 10px; padding: 8px; background: white; border-left: 3px solid #2196F3; border-radius: 2px;">
@@ -292,6 +297,74 @@
             container.innerHTML = html;
         }
         
+        // Climbing skill tooltips (v3)
+        function getClimbingTooltip(level, scale) {
+            if (!scale) scale = getClimbingScale();
+            if (scale === 3) {
+                if (level === 1) return 'Beginner\nRiders are developing climbing endurance. Comfortable on gradual inclines but may need to walk on steeper or longer climbs.';
+                if (level === 2) return 'Intermediate\nRiders can sustain moderate climbs without stopping. They demonstrate proper pacing, cadence control, and efficient body position on varied gradients.';
+                if (level === 3) return 'Advanced\nRiders power through steep and sustained climbs with strong technique. They maintain composure on long ascents, use efficient gear selection, and can accelerate on climbs when needed.';
+            } else if (scale === 5) {
+                if (level === 1) return 'Beginner\nRiders are developing climbing endurance. Comfortable on gradual inclines but may need to walk on steeper or longer climbs.';
+                if (level === 2) return 'Beginner+\nRiders can complete most climbs but may need brief rest stops on longer or steeper ascents. Building cadence control and pacing.';
+                if (level === 3) return 'Intermediate\nRiders can sustain moderate climbs without stopping. They demonstrate proper pacing, cadence control, and efficient body position on varied gradients.';
+                if (level === 4) return 'Advanced\nRiders power through steep and sustained climbs with strong technique. They maintain composure on long ascents and use efficient gear selection.';
+                if (level === 5) return 'Advanced+\nRiders excel on the most demanding climbs, maintaining high power output on steep and extended ascents. Strong tactical awareness for group climbing.';
+            }
+            return '';
+        }
+
+        function getClimbingLevelDescriptions(scale) {
+            if (!scale) scale = getClimbingScale();
+            if (scale === 3) {
+                return [
+                    { level: 1, label: 'Level 1: Beginner', description: 'Riders are developing climbing endurance. Comfortable on gradual inclines but may need to walk on steeper or longer climbs.' },
+                    { level: 2, label: 'Level 2: Intermediate', description: 'Riders can sustain moderate climbs without stopping. They demonstrate proper pacing, cadence control, and efficient body position on varied gradients.' },
+                    { level: 3, label: 'Level 3: Advanced', description: 'Riders power through steep and sustained climbs with strong technique. They maintain composure on long ascents, use efficient gear selection, and can accelerate on climbs when needed.' }
+                ];
+            } else if (scale === 5) {
+                return [
+                    { level: 1, label: 'Level 1: Beginner', description: 'Riders are developing climbing endurance. Comfortable on gradual inclines but may need to walk on steeper or longer climbs.' },
+                    { level: 2, label: 'Level 2: Beginner+', description: 'Riders can complete most climbs but may need brief rest stops on longer or steeper ascents. Building cadence control and pacing.' },
+                    { level: 3, label: 'Level 3: Intermediate', description: 'Riders can sustain moderate climbs without stopping. They demonstrate proper pacing, cadence control, and efficient body position on varied gradients.' },
+                    { level: 4, label: 'Level 4: Advanced', description: 'Riders power through steep and sustained climbs with strong technique. They maintain composure on long ascents and use efficient gear selection.' },
+                    { level: 5, label: 'Level 5: Advanced+', description: 'Riders excel on the most demanding climbs, maintaining high power output on steep and extended ascents. Strong tactical awareness for group climbing.' }
+                ];
+            }
+            return [];
+        }
+
+        function updateClimbingDescriptions() {
+            const container = document.getElementById('climbing-descriptions');
+            if (!container) return;
+            const scale = getClimbingScale();
+            const descriptions = getClimbingLevelDescriptions(scale);
+            if (descriptions.length === 0) { container.innerHTML = ''; return; }
+            let html = '<div style="font-weight: 600; margin-bottom: 8px; color: #333;">Climbing Level Descriptions:</div>';
+            descriptions.forEach(desc => {
+                html += '<div style="margin-bottom: 10px; padding: 8px; background: white; border-left: 3px solid #4CAF50; border-radius: 2px;">' +
+                    '<div style="font-weight: 600; color: #4CAF50; margin-bottom: 4px;">' + escapeHtml(desc.label) + '</div>' +
+                    '<div style="color: #555;">' + escapeHtml(desc.description) + '</div></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function convertClimbingScale(value, oldScale, newScale) {
+            if (oldScale === newScale) return value;
+            if (value < 1) return 1;
+            if (value > oldScale) value = oldScale;
+            if ((oldScale === 3 && newScale === 5) || (oldScale === 5 && newScale === 3)) {
+                if (oldScale === 3 && newScale === 5) {
+                    const mapping = { 1: 1, 2: 3, 3: 5 };
+                    return mapping[value] || value;
+                } else {
+                    const mapping = { 1: 1, 2: 1, 3: 2, 4: 3, 5: 3 };
+                    return mapping[value] || value;
+                }
+            }
+            return convertScale(value, oldScale, newScale);
+        }
+
         // Convert a value from one scale to another (proportional conversion)
         function convertScale(value, oldMax, newMax) {
             if (oldMax === newMax) return value;
@@ -499,16 +572,17 @@
                 practices: [],
                 fitnessScale: 5,
                 skillsScale: 3,
+                climbingScale: 3,
                 paceScaleOrder: 'fastest_to_slowest',
                 groupPaceOrder: 'fastest_to_slowest'
             };
         }
         
-        // Convert all fitness and skills ratings when scales change
-        function convertAllRatingsToNewScales(oldFitnessScale, newFitnessScale, oldSkillsScale, newSkillsScale) {
+        // Convert all fitness, skills, and climbing ratings when scales change
+        function convertAllRatingsToNewScales(oldFitnessScale, newFitnessScale, oldSkillsScale, newSkillsScale, oldClimbingScale, newClimbingScale) {
             let convertedCount = 0;
             
-            // Convert rider fitness and skills
+            // Convert rider fitness, skills, and climbing
             if (data.riders) {
                 data.riders.forEach(rider => {
                     if (rider.fitness && oldFitnessScale !== newFitnessScale) {
@@ -525,10 +599,14 @@
                             convertedCount++;
                         }
                     }
+                    if (rider.climbing && oldClimbingScale !== newClimbingScale) {
+                        rider.climbing = String(convertClimbingScale(parseInt(rider.climbing || '3', 10), oldClimbingScale, newClimbingScale));
+                        convertedCount++;
+                    }
                 });
             }
             
-            // Convert coach fitness and skills
+            // Convert coach fitness, skills, and climbing
             if (data.coaches) {
                 data.coaches.forEach(coach => {
                     if (coach.fitness && oldFitnessScale !== newFitnessScale) {
@@ -544,6 +622,10 @@
                             coach.skills = String(convertBikeSkillsScale(oldValue, oldSkillsScale, newSkillsScale));
                             convertedCount++;
                         }
+                    }
+                    if (coach.climbing && oldClimbingScale !== newClimbingScale) {
+                        coach.climbing = String(convertClimbingScale(parseInt(coach.climbing || '3', 10), oldClimbingScale, newClimbingScale));
+                        convertedCount++;
                     }
                 });
             }
@@ -582,6 +664,13 @@
                     skillsScaleInput.value = savedSkillsScale;
                     if (skillsScaleDisplay) skillsScaleDisplay.textContent = savedSkillsScale;
                 }
+                const climbingScaleInput = document.getElementById('climbing-scale');
+                if (climbingScaleInput) {
+                    const savedClimbingScale = data.seasonSettings.climbingScale;
+                    if (savedClimbingScale !== undefined && savedClimbingScale !== null) {
+                        climbingScaleInput.value = savedClimbingScale;
+                    }
+                }
                 if (paceScaleOrderInput) {
                     paceScaleOrderInput.value = savedPaceScaleOrder;
                 }
@@ -594,6 +683,7 @@
             console.log('=== updateScaleSettings() CALLED ===');
             const fitnessScaleInput = document.getElementById('fitness-scale');
             const skillsScaleInput = document.getElementById('skills-scale');
+            const climbingScaleInput = document.getElementById('climbing-scale');
             const fitnessScaleDisplay = document.getElementById('fitness-scale-display');
             const skillsScaleDisplay = document.getElementById('skills-scale-display');
             const paceScaleOrderInput = document.getElementById('pace-scale-order');
@@ -620,17 +710,22 @@
             // Update bike skills descriptions
             updateBikeSkillsDescriptions();
             
+            // Update climbing descriptions
+            updateClimbingDescriptions();
+            
             // Save the scale settings to data and localStorage
+            const climbingScale = parseInt(climbingScaleInput?.value || '3', 10);
             if (fitnessScaleInput && skillsScaleInput) {
                 const fitnessScale = parseInt(fitnessScaleInput.value, 10);
                 const skillsScale = parseInt(skillsScaleInput.value, 10);
                 const nextPaceScaleOrder = normalizePaceScaleOrder(paceScaleOrderInput?.value);
                 
-                console.log('updateScaleSettings - parsed values:', { fitnessScale, skillsScale });
+                console.log('updateScaleSettings - parsed values:', { fitnessScale, skillsScale, climbingScale });
                 
-                // Only save if values are valid (skills scale must be 3 or 5)
+                // Only save if values are valid (skills scale must be 3 or 5, climbing scale must be 3 or 5)
                 if (Number.isFinite(fitnessScale) && fitnessScale >= 3 && fitnessScale <= 20 &&
-                    Number.isFinite(skillsScale) && (skillsScale === 3 || skillsScale === 5)) {
+                    Number.isFinite(skillsScale) && (skillsScale === 3 || skillsScale === 5) &&
+                    Number.isFinite(climbingScale) && (climbingScale === 3 || climbingScale === 5)) {
                     
                     // Initialize seasonSettings if it doesn't exist
                     if (!data.seasonSettings) {
@@ -651,6 +746,7 @@
                     
                     data.seasonSettings.fitnessScale = fitnessScale;
                     data.seasonSettings.skillsScale = skillsScale;
+                    data.seasonSettings.climbingScale = climbingScale;
                     data.seasonSettings.paceScaleOrder = nextPaceScaleOrder;
 
                     if (oldPaceScaleOrder !== nextPaceScaleOrder) {
@@ -681,6 +777,7 @@
         async function syncScaleSettings() {
             const fitnessScaleInput = document.getElementById('fitness-scale');
             const skillsScaleInput = document.getElementById('skills-scale');
+            const climbingScaleInput = document.getElementById('climbing-scale');
             const paceScaleOrderInput = document.getElementById('pace-scale-order');
             
             if (!fitnessScaleInput || !skillsScaleInput) {
@@ -690,6 +787,7 @@
 
             const fitnessScale = parseInt(fitnessScaleInput.value, 10);
             const skillsScale = parseInt(skillsScaleInput.value, 10);
+            const climbingScale = parseInt(climbingScaleInput?.value || '3', 10);
 
             // Validate inputs
             if (!Number.isFinite(fitnessScale) || fitnessScale < 3 || fitnessScale > 20) {
@@ -698,6 +796,10 @@
             }
             if (!Number.isFinite(skillsScale) || skillsScale < 2 || skillsScale > 10) {
                 alert('Skills scale must be between 2 and 10.');
+                return;
+            }
+            if (!Number.isFinite(climbingScale) || (climbingScale !== 3 && climbingScale !== 5)) {
+                alert('Climbing scale must be 3 or 5.');
                 return;
             }
 
@@ -710,17 +812,19 @@
                 // Get old scales for conversion
                 const oldFitnessScale = data.seasonSettings.fitnessScale || 5;
                 const oldSkillsScale = data.seasonSettings.skillsScale || 3;
+                const oldClimbingScale = data.seasonSettings.climbingScale || 3;
 
                 // Update local seasonSettings
                 data.seasonSettings.fitnessScale = fitnessScale;
                 data.seasonSettings.skillsScale = skillsScale;
+                data.seasonSettings.climbingScale = climbingScale;
                 if (paceScaleOrderInput) {
                     data.seasonSettings.paceScaleOrder = normalizePaceScaleOrder(paceScaleOrderInput.value);
                 }
 
                 // Convert existing data if scales changed
-                if (fitnessScale !== oldFitnessScale || skillsScale !== oldSkillsScale) {
-                    convertAllRatingsToNewScales(oldFitnessScale, fitnessScale, oldSkillsScale, skillsScale);
+                if (fitnessScale !== oldFitnessScale || skillsScale !== oldSkillsScale || climbingScale !== oldClimbingScale) {
+                    convertAllRatingsToNewScales(oldFitnessScale, fitnessScale, oldSkillsScale, skillsScale, oldClimbingScale, climbingScale);
                 }
 
                 // Update UI displays
@@ -745,6 +849,7 @@
                             practices: data.seasonSettings.practices || [],
                             fitnessScale: fitnessScale,
                             skillsScale: skillsScale,
+                            climbingScale: climbingScale,
                             paceScaleOrder: normalizePaceScaleOrder(data.seasonSettings.paceScaleOrder),
                             groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings.groupPaceOrder)
                         });
@@ -756,7 +861,7 @@
                 }
 
                 // Show success message
-                alert(`Scale settings updated successfully!\n\nRelative Pace Scale: 1-${fitnessScale}\nSkills Scale: 1-${skillsScale}\n\nAll ratings have been converted to the new scales.`);
+                alert(`Scale settings updated successfully!\n\nRelative Pace Scale: 1-${fitnessScale}\nSkills Scale: 1-${skillsScale}\nClimbing Scale: 1-${climbingScale}\n\nAll ratings have been converted to the new scales.`);
 
             } catch (error) {
                 console.error('Error syncing scale settings:', error);
@@ -1244,19 +1349,24 @@
             let badgeHtml = '';
             if (!hideBadges) {
             if (sortBy === 'pace') {
-                    badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">Pace ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">End ${fitness}</span>`;
             } else if (sortBy === 'skills') {
                 const skillsScale = getSkillsScale();
                 const skills = Math.max(1, Math.min(skillsScale, parseInt(rider.skills || Math.ceil(skillsScale / 2), 10)));
                 const skillsTooltip = getBikeSkillsTooltip(skills, skillsScale);
-                    badgeHtml = `<span class="badge badge-skills-${skills}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'skills', ${skills})" style="cursor: pointer;" title="${skillsTooltip.replace(/\n/g, '&#10;')}" data-rider-id="${rider.id}" data-badge-type="skills">Bike Skills ${skills}</span>`;
+                    badgeHtml = `<span class="badge badge-skills-${skills}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'skills', ${skills})" style="cursor: pointer;" title="${skillsTooltip.replace(/\n/g, '&#10;')}" data-rider-id="${rider.id}" data-badge-type="skills">Desc ${skills}</span>`;
+            } else if (sortBy === 'climbing') {
+                const climbingScale = getClimbingScale();
+                const climbing = Math.max(1, Math.min(climbingScale, parseInt(rider.climbing || '3', 10)));
+                const climbingTooltip = getClimbingTooltip(climbing, climbingScale);
+                    badgeHtml = `<span class="badge badge-climbing-${climbing}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'climbing', ${climbing})" style="cursor: pointer;" title="${climbingTooltip.replace(/\n/g, '&#10;')}" data-rider-id="${rider.id}" data-badge-type="climbing">Climb ${climbing}</span>`;
             } else if (sortBy === 'grade') {
                 badgeHtml = gradeLabel ? `<span class="badge badge-grade">${gradeLabel}</span>` : '';
             } else if (sortBy === 'gender') {
                 badgeHtml = genderValue ? `<span class="badge badge-gender">${escapeHtml(genderValue)}</span>` : '';
             } else {
                     // For firstName/lastName/name sort, show pace badge as default (clickable)
-                    badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">Pace ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitness}" onclick="handleBadgeClick(event, 'rider', ${rider.id}, 'pace', ${fitness})" style="cursor: pointer;" data-rider-id="${rider.id}" data-badge-type="pace">End ${fitness}</span>`;
                 }
             }
             
@@ -1378,17 +1488,22 @@
             let badgeHtml = '';
             if (compact) {
                 if (sortBy === 'pace') {
-                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">End ${fitness}</span>`;
                 } else if (sortBy === 'level') {
                     const levelDisplay = levelRaw === 'N/A' ? 'N/A' : `Level ${level}`;
                     badgeHtml = `<span class="badge badge-level">${levelDisplay}</span>`;
+                } else if (sortBy === 'climbing') {
+                    const climbingScale = getClimbingScale();
+                    const climbingVal = Math.max(1, Math.min(climbingScale, parseInt(coach.climbing || '3', 10)));
+                    const climbingTooltip = getClimbingTooltip(climbingVal, climbingScale);
+                    badgeHtml = `<span class="badge badge-climbing-${climbingVal}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'climbing', ${climbingVal})" style="cursor: pointer;" title="${climbingTooltip.replace(/\n/g, '&#10;')}" data-coach-id="${coach.id}" data-badge-type="climbing">Climb ${climbingVal}</span>`;
                 } else {
                     // For name sort, show pace badge as default (clickable)
-                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span>`;
+                    badgeHtml = `<span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer;" data-coach-id="${coach.id}" data-badge-type="pace">End ${fitness}</span>`;
                 }
             } else {
                 // Non-compact mode: show both level and pace (pace is clickable)
-                badgeHtml = `<div class="coach-meta">Level ${level} · <span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer; display: inline;" data-coach-id="${coach.id}" data-badge-type="pace">Pace ${fitness}</span></div>`;
+                badgeHtml = `<div class="coach-meta">Level ${level} · <span class="badge badge-pace-${fitnessValue}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'pace', ${fitnessValue})" style="cursor: pointer; display: inline;" data-coach-id="${coach.id}" data-badge-type="pace">End ${fitness}</span></div>`;
             }
 
             // Set background color based on coach level for practice planner (when showAttendance is true)
@@ -6368,7 +6483,7 @@
         async function adjustCoachPace(coachId, delta) {
             // Permission check - allow if canEditCoaches exists, otherwise allow by default
             if (typeof canEditCoaches === 'function' && !canEditCoaches()) {
-                alert('You do not have permission to update coach pace');
+                alert('You do not have permission to update coach endurance');
                 return;
             }
 
@@ -6416,10 +6531,47 @@
             updateCoachSkillsDisplay(coachId, newSkills);
         }
 
+        async function adjustRiderClimbing(riderId, delta) {
+            if (typeof canEditRiders === 'function' && !canEditRiders()) {
+                alert('You do not have permission to update rider climbing');
+                return;
+            }
+            const rider = data.riders.find(r => r.id === riderId);
+            if (!rider) return;
+            const climbingScale = getClimbingScale();
+            const current = Math.max(1, Math.min(climbingScale, parseInt(rider.climbing || Math.ceil(climbingScale / 2), 10)));
+            const newVal = Math.max(1, Math.min(climbingScale, current + delta));
+            rider.climbing = String(newVal);
+            await saveRiderToDB(rider);
+            // Update the climbing display cell
+            const cell = document.querySelector(`[data-rider-id="${riderId}"] [data-label="Climbing"] .pace-value`);
+            if (cell) cell.textContent = newVal;
+            if (data.currentRide) {
+                const ride = data.rides.find(r => r.id === data.currentRide);
+                if (ride) renderAssignments(ride);
+            }
+        }
+
+        async function adjustCoachClimbing(coachId, delta) {
+            if (typeof canEditCoaches === 'function' && !canEditCoaches()) {
+                alert('You do not have permission to update coach climbing');
+                return;
+            }
+            const coach = data.coaches.find(c => c.id === coachId);
+            if (!coach) return;
+            const climbingScale = getClimbingScale();
+            const current = Math.max(1, Math.min(climbingScale, parseInt(coach.climbing || Math.ceil(climbingScale / 2), 10)));
+            const newVal = Math.max(1, Math.min(climbingScale, current + delta));
+            coach.climbing = String(newVal);
+            await saveCoachToDB(coach);
+            const cell = document.querySelector(`[data-coach-id="${coachId}"] [data-label="Climbing"] .pace-value`);
+            if (cell) cell.textContent = newVal;
+        }
+
         async function adjustRiderPace(riderId, delta) {
             // Permission check - allow if canEditRiders exists, otherwise allow by default
             if (typeof canEditRiders === 'function' && !canEditRiders()) {
-                alert('You do not have permission to update rider pace');
+                alert('You do not have permission to update rider endurance');
                 return;
             }
 
@@ -6457,6 +6609,8 @@
             let maxValue;
             if (badgeType === 'pace') {
                 maxValue = getFitnessScale();
+            } else if (badgeType === 'climbing') {
+                maxValue = getClimbingScale();
             } else if (badgeType === 'skills') {
                 maxValue = getSkillsScale();
             } else {
@@ -6637,12 +6791,16 @@
             if (type === 'rider') {
                 if (badgeType === 'pace') {
                     await adjustRiderPace(id, delta);
+                } else if (badgeType === 'climbing') {
+                    await adjustRiderClimbing(id, delta);
                 } else if (badgeType === 'skills') {
                     await adjustRiderSkills(id, delta);
                 }
             } else if (type === 'coach') {
                 if (badgeType === 'pace') {
                     await adjustCoachPace(id, delta);
+                } else if (badgeType === 'climbing') {
+                    await adjustCoachClimbing(id, delta);
                 } else if (badgeType === 'skills') {
                     await adjustCoachSkills(id, delta);
                 }
@@ -6693,7 +6851,7 @@
             // Look for pace-value in the pace column (first pace-controls div)
             const row = document.querySelector(`[data-coach-id="${coachId}"]`);
             if (row) {
-                const paceCell = row.querySelector('[data-label="Pace"]');
+                const paceCell = row.querySelector('[data-label="Endurance"]');
                 if (paceCell) {
                     const paceValue = paceCell.querySelector('.pace-value');
                     if (paceValue) {
@@ -6708,7 +6866,7 @@
             // Look for pace-value in the skills column (second pace-controls div)
             const row = document.querySelector(`[data-coach-id="${coachId}"]`);
             if (row) {
-                const skillsCell = row.querySelector('[data-label="Bike Skills"]');
+                const skillsCell = row.querySelector('[data-label="Descending"]');
                 if (skillsCell) {
                     const paceValue = skillsCell.querySelector('.pace-value');
                     if (paceValue) {
@@ -6727,7 +6885,7 @@
             // Look for pace-value in the pace column (first pace-controls div)
             const row = document.querySelector(`[data-rider-id="${riderId}"]`);
             if (row) {
-                const paceCell = row.querySelector('[data-label="Pace"]');
+                const paceCell = row.querySelector('[data-label="Endurance"]');
                 if (paceCell) {
                     const paceValue = paceCell.querySelector('.pace-value');
                     if (paceValue) {
@@ -6742,7 +6900,7 @@
             // Look for pace-value in the skills column (second pace-controls div)
             const row = document.querySelector(`[data-rider-id="${riderId}"]`);
             if (row) {
-                const skillsCell = row.querySelector('[data-label="Bike Skills"]');
+                const skillsCell = row.querySelector('[data-label="Descending"]');
                 if (skillsCell) {
                     const paceValue = skillsCell.querySelector('.pace-value');
                     if (paceValue) {
@@ -6770,8 +6928,9 @@
             { key: 'gender', label: 'Gender', sortable: true, width: 'minmax(90px, 0.7fr)' },
             { key: 'grade', label: 'Grade', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'racingGroup', label: 'Racing Group', sortable: true, width: 'minmax(160px, 1fr)' },
-            { key: 'pace', label: 'Relative Pace', sortable: true, width: 'minmax(130px, 0.9fr)' },
-            { key: 'skills', label: 'Bike Skills', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'pace', label: 'Endurance', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'skills', label: 'Descending', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'climbing', label: 'Climbing', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'actions', label: '', sortable: false, width: 'minmax(120px, 0.8fr)' }
         ];
         
@@ -6779,8 +6938,9 @@
             { key: 'name', label: 'Name', sortable: true, width: 'minmax(220px, 1.8fr)' },
             { key: 'phone', label: 'Phone', sortable: false, width: 'minmax(160px, 1fr)' },
             { key: 'level', label: 'Coach Level', sortable: true, width: 'minmax(130px, 0.9fr)' },
-            { key: 'pace', label: 'Relative Pace', sortable: true, width: 'minmax(130px, 0.9fr)' },
-            { key: 'skills', label: 'Bike Skills', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'pace', label: 'Endurance', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'skills', label: 'Descending', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'climbing', label: 'Climbing', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'actions', label: '', sortable: false, width: 'minmax(120px, 0.8fr)' }
         ];
         
@@ -7408,7 +7568,7 @@
                                     ${escapeHtml(racingValue)}
                                 </div>`;
                             case 'pace':
-                                return `<div class="roster-cell" data-label="Pace">
+                                return `<div class="roster-cell" data-label="Endurance">
                                     <div class="pace-controls">
                                         <span class="pace-arrow" onclick="adjustRiderPace(${rider.id}, -1)">▼</span>
                                         <span class="pace-value">${fitnessValue}</span>
@@ -7419,11 +7579,22 @@
                                 const riderSkillsScale = getSkillsScale();
                                 const riderSkillsValue = Math.max(1, Math.min(riderSkillsScale, parseInt(rider.skills || Math.ceil(riderSkillsScale / 2), 10)));
                                 const riderSkillsTooltip = getBikeSkillsTooltip(riderSkillsValue, riderSkillsScale);
-                                return `<div class="roster-cell" data-label="Bike Skills">
+                                return `<div class="roster-cell" data-label="Descending">
                                     <div class="pace-controls">
                                         <span class="pace-arrow" onclick="adjustRiderSkills(${rider.id}, -1)">▼</span>
                                         <span class="pace-value" title="${riderSkillsTooltip.replace(/\n/g, '&#10;')}" style="cursor: help;">${riderSkillsValue}</span>
                                         <span class="pace-arrow" onclick="adjustRiderSkills(${rider.id}, 1)">▲</span>
+                                    </div>
+                                </div>`;
+                            case 'climbing':
+                                const riderClimbingScale = getClimbingScale();
+                                const riderClimbingValue = Math.max(1, Math.min(riderClimbingScale, parseInt(rider.climbing || '3', 10)));
+                                const riderClimbingTooltip = getClimbingTooltip(riderClimbingValue, riderClimbingScale);
+                                return `<div class="roster-cell" data-label="Climbing">
+                                    <div class="pace-controls">
+                                        <span class="pace-arrow" onclick="adjustRiderClimbing(${rider.id}, -1)">▼</span>
+                                        <span class="pace-value" title="${riderClimbingTooltip.replace(/\n/g, '&#10;')}" style="cursor: help;">${riderClimbingValue}</span>
+                                        <span class="pace-arrow" onclick="adjustRiderClimbing(${rider.id}, 1)">▲</span>
                                     </div>
                                 </div>`;
                             case 'notes':
@@ -7763,7 +7934,7 @@
                                     ${escapeHtml(levelLabel)}
                                 </div>`;
                             case 'pace':
-                                return `<div class="roster-cell" data-label="Pace">
+                                return `<div class="roster-cell" data-label="Endurance">
                                     <div class="pace-controls">
                                         <span class="pace-arrow" onclick="adjustCoachPace(${coach.id}, -1)">▼</span>
                                         <span class="pace-value">${fitnessValue}</span>
@@ -7774,11 +7945,22 @@
                                 const coachSkillsScale = getSkillsScale();
                                 const coachSkillsValue = Math.max(1, Math.min(coachSkillsScale, parseInt(coach.skills || Math.ceil(coachSkillsScale / 2), 10)));
                                 const coachSkillsTooltip = getBikeSkillsTooltip(coachSkillsValue, coachSkillsScale);
-                                return `<div class="roster-cell" data-label="Bike Skills">
+                                return `<div class="roster-cell" data-label="Descending">
                                     <div class="pace-controls">
                                         <span class="pace-arrow" onclick="adjustCoachSkills(${coach.id}, -1)">▼</span>
                                         <span class="pace-value" title="${coachSkillsTooltip.replace(/\n/g, '&#10;')}" style="cursor: help;">${coachSkillsValue}</span>
                                         <span class="pace-arrow" onclick="adjustCoachSkills(${coach.id}, 1)">▲</span>
+                                    </div>
+                                </div>`;
+                            case 'climbing':
+                                const coachClimbingScale = getClimbingScale();
+                                const coachClimbingValue = Math.max(1, Math.min(coachClimbingScale, parseInt(coach.climbing || '3', 10)));
+                                const coachClimbingTooltip = getClimbingTooltip(coachClimbingValue, coachClimbingScale);
+                                return `<div class="roster-cell" data-label="Climbing">
+                                    <div class="pace-controls">
+                                        <span class="pace-arrow" onclick="adjustCoachClimbing(${coach.id}, -1)">▼</span>
+                                        <span class="pace-value" title="${coachClimbingTooltip.replace(/\n/g, '&#10;')}" style="cursor: help;">${coachClimbingValue}</span>
+                                        <span class="pace-arrow" onclick="adjustCoachClimbing(${coach.id}, 1)">▲</span>
                                     </div>
                                 </div>`;
                             case 'notes':
@@ -11472,14 +11654,17 @@
             // Get scale settings - preserve existing saved values if inputs haven't been updated
             const fitnessScaleInput = document.getElementById('fitness-scale');
             const skillsScaleInput = document.getElementById('skills-scale');
+            const climbingScaleInput = document.getElementById('climbing-scale');
             
             // Get old scales for conversion (before updating)
             const oldFitnessScale = data.seasonSettings?.fitnessScale || 5;
             const oldSkillsScale = data.seasonSettings?.skillsScale || 3;
+            const oldClimbingScale = data.seasonSettings?.climbingScale || 3;
             
             // Use input value if valid, otherwise preserve existing saved value
             let fitnessScale = oldFitnessScale;
             let skillsScale = oldSkillsScale;
+            let climbingScale = oldClimbingScale;
             
             if (fitnessScaleInput) {
                 const inputValue = parseInt(fitnessScaleInput.value, 10);
@@ -11493,6 +11678,12 @@
                     skillsScale = inputValue;
                 }
             }
+            if (climbingScaleInput) {
+                const inputValue = parseInt(climbingScaleInput.value, 10);
+                if (Number.isFinite(inputValue) && (inputValue === 3 || inputValue === 5)) {
+                    climbingScale = inputValue;
+                }
+            }
             
             // Preserve all existing fields in seasonSettings (like csvFieldMappings, etc.)
             data.seasonSettings = {
@@ -11502,13 +11693,14 @@
                 practices: practicesData,
                 fitnessScale: fitnessScale,
                 skillsScale: skillsScale,
+                climbingScale: climbingScale,
                 paceScaleOrder: normalizePaceScaleOrder(paceScaleOrderInput?.value || data.seasonSettings?.paceScaleOrder),
                 groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder)
             };
             
             // Convert existing data if scales changed
-            if (fitnessScale !== oldFitnessScale || skillsScale !== oldSkillsScale) {
-                convertAllRatingsToNewScales(oldFitnessScale, fitnessScale, oldSkillsScale, skillsScale);
+            if (fitnessScale !== oldFitnessScale || skillsScale !== oldSkillsScale || climbingScale !== oldClimbingScale) {
+                convertAllRatingsToNewScales(oldFitnessScale, fitnessScale, oldSkillsScale, skillsScale, oldClimbingScale, climbingScale);
             }
             
             // Update scale displays
@@ -13289,7 +13481,7 @@
             { key: 'firstName', label: 'First Name', required: true },
             { key: 'lastName', label: 'Last Name', required: true },
             { key: 'fitness', label: 'Pace (Relative Pace)', required: true, programDependent: true },
-            { key: 'skills', label: 'Bike Skills', required: true, programDependent: true },
+            { key: 'skills', label: 'Descending', required: true, programDependent: true },
             { key: 'racingGroup', label: 'Ride Group', required: true, programDependent: true },
             { key: 'photo', label: 'Photo', required: true, programDependent: true },
             { key: 'notes', label: 'Notes', required: true, programDependent: true },
@@ -18857,7 +19049,7 @@
                 availableCoaches.forEach((coach, idx) => {
                     const level = coach.coachingLicenseLevel || coach.level || 'N/A';
                     const fitness = getCoachFitnessValue(coach);
-                    debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}, ID: ${coach.id}`);
+                    debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}, ID: ${coach.id}`);
                 });
                 debugLines.push('');
 
@@ -19326,7 +19518,7 @@
                 debugLines.push('Riders ranked by pace (fastest to slowest):');
                 sortedRiders.forEach((rider, idx) => {
                     const fitness = parseInt(rider.fitness || '5', 10);
-                    debugLines.push(`  ${idx + 1}. ${rider.name || 'Rider'} - Pace ${fitness}`);
+                    debugLines.push(`  ${idx + 1}. ${rider.name || 'Rider'} - End ${fitness}`);
                 });
                 debugLines.push('');
 
@@ -19379,7 +19571,7 @@
                     // List all riders with their fitness
                     riders.forEach((rider, riderIdx) => {
                         const fitness = parseInt(rider.fitness || '5', 10);
-                        debugLines.push(`    ${riderIdx + 1}. ${rider.name || 'Rider'} - Pace ${fitness}`);
+                        debugLines.push(`    ${riderIdx + 1}. ${rider.name || 'Rider'} - End ${fitness}`);
                     });
                 });
                 debugLines.push('');
@@ -19538,7 +19730,7 @@
                     sortedLeaders.forEach((coach, idx) => {
                         const fitness = getCoachFitnessValue(coach);
                         const level = coach.coachingLicenseLevel || coach.level || '1';
-                        debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
+                        debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}`);
                     });
                 } else {
                     debugLines.push('  No eligible leaders available.');
@@ -19585,7 +19777,7 @@
                         remainingCoaches.forEach((coach, idx) => {
                             const fitness = getCoachFitnessValue(coach);
                             const level = coach.coachingLicenseLevel || coach.level || '1';
-                            debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, Pace ${fitness}`);
+                            debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}`);
                         });
                     } else {
                         debugLines.push('  No remaining coaches available.');
@@ -22109,6 +22301,12 @@
                             if (bSkills !== aSkills) return bSkills - aSkills; // Descending (higher skills first)
                             // If skills is equal, sort by name
                             return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || ''));
+                        } else if (sortBy === 'climbing') {
+                            const aClimbing = parseInt(a.climbing || '3', 10);
+                            const bClimbing = parseInt(b.climbing || '3', 10);
+                            if (bClimbing !== aClimbing) return bClimbing - aClimbing; // Descending (higher climbing first)
+                            // If climbing is equal, sort by name
+                            return getSortableLastName(a.name || '').localeCompare(getSortableLastName(b.name || ''));
                         } else if (sortBy === 'grade') {
                             const aGrade = parseInt(a.grade || '0', 10) || 0;
                             const bGrade = parseInt(b.grade || '0', 10) || 0;
@@ -22215,8 +22413,9 @@
                             <span style="font-weight: 600; font-size: 16px; color: white;">${group.label}${group.colorName ? ` (${group.colorName})` : ''}${headerWarning}</span>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <select class="group-sort-select" onchange="changeGroupSort(${group.id}, this.value)" title="Sort by" style="padding: 4px 8px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; font-size: 13px; background: rgba(255,255,255,0.2); color: white; cursor: pointer;">
-                                    <option value="pace" ${sortBy === 'pace' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Pace</option>
-                                    <option value="skills" ${sortBy === 'skills' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Bike Skills</option>
+                                    <option value="pace" ${sortBy === 'pace' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Endurance</option>
+                                    <option value="skills" ${sortBy === 'skills' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Descending</option>
+                                    <option value="climbing" ${sortBy === 'climbing' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Climbing</option>
                                     <option value="grade" ${sortBy === 'grade' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Grade</option>
                                     <option value="gender" ${sortBy === 'gender' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Gender</option>
                                     <option value="name" ${sortBy === 'name' ? 'selected' : ''} style="background: #2196F3; color: white;">Sort by: Name</option>
@@ -22724,6 +22923,10 @@
                     compare = a.gender !== b.gender ? a.gender.localeCompare(b.gender) : a.lastName.localeCompare(b.lastName);
                 } else if (sortBy === 'skills') {
                     compare = b.skills !== a.skills ? b.skills - a.skills : a.lastName.localeCompare(b.lastName);
+                } else if (sortBy === 'climbing') {
+                    const aClimbing = parseInt(a.climbing || '3', 10);
+                    const bClimbing = parseInt(b.climbing || '3', 10);
+                    compare = bClimbing !== aClimbing ? bClimbing - aClimbing : a.lastName.localeCompare(b.lastName);
                 } else if (sortBy === 'level') {
                     compare = b.level !== a.level ? b.level - a.level : a.lastName.localeCompare(b.lastName);
                 } else {
@@ -23189,8 +23392,9 @@
                                 ${ridersSortDirection === 'asc' ? '↑' : '↓'}
                             </button>
                             <select class="group-sort-select" onchange="changePracticeRidersSort(this.value)" title="Sort by" style="font-size: 12px; padding: 4px 8px;">
-                                <option value="pace" ${ridersSort === 'pace' ? 'selected' : ''}>Sort by: Pace</option>
-                                <option value="skills" ${ridersSort === 'skills' ? 'selected' : ''}>Sort by: Bike Skills</option>
+                                <option value="pace" ${ridersSort === 'pace' ? 'selected' : ''}>Sort by: Endurance</option>
+                                <option value="skills" ${ridersSort === 'skills' ? 'selected' : ''}>Sort by: Descending</option>
+                                <option value="climbing" ${ridersSort === 'climbing' ? 'selected' : ''}>Sort by: Climbing</option>
                                 <option value="grade" ${ridersSort === 'grade' ? 'selected' : ''}>Sort by: Grade</option>
                                 <option value="gender" ${ridersSort === 'gender' ? 'selected' : ''}>Sort by: Gender</option>
                                 <option value="firstName" ${ridersSort === 'firstName' ? 'selected' : ''}>Sort by: First Name</option>
@@ -23455,7 +23659,8 @@
                                 ${coachesSortDirection === 'asc' ? '↑' : '↓'}
                             </button>
                             <select class="group-sort-select" onchange="changePracticeCoachesSort(this.value)" title="Sort by" style="font-size: 12px; padding: 4px 8px;">
-                                <option value="pace" ${coachesSort === 'pace' ? 'selected' : ''}>Sort by: Pace</option>
+                                <option value="pace" ${coachesSort === 'pace' ? 'selected' : ''}>Sort by: Endurance</option>
+                                <option value="climbing" ${coachesSort === 'climbing' ? 'selected' : ''}>Sort by: Climbing</option>
                                 <option value="level" ${coachesSort === 'level' ? 'selected' : ''}>Sort by: Level</option>
                                 <option value="firstName" ${coachesSort === 'firstName' ? 'selected' : ''}>Sort by: First Name</option>
                                 <option value="lastName" ${coachesSort === 'lastName' ? 'selected' : ''}>Sort by: Last Name</option>
@@ -26585,7 +26790,7 @@
                                                         </div>
                                                         <strong style="flex: 1; min-width: 0;">${safeName}${medicalIcon}</strong>
                                                         <div style="display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin-left: auto; margin-right: 4px;">
-                                                            <span class="badge badge-pace-${fitness}">Pace ${fitness}</span>
+                                                            <span class="badge badge-pace-${fitness}">End ${fitness}</span>
                                                             <span class="badge badge-skills-${skills}" title="${getBikeSkillsTooltip(skills, getSkillsScale()).replace(/\n/g, '&#10;')}" style="cursor: help;">Skills ${skills}</span>
                                                         </div>
                                                         <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">

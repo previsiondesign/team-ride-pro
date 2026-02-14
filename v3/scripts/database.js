@@ -18,6 +18,7 @@ async function getAllRiders() {
     }
     
     // Map database structure to app structure
+    // v3 reads from endurance/climbing/descending columns (falls back to fitness/skills for pre-migration data)
     return (data || []).map(rider => ({
         ...(rider.extra_data || {}),
         id: rider.id,
@@ -27,8 +28,9 @@ async function getAllRiders() {
         grade: rider.grade,
         gender: rider.gender,
         racingGroup: rider.racing_group,
-        fitness: rider.fitness,
-        skills: rider.skills,
+        fitness: rider.endurance || rider.fitness,
+        climbing: rider.climbing || '3',
+        skills: rider.descending || rider.skills,
         photo: rider.photo,
         notes: rider.notes
     }));
@@ -49,7 +51,7 @@ async function getRiderById(id) {
         return null;
     }
     
-    // Map database structure to app structure
+    // Map database structure to app structure (v3 columns)
     return {
         ...(data.extra_data || {}),
         id: data.id,
@@ -59,8 +61,9 @@ async function getRiderById(id) {
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.fitness,
-        skills: data.skills,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes
     };
@@ -70,7 +73,7 @@ async function createRider(riderData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
-    // Map app structure to database structure
+    // Map app structure to database structure (v3 writes to endurance/climbing/descending columns)
     const dbData = {
         name: riderData.name,
         phone: riderData.phone,
@@ -79,7 +82,10 @@ async function createRider(riderData) {
         gender: riderData.gender,
         racing_group: riderData.racing_group || riderData.racingGroup,
         fitness: riderData.fitness,
+        endurance: riderData.fitness,
+        climbing: riderData.climbing || '3',
         skills: riderData.skills,
+        descending: riderData.skills,
         photo: riderData.photo || null,
         notes: riderData.notes || null,
         extra_data: (() => {
@@ -106,7 +112,9 @@ async function createRider(riderData) {
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.fitness,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes
     };
@@ -116,7 +124,7 @@ async function updateRider(id, riderData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
-    // Map app structure to database structure
+    // Map app structure to database structure (v3 writes to both old and new columns for compatibility)
     const dbData = {};
     if (riderData.name !== undefined) dbData.name = riderData.name;
     if (riderData.phone !== undefined) dbData.phone = riderData.phone;
@@ -125,8 +133,9 @@ async function updateRider(id, riderData) {
     if (riderData.gender !== undefined) dbData.gender = riderData.gender;
     if (riderData.racing_group !== undefined) dbData.racing_group = riderData.racing_group;
     if (riderData.racingGroup !== undefined) dbData.racing_group = riderData.racingGroup;
-    if (riderData.fitness !== undefined) dbData.fitness = riderData.fitness;
-    if (riderData.skills !== undefined) dbData.skills = riderData.skills;
+    if (riderData.fitness !== undefined) { dbData.fitness = riderData.fitness; dbData.endurance = riderData.fitness; }
+    if (riderData.climbing !== undefined) dbData.climbing = riderData.climbing;
+    if (riderData.skills !== undefined) { dbData.skills = riderData.skills; dbData.descending = riderData.skills; }
     if (riderData.photo !== undefined) dbData.photo = riderData.photo;
     if (riderData.notes !== undefined) dbData.notes = riderData.notes;
     if (riderData.extra_data !== undefined) dbData.extra_data = riderData.extra_data;
@@ -151,7 +160,9 @@ async function updateRider(id, riderData) {
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.fitness,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes
     };
@@ -190,7 +201,7 @@ async function getAllCoaches() {
         return [];
     }
     
-    // Map database structure to app structure
+    // Map database structure to app structure (v3 columns)
     return (data || []).map(coach => ({
         ...(coach.extra_data || {}),
         id: coach.id,
@@ -199,8 +210,9 @@ async function getAllCoaches() {
         email: coach.email,
         level: coach.level,
         coachingLicenseLevel: coach.level,
-        fitness: coach.fitness,
-        skills: coach.skills,
+        fitness: coach.endurance || coach.fitness,
+        climbing: coach.climbing || '3',
+        skills: coach.descending || coach.skills,
         photo: coach.photo,
         notes: coach.notes,
         user_id: coach.user_id
@@ -222,7 +234,7 @@ async function getCoachById(id) {
         return null;
     }
     
-    // Map database structure to app structure
+    // Map database structure to app structure (v3 columns)
     return {
         ...(data.extra_data || {}),
         id: data.id,
@@ -231,8 +243,9 @@ async function getCoachById(id) {
         email: data.email,
         level: data.level,
         coachingLicenseLevel: data.level,
-        fitness: data.fitness,
-        skills: data.skills,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes,
         user_id: data.user_id
@@ -249,7 +262,10 @@ async function createCoach(coachData) {
         email: coachData.email || null,
         level: coachData.coachingLicenseLevel || coachData.level || '1',
         fitness: coachData.fitness || '5',
+        endurance: coachData.fitness || '5',
+        climbing: coachData.climbing || '3',
         skills: coachData.skills || null,
+        descending: coachData.skills || null,
         photo: coachData.photo || null,
         notes: coachData.notes || null,
         extra_data: (() => {
@@ -273,8 +289,9 @@ async function createCoach(coachData) {
         email: data.email,
         level: data.level,
         coachingLicenseLevel: data.level,
-        fitness: data.fitness,
-        skills: data.skills,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes,
         user_id: data.user_id
@@ -291,8 +308,9 @@ async function updateCoach(id, coachData) {
     if (coachData.email !== undefined) dbData.email = coachData.email;
     if (coachData.level !== undefined) dbData.level = coachData.level;
     if (coachData.coachingLicenseLevel !== undefined) dbData.level = coachData.coachingLicenseLevel;
-    if (coachData.fitness !== undefined) dbData.fitness = coachData.fitness;
-    if (coachData.skills !== undefined) dbData.skills = coachData.skills;
+    if (coachData.fitness !== undefined) { dbData.fitness = coachData.fitness; dbData.endurance = coachData.fitness; }
+    if (coachData.climbing !== undefined) dbData.climbing = coachData.climbing;
+    if (coachData.skills !== undefined) { dbData.skills = coachData.skills; dbData.descending = coachData.skills; }
     if (coachData.photo !== undefined) dbData.photo = coachData.photo;
     if (coachData.notes !== undefined) dbData.notes = coachData.notes;
     if (coachData.extra_data !== undefined) dbData.extra_data = coachData.extra_data;
@@ -314,8 +332,9 @@ async function updateCoach(id, coachData) {
         email: data.email,
         level: data.level,
         coachingLicenseLevel: data.level,
-        fitness: data.fitness,
-        skills: data.skills,
+        fitness: data.endurance || data.fitness,
+        climbing: data.climbing || '3',
+        skills: data.descending || data.skills,
         photo: data.photo,
         notes: data.notes,
         user_id: data.user_id
@@ -739,9 +758,10 @@ const SEASON_APP_TO_DB = {
     startDate: 'start_date',
     endDate: 'end_date',
     practices: 'practices',
-    fitnessScale: 'fitness_scale',
-    skillsScale: 'skills_scale',
-    paceScaleOrder: 'pace_scale_order',
+    fitnessScale: 'endurance_scale',
+    climbingScale: 'climbing_scale',
+    skillsScale: 'descending_scale',
+    paceScaleOrder: 'endurance_scale_order',
     groupPaceOrder: 'group_pace_order',
     csvFieldMappings: 'csv_field_mappings',
     timeEstimationSettings: 'time_estimation_settings',
@@ -753,6 +773,7 @@ const SEASON_DB_TO_APP = Object.fromEntries(Object.entries(SEASON_APP_TO_DB).map
 
 const SEASON_DEFAULTS = {
     fitnessScale: 5,
+    climbingScale: 3,
     skillsScale: 3,
     paceScaleOrder: 'fastest_to_slowest',
     groupPaceOrder: 'fastest_to_slowest',
