@@ -43,3 +43,13 @@ USING (
 WITH CHECK (
     EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role = 'coach-admin')
 );
+
+-- Any coach-admin can delete (needed so requesters can clear stale rows before inserting new requests)
+DROP POLICY IF EXISTS "Coach-admins can delete take over requests" ON admin_take_over_requests;
+CREATE POLICY "Coach-admins can delete take over requests" ON admin_take_over_requests
+FOR DELETE TO authenticated
+USING (EXISTS (
+    SELECT 1 FROM user_roles
+    WHERE user_roles.user_id = auth.uid()
+      AND user_roles.role = 'coach-admin'
+));

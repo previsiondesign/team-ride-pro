@@ -1673,9 +1673,13 @@ async function getTakeOverRequest() {
 async function createTakeOverRequest(requesterInfo) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
+    // Delete any existing row first to avoid RLS UPDATE policy blocking the upsert.
+    // The UPDATE policy only allows the lock holder to update, so a requester's upsert
+    // would silently fail if a stale row already exists.
+    await client.from('admin_take_over_requests').delete().eq('id', 'current');
     const { error } = await client
         .from('admin_take_over_requests')
-        .upsert([{
+        .insert([{
             id: 'current',
             requesting_user_id: requesterInfo.user_id,
             requesting_user_name: requesterInfo.user_name || null,
@@ -1684,7 +1688,7 @@ async function createTakeOverRequest(requesterInfo) {
             response_message: null,
             created_at: new Date().toISOString(),
             responded_at: null
-        }], { onConflict: 'id' });
+        }]);
     if (error) throw error;
 }
 
@@ -1700,6 +1704,16 @@ async function respondToTakeOverRequest(status, responseMessage = null) {
         })
         .eq('id', 'current');
     if (error) throw error;
+}
+
+async function clearTakeOverRequest() {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+        await client.from('admin_take_over_requests').delete().eq('id', 'current');
+    } catch (e) {
+        console.warn('Error clearing take over request:', e);
+    }
 }
 
 // ============ SIMPLIFIED LOGIN LOOKUP ============

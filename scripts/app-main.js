@@ -3151,6 +3151,8 @@
                         clearInterval(lockConflictRequestPollTimer);
                         lockConflictRequestPollTimer = null;
                         overlay.style.display = 'none';
+                        // Clean up the processed request row so it does not block future requests
+                        if (typeof clearTakeOverRequest === 'function') await clearTakeOverRequest();
                         if (req.status === 'granted') {
                             if (typeof releaseAdminEditLock === 'function') await releaseAdminEditLock();
                             await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin' });
@@ -3229,7 +3231,9 @@
                         clearInterval(adminEditLockInterval);
                         adminEditLockInterval = null;
                         showTakeOverRequestPopup(req);
-                    } catch (e) {}
+                    } catch (e) {
+                        console.warn('Take over check poll error:', e);
+                    }
                 }, 2500);
             } catch (error) {
                 console.warn('Failed to initialize admin edit lock:', error);
@@ -3283,6 +3287,9 @@
                 try {
                     if (grant) {
                         if (typeof respondToTakeOverRequest === 'function') await respondToTakeOverRequest('granted');
+                        // Brief delay so the requester's poll can read the 'granted' status before we delete the row
+                        await new Promise(r => setTimeout(r, 3000));
+                        if (typeof clearTakeOverRequest === 'function') await clearTakeOverRequest();
                         try {
                             sessionStorage.setItem('logoutReason', JSON.stringify({ by: name, at: new Date().toISOString() }));
                         } catch (e) {}
@@ -3312,7 +3319,12 @@
                 if (takeOverCountdownTimer) clearInterval(takeOverCountdownTimer);
                 try {
                     if (typeof respondToTakeOverRequest === 'function') await respondToTakeOverRequest('denied', reason);
-                } catch (e) {}
+                    // Brief delay so the requester's poll can read the 'denied' status before we delete the row
+                    await new Promise(r => setTimeout(r, 3000));
+                    if (typeof clearTakeOverRequest === 'function') await clearTakeOverRequest();
+                } catch (e) {
+                    console.warn('Take over deny error:', e);
+                }
                 overlay.style.display = 'none';
             };
             takeOverCountdownSeconds = 30;
@@ -3477,11 +3489,40 @@
 
         function setupAutoLogoutOnClose() {
             const handleClose = () => {
+                // Clear intervals synchronously first
+                if (adminEditLockInterval) { clearInterval(adminEditLockInterval); adminEditLockInterval = null; }
+                if (takeOverCheckInterval) { clearInterval(takeOverCheckInterval); takeOverCheckInterval = null; }
+
                 try {
-                    releaseAdminEditLock();
-                    if (typeof signOut === 'function') {
-                        signOut();
-                    }
+                    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                    if (!currentUser) return;
+
+                    // Use fetch with keepalive to reliably release the lock during page unload.
+                    // Normal async Supabase calls may not complete before the browser discards the page.
+                    const url = window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '');
+                    const key = window.SUPABASE_ANON_KEY || (typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '');
+                    if (!url || !key) return;
+
+                    // Retrieve auth token from sessionStorage for the Authorization header
+                    let token = key;
+                    try {
+                        const projectRef = new URL(url).hostname.split('.')[0];
+                        const sessionStr = sessionStorage.getItem('sb-' + projectRef + '-auth-token');
+                        if (sessionStr) {
+                            const session = JSON.parse(sessionStr);
+                            if (session && session.access_token) token = session.access_token;
+                        }
+                    } catch (e) {}
+
+                    fetch(url + '/rest/v1/admin_edit_locks?id=eq.current&user_id=eq.' + currentUser.id, {
+                        method: 'DELETE',
+                        headers: {
+                            'apikey': key,
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        },
+                        keepalive: true
+                    }).catch(() => {});
                 } catch (error) {
                     console.warn('Auto-logout on close failed:', error);
                 }
