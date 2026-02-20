@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Warmup Timer">
     <meta name="apple-mobile-web-app-status-bar-style" content="#2196F3">
+    <link rel="manifest" href="manifest.json">
     <title>Fort Ord Race Warmup Timer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -170,17 +171,17 @@
         .info-middle { text-align: center; margin-top: 10px; }
         body.fullscreen .info-middle {
             position: absolute;
-            top: 58%;
+            top: 62%;
             left: 50%;
             transform: translate(-50%, -50%);
             width: 88vw; max-width: 500px;
             z-index: 10; text-align: center;
         }
         @media (orientation: portrait) and (max-width: 500px) {
-            body.fullscreen .info-middle { top: 56%; }
+            body.fullscreen .info-middle { top: 60%; }
         }
         @media (orientation: portrait) and (max-width: 400px) {
-            body.fullscreen .info-middle { top: 55%; }
+            body.fullscreen .info-middle { top: 58%; }
         }
 
         .phase-description {
@@ -206,7 +207,7 @@
         .info-bottom { text-align: center; margin-top: 10px; }
         body.fullscreen .info-bottom {
             position: absolute;
-            bottom: 80px;
+            bottom: 56px;
             left: 50%;
             transform: translateX(-50%);
             width: 90vw; max-width: 500px;
@@ -214,12 +215,12 @@
         }
         @media (orientation: portrait) and (max-width: 500px) {
             body.fullscreen .info-bottom {
-                bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 62px);
+                bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 44px);
             }
         }
         @media (orientation: portrait) and (max-width: 400px) {
             body.fullscreen .info-bottom {
-                bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 56px);
+                bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 40px);
             }
         }
 
@@ -627,6 +628,7 @@
                 window.speechSynthesis.speak(t); window.speechSynthesis.cancel();
             }
             document.body.classList.add('fullscreen');
+            try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); } catch(e) {}
             document.querySelector('.setup-screen').classList.remove('active');
             document.querySelector('.timer-screen').classList.remove('active');
             document.querySelector('.countdown-screen').classList.add('active');

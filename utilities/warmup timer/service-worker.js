@@ -1,6 +1,6 @@
 var CACHE_NAME = 'warmup-timer-v1';
 var urlsToCache = [
-    './',
+    './', './manifest.json',
     './warmup-timer.html'
 ];
 

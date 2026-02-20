@@ -1,0 +1,11 @@
+{
+  "name": "Fort Ord Race Warmup Timer",
+  "short_name": "Warmup Timer",
+  "description": "30-minute structured race warmup timer with voice announcements",
+  "start_url": "./warmup-timer.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#f5f5f5",
+  "theme_color": "#2196F3",
+  "icons": []
+}
