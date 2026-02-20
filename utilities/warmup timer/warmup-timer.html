@@ -167,40 +167,53 @@
         body.fullscreen .up-next { font-size: 4.2vw; color: #333; font-weight: 500; margin-top: 1.2vw; }
         @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .up-next { font-size: 4.5vw; } }
 
-        /* ===== Info: middle (description) — floats centered between top and bottom ===== */
-        .info-middle { text-align: center; margin-top: 10px; }
+        /* ===== Info: middle (description) — flex container spanning gap between top and bottom ===== */
+        .info-middle {
+            text-align: center; margin-top: 12px;
+            display: flex; align-items: center; justify-content: center;
+        }
         body.fullscreen .info-middle {
             position: absolute;
-            top: 62%;
+            top: 48%;
+            bottom: 100px;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translateX(-50%);
             width: 88vw; max-width: 500px;
             z-index: 10; text-align: center;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
         }
         @media (orientation: portrait) and (max-width: 500px) {
-            body.fullscreen .info-middle { top: 60%; }
+            body.fullscreen .info-middle {
+                top: 47%;
+                bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 84px);
+            }
         }
         @media (orientation: portrait) and (max-width: 400px) {
-            body.fullscreen .info-middle { top: 58%; }
+            body.fullscreen .info-middle {
+                top: 46%;
+                bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 76px);
+            }
         }
 
         .phase-description {
             font-size: 14px; color: #555; font-style: italic; line-height: 1.45;
             max-width: 460px; margin-left: auto; margin-right: auto;
+            padding: 0 4px;
         }
         body.fullscreen .phase-description {
             font-size: 5.4vw; color: #444; font-style: italic; line-height: 1.4;
             white-space: normal; word-wrap: break-word;
-            max-height: 22vh; overflow: hidden;
+            transition: font-size 0.15s ease;
         }
         @media (orientation: portrait) and (max-width: 500px) {
-            body.fullscreen .phase-description { font-size: 5.1vw; max-height: 20vh; }
+            body.fullscreen .phase-description { font-size: 5.1vw; }
         }
         @media (orientation: portrait) and (max-width: 400px) {
-            body.fullscreen .phase-description { font-size: 4.8vw; max-height: 18vh; }
+            body.fullscreen .phase-description { font-size: 4.8vw; }
         }
         @media (orientation: portrait) and (max-width: 360px) {
-            body.fullscreen .phase-description { font-size: 4.5vw; max-height: 16vh; }
+            body.fullscreen .phase-description { font-size: 4.5vw; }
         }
 
         /* ===== Info: bottom (remaining + completion) — close to controls ===== */
@@ -373,7 +386,7 @@
                 <div class="step-info" id="stepDisplay">Step 1 of 12</div>
                 <div class="up-next" id="upNextDisplay"></div>
             </div>
-            <div class="info-middle">
+            <div class="info-middle" id="infoMiddle">
                 <div class="phase-description" id="phaseDescription"></div>
             </div>
             <div class="info-bottom">
@@ -557,12 +570,31 @@
             while (el.scrollWidth > mw && fs > min) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
             if (fs < orig * 0.7) el.style.fontSize = ((fs / window.innerWidth) * 100) + 'vw';
         }
+        function autoResizeDescription() {
+            var el = document.getElementById('phaseDescription');
+            var box = document.getElementById('infoMiddle');
+            if (!el || !box || !el.textContent) return;
+            el.style.fontSize = '';
+            void el.offsetHeight;
+            var avail = box.clientHeight;
+            if (avail <= 0) return;
+            var fs = parseFloat(window.getComputedStyle(el).fontSize);
+            var minFs = Math.max(11, fs * 0.45);
+            var tries = 0;
+            while (el.scrollHeight > avail && fs > minFs && tries < 40) {
+                fs -= 0.5;
+                el.style.fontSize = fs + 'px';
+                tries++;
+            }
+        }
+
         var resizeTimeout;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(function() {
                 var p = document.getElementById('phaseDisplay');
                 if (p && document.body.classList.contains('fullscreen')) autoResizePhaseText(p);
+                autoResizeDescription();
             }, 100);
         });
 
@@ -734,6 +766,7 @@
             pb.style.width = pct + '%'; pb.className = 'overall-progress-bar phase-' + step.type;
             document.getElementById('skipBackBtn').disabled = (currentStepIndex === 0);
             if (timeRemaining <= 3) ts.classList.add('pulsing'); else ts.classList.remove('pulsing');
+            setTimeout(autoResizeDescription, 0);
         }
 
         function pauseResume() {
