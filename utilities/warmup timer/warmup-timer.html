@@ -325,6 +325,9 @@
         .confirm-yes:hover { background: #1976D2; }
         .confirm-no { background: #eee; color: #333; }
         .confirm-no:hover { background: #ddd; }
+        .confirm-reset-row { margin-top: 10px; }
+        .confirm-reset { width: 100%; padding: 12px 0; font-size: 14px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; background: #F44336; color: white; }
+        .confirm-reset:hover { background: #D32F2F; }
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
@@ -394,7 +397,7 @@
             </div>
             <div class="controls">
                 <button class="button button-secondary skip-button" onclick="onSkipBack()" id="skipBackBtn">&lsaquo; Skip</button>
-                <button class="button button-secondary pause-button" onclick="onPauseResume()" id="pauseButton">Pause</button>
+                <button class="button button-secondary pause-button" onclick="onPauseResume()" id="pauseButton">Pause/Reset</button>
                 <button class="button button-secondary skip-button" onclick="onSkipForward()" id="skipFwdBtn">Skip &rsaquo;</button>
             </div>
         </div>
@@ -406,6 +409,9 @@
             <div class="confirm-buttons">
                 <button class="confirm-yes" id="confirmYes">Yes</button>
                 <button class="confirm-no" id="confirmNo">Cancel</button>
+            </div>
+            <div class="confirm-reset-row" id="confirmResetRow" style="display:none;">
+                <button class="confirm-reset" id="confirmReset">Reset Timer</button>
             </div>
         </div>
     </div>
@@ -454,8 +460,9 @@
         var audioContext = null;
 
         var pendingAction = null;
-        function showConfirm(message, callback) {
+        function showConfirm(message, callback, showReset) {
             document.getElementById('confirmText').textContent = message;
+            document.getElementById('confirmResetRow').style.display = showReset ? 'block' : 'none';
             document.getElementById('confirmOverlay').classList.add('visible');
             pendingAction = callback;
         }
@@ -469,6 +476,12 @@
             e.stopPropagation();
             document.getElementById('confirmOverlay').classList.remove('visible');
             pendingAction = null;
+        });
+        document.getElementById('confirmReset').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('confirmOverlay').classList.remove('visible');
+            pendingAction = null;
+            stopTimer();
         });
         document.getElementById('confirmOverlay').addEventListener('click', function(e) {
             if (e.target === this) { this.classList.remove('visible'); pendingAction = null; }
@@ -485,7 +498,7 @@
         }
         function onPauseResume() {
             if (isComplete) { stopTimer(); return; }
-            if (!isPaused) showConfirm('Pause the timer?', pauseResume);
+            if (!isPaused) showConfirm('Pause the timer?', pauseResume, true);
             else pauseResume();
         }
 
@@ -651,7 +664,7 @@
             document.getElementById('timeDisplay').classList.remove('complete');
             document.getElementById('phaseDisplay').classList.remove('complete', 'phase-complete');
             var pb = document.getElementById('pauseButton');
-            pb.textContent = 'Pause'; pb.className = 'button button-secondary pause-button';
+            pb.textContent = 'Pause/Reset'; pb.className = 'button button-secondary pause-button';
             document.getElementById('skipFwdBtn').disabled = false;
             initAudioContext();
             if ('speechSynthesis' in window) {
@@ -775,7 +788,7 @@
                 var pd = Math.floor((Date.now() - pauseStartTime) / 1000);
                 pausedTime += pd; overallPausedTime += pd; pauseStartTime = null;
             }
-            document.getElementById('pauseButton').textContent = isPaused ? 'Resume' : 'Pause';
+            document.getElementById('pauseButton').textContent = isPaused ? 'Resume' : 'Pause/Reset';
         }
 
         function stopTimer() {
@@ -788,7 +801,7 @@
             document.querySelector('.countdown-screen').classList.remove('active');
             document.querySelector('.setup-screen').classList.add('active');
             var pb = document.getElementById('pauseButton');
-            pb.textContent = 'Pause'; pb.className = 'button button-secondary pause-button';
+            pb.textContent = 'Pause/Reset'; pb.className = 'button button-secondary pause-button';
         }
 
         function completeTimer() {
