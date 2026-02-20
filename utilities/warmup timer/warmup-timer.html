@@ -314,6 +314,14 @@
         }
         .controls .button { margin-top: 0; }
 
+        /* ===== Duration controls on setup screen ===== */
+        .duration-controls {
+            display: flex; gap: 10px; margin-top: 14px; max-width: 400px; width: 100%; align-items: center; justify-content: center;
+        }
+        .duration-controls .button { font-size: 13px; padding: 8px 12px; margin-top: 0; flex: 1; }
+        .duration-controls .button:disabled { opacity: 0.35; cursor: default; }
+        .duration-label { font-size: 14px; font-weight: 600; color: #555; text-align: center; margin-top: 12px; }
+
         /* ===== Confirmation overlay ===== */
         .confirm-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background: rgba(0,0,0,0.55); z-index: 100; align-items: center; justify-content: center; }
         .confirm-overlay.visible { display: flex; }
@@ -369,6 +377,11 @@
                 </table>
             </div>
             <button class="button button-primary" onclick="startTimer()" style="max-width: 400px;">Start Warmup</button>
+            <div class="duration-label" id="durationLabel">30 min warmup</div>
+            <div class="duration-controls">
+                <button class="button button-secondary" id="shortenBtn" onclick="shortenWarmup()">Shorten by 5 min</button>
+                <button class="button button-secondary" id="extendBtn" onclick="extendWarmup()">Extend by 5 min</button>
+            </div>
         </div>
 
         <div class="countdown-screen">
@@ -440,6 +453,95 @@
         ];
 
         var TOTAL_WARMUP = WARMUP_STEPS.reduce(function(sum, s) { return sum + s.duration; }, 0);
+
+        var currentDuration = 30;
+
+        function buildSteps(minutes) {
+            var steps;
+            if (minutes === 25) {
+                steps = [
+                    { duration: 480, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 8 minutes' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 300, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 5 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 6 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            } else if (minutes === 35) {
+                steps = [
+                    { duration: 780, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 13 minutes' },
+                    { duration: 120, label: 'Build effort to 40%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 40 percent' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 4: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 4. Race pace! 30 seconds' },
+                    { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            } else {
+                steps = [
+                    { duration: 600, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 10 minutes' },
+                    { duration: 120, label: 'Build effort to 40%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 40 percent' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            }
+            return steps;
+        }
+
+        function formatStepDuration(sec) {
+            if (sec >= 60 && sec % 60 === 0) return (sec / 60) + ' min';
+            return sec + ' sec';
+        }
+
+        function rebuildTable() {
+            var tbody = document.querySelector('.warmup-steps tbody');
+            var total = WARMUP_STEPS.reduce(function(s, step) { return s + step.duration; }, 0);
+            var rows = '';
+            for (var i = 0; i < WARMUP_STEPS.length; i++) {
+                var step = WARMUP_STEPS[i];
+                var dotClass = 'dot-' + step.type;
+                var lbl = step.descKey === 'cooldown' ? step.label + ' cooldown' : step.label;
+                rows += '<tr><td class="time-col">' + formatStepDuration(step.duration) + '</td><td><span class="step-dot ' + dotClass + '"></span>' + lbl + '</td></tr>';
+            }
+            rows += '<tr><td class="time-col"><strong>' + Math.round(total / 60) + ' min</strong></td><td><strong>Total Warmup</strong></td></tr>';
+            tbody.innerHTML = rows;
+        }
+
+        function setDuration(minutes) {
+            currentDuration = minutes;
+            WARMUP_STEPS = buildSteps(minutes);
+            TOTAL_WARMUP = WARMUP_STEPS.reduce(function(s, step) { return s + step.duration; }, 0);
+            rebuildTable();
+            document.getElementById('shortenBtn').disabled = (minutes <= 25);
+            document.getElementById('extendBtn').disabled = (minutes >= 35);
+            document.getElementById('durationLabel').textContent = minutes + ' min warmup';
+        }
+
+        function shortenWarmup() { if (currentDuration > 25) setDuration(currentDuration - 5); }
+        function extendWarmup() { if (currentDuration < 35) setDuration(currentDuration + 5); }
 
         var currentStepIndex = 0;
         var timeRemaining = 0;
