@@ -481,7 +481,7 @@
             e.stopPropagation();
             document.getElementById('confirmOverlay').classList.remove('visible');
             pendingAction = null;
-            stopTimer();
+            setTimeout(function() { showConfirm('Are you sure you want to reset the timer?', stopTimer); }, 200);
         });
         document.getElementById('confirmOverlay').addEventListener('click', function(e) {
             if (e.target === this) { this.classList.remove('visible'); pendingAction = null; }
