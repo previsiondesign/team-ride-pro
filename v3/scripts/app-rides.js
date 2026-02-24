@@ -509,16 +509,20 @@
             const nextRide = upcomingRides.length > 0 ? upcomingRides[0] : null;
             const nextDateLabel = document.getElementById('next-practice-date-label');
             const planNextBtn = document.getElementById('plan-next-practice-btn');
+            const nextDateFormatted = (() => {
+                if (!nextRide) return '';
+                const rideDate = parseISODate(nextRide.date);
+                return rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : nextRide.date;
+            })();
             if (nextDateLabel) {
-                if (nextRide) {
-                    const rideDate = parseISODate(nextRide.date);
-                    nextDateLabel.textContent = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : nextRide.date;
-                } else {
-                    nextDateLabel.textContent = 'No upcoming practice';
-                }
+                nextDateLabel.textContent = nextDateFormatted || 'No upcoming practice';
             }
             if (planNextBtn) {
                 planNextBtn.disabled = !nextRide;
+            }
+            const homeNextDateEl = document.getElementById('practice-home-next-date');
+            if (homeNextDateEl) {
+                homeNextDateEl.textContent = nextDateFormatted ? `Next Practice: ${nextDateFormatted}` : '';
             }
             
             // Show/hide views based on practicePlannerView
@@ -795,6 +799,7 @@
             const ridesWithGroups = (data.rides || [])
                 .filter(r => {
                     if (!r.date || r.deleted || r.cancelled) return false;
+                    if (isRideDateExcludedFromPlanner(r.date)) return false;
                     const rDate = parseISODate(r.date);
                     if (!rDate) return false;
                     return rDate < currentDate && r.groups && r.groups.length > 0;
@@ -883,14 +888,20 @@
                 ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => c.id);
             }
 
+            const rideDate = ride.date || '';
+            const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
+            const isCoachAbsent = (id) => rideDate && isScheduledAbsent('coach', id, rideDate).absent;
+
             ride.groups = sourceRide.groups.map(srcGroup => {
                 const newGroup = createGroup(srcGroup.label);
-                newGroup.riders = srcGroup.riders ? [...srcGroup.riders] : [];
+                newGroup.riders = srcGroup.riders ? srcGroup.riders.filter(id => !isRiderAbsent(id)) : [];
                 if (srcGroup.coaches) {
-                    newGroup.coaches.leader = srcGroup.coaches.leader || null;
-                    newGroup.coaches.sweep = srcGroup.coaches.sweep || null;
-                    newGroup.coaches.roam = srcGroup.coaches.roam || null;
-                    newGroup.coaches.extraRoam = Array.isArray(srcGroup.coaches.extraRoam) ? [...srcGroup.coaches.extraRoam] : [];
+                    newGroup.coaches.leader = (srcGroup.coaches.leader && !isCoachAbsent(srcGroup.coaches.leader)) ? srcGroup.coaches.leader : null;
+                    newGroup.coaches.sweep = (srcGroup.coaches.sweep && !isCoachAbsent(srcGroup.coaches.sweep)) ? srcGroup.coaches.sweep : null;
+                    newGroup.coaches.roam = (srcGroup.coaches.roam && !isCoachAbsent(srcGroup.coaches.roam)) ? srcGroup.coaches.roam : null;
+                    newGroup.coaches.extraRoam = Array.isArray(srcGroup.coaches.extraRoam)
+                        ? srcGroup.coaches.extraRoam.filter(id => !isCoachAbsent(id))
+                        : [];
                 }
                 newGroup.routeId = includeRoutes ? (srcGroup.routeId || null) : null;
                 newGroup.sortBy = srcGroup.sortBy;
@@ -899,6 +910,25 @@
 
             ride.planningStarted = true;
             saveRideToDB(ride);
+
+            // Warn about unassigned attending riders/coaches
+            const assignedRiderIds = new Set();
+            const assignedCoachIds = new Set();
+            ride.groups.forEach(g => {
+                (g.riders || []).forEach(id => assignedRiderIds.add(id));
+                if (g.coaches?.leader) assignedCoachIds.add(g.coaches.leader);
+                if (g.coaches?.sweep) assignedCoachIds.add(g.coaches.sweep);
+                if (g.coaches?.roam) assignedCoachIds.add(g.coaches.roam);
+                (g.coaches?.extraRoam || []).forEach(id => { if (id) assignedCoachIds.add(id); });
+            });
+            const unassignedRiders = (ride.availableRiders || []).filter(id => !assignedRiderIds.has(id));
+            const unassignedCoaches = (ride.availableCoaches || []).filter(id => !assignedCoachIds.has(id));
+            if (unassignedRiders.length > 0 || unassignedCoaches.length > 0) {
+                const parts = [];
+                if (unassignedRiders.length > 0) parts.push(`${unassignedRiders.length} rider${unassignedRiders.length !== 1 ? 's' : ''}`);
+                if (unassignedCoaches.length > 0) parts.push(`${unassignedCoaches.length} coach${unassignedCoaches.length !== 1 ? 'es' : ''}`);
+                alert(`Groups copied. Note: ${parts.join(' and ')} marked as attending are currently unassigned and need to be placed in groups.`);
+            }
 
             _copyPriorSource = null;
             _selectedPriorRideId = null;
@@ -3701,7 +3731,10 @@
                             // In future picker, exclude planner-excluded practices
                             return !isRideDateExcludedFromPlanner(dateKey);
                         }
-                        return (pickerMode === 'past' && isPast);
+                        if (pickerMode === 'past' && isPast) {
+                            return !isRideDateExcludedFromPlanner(dateKey);
+                        }
+                        return false;
                     })();
 
                     if (pickerMode) {
@@ -6004,6 +6037,7 @@
             const allRides = (data.rides || [])
                 .filter(r => {
                     if (!r.date || r.deleted || r.cancelled) return false;
+                    if (isRideDateExcludedFromPlanner(r.date)) return false;
                     const rDate = parseISODate(r.date);
                     if (!rDate) return false;
                     return rDate < currentDate; // Only practices before current
@@ -6101,25 +6135,30 @@
             const missingCoaches = Array.from(sourceAvailableCoaches).filter(id => !currentAvailableCoaches.has(id));
             const missingRiders = Array.from(sourceAvailableRiders).filter(id => !currentAvailableRiders.has(id));
 
+            // Build scheduled-absence lookup for the current ride date
+            const rideDate = ride.date || '';
+            const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
+            const isCoachAbsent = (id) => rideDate && isScheduledAbsent('coach', id, rideDate).absent;
+
             // Copy groups from source practice
             ride.groups = sourceRide.groups.map(sourceGroup => {
                 const newGroup = createGroup(sourceGroup.label);
                 
-                // Copy riders (only those available in current practice)
-                newGroup.riders = sourceGroup.riders.filter(riderId => currentAvailableRiders.has(riderId));
+                // Copy riders (only those available in current practice and not scheduled absent)
+                newGroup.riders = sourceGroup.riders.filter(riderId => currentAvailableRiders.has(riderId) && !isRiderAbsent(riderId));
                 
-                // Copy coaches (only those available in current practice)
-                if (sourceGroup.coaches.leader && currentAvailableCoaches.has(sourceGroup.coaches.leader)) {
+                // Copy coaches (only those available in current practice and not scheduled absent)
+                if (sourceGroup.coaches.leader && currentAvailableCoaches.has(sourceGroup.coaches.leader) && !isCoachAbsent(sourceGroup.coaches.leader)) {
                     newGroup.coaches.leader = sourceGroup.coaches.leader;
                 }
-                if (sourceGroup.coaches.sweep && currentAvailableCoaches.has(sourceGroup.coaches.sweep)) {
+                if (sourceGroup.coaches.sweep && currentAvailableCoaches.has(sourceGroup.coaches.sweep) && !isCoachAbsent(sourceGroup.coaches.sweep)) {
                     newGroup.coaches.sweep = sourceGroup.coaches.sweep;
                 }
-                if (sourceGroup.coaches.roam && currentAvailableCoaches.has(sourceGroup.coaches.roam)) {
+                if (sourceGroup.coaches.roam && currentAvailableCoaches.has(sourceGroup.coaches.roam) && !isCoachAbsent(sourceGroup.coaches.roam)) {
                     newGroup.coaches.roam = sourceGroup.coaches.roam;
                 }
                 if (Array.isArray(sourceGroup.coaches.extraRoam)) {
-                    newGroup.coaches.extraRoam = sourceGroup.coaches.extraRoam.filter(id => currentAvailableCoaches.has(id));
+                    newGroup.coaches.extraRoam = sourceGroup.coaches.extraRoam.filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id));
                 }
                 
                 // Auto-promote qualified L2/L3 coach to leader if original leader is absent

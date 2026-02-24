@@ -4824,6 +4824,7 @@
 
             saveAssignmentState(ride);
             ride.groups = ride.groups.filter(g => g.id !== numericId);
+            renumberGroups(ride, true);
             saveRideToDB(ride);
             renderAssignments(ride);
 
@@ -4861,6 +4862,7 @@
             if (otherGroups.length > 0) {
                 menuHtml += `<div class="group-menu-item" onclick="openMergeGroupDialog(${numericId}); closeGroupMenu();">Merge this group with…</div>`;
             }
+            menuHtml += `<div class="group-menu-item" onclick="splitGroup(${numericId}); closeGroupMenu();">Split Group</div>`;
             menuHtml += `<div class="group-menu-separator"></div>`;
             menuHtml += `<div class="group-menu-item group-menu-danger" onclick="deleteGroup(${numericId}); closeGroupMenu();">Delete Group</div>`;
 
@@ -5137,6 +5139,13 @@
             const existing = document.getElementById('reorder-groups-dialog-overlay');
             if (existing) existing.remove();
 
+            // Sort groups by label number so dialog matches the visual order
+            ride.groups.sort((a, b) => {
+                const aNum = parseInt((a.label || '').match(/\d+/)?.[0] || '0', 10);
+                const bNum = parseInt((b.label || '').match(/\d+/)?.[0] || '0', 10);
+                return aNum - bNum;
+            });
+
             // Capture original labels keyed by group object reference
             _reorderOriginalLabels = new Map();
             ride.groups.forEach(g => {
@@ -5299,6 +5308,135 @@
 
             // Remove source group
             ride.groups = ride.groups.filter(g => g.id !== sourceGroupId);
+            renumberGroups(ride, true);
+            saveRideToDB(ride);
+            renderAssignments(ride);
+        }
+
+        function splitGroup(groupId) {
+            const ride = data.rides.find(r => r.id === data.currentRide);
+            if (!ride) return;
+            const numericId = parseInt(groupId, 10);
+            const group = findGroupById(ride, numericId);
+            if (!group) return;
+
+            if (!group.riders || group.riders.length < 2) {
+                alert('This group needs at least 2 riders to be split.');
+                return;
+            }
+            if (!confirm(`Split "${group.label || 'this group'}" into two groups?`)) return;
+
+            saveAssignmentState(ride);
+
+            const riderMap = {};
+            (data.riders || []).forEach(r => { riderMap[r.id] = r; });
+
+            const sortedRiders = [...group.riders].sort((a, b) => {
+                const ra = riderMap[a], rb = riderMap[b];
+                const fa = ra ? (parseInt(ra.fitness || '5', 10) || 5) : 5;
+                const fb = rb ? (parseInt(rb.fitness || '5', 10) || 5) : 5;
+                return fb - fa;
+            });
+
+            // Snake-draft: 0->A, 1->B, 2->B, 3->A, 4->A, 5->B ...
+            const ridersA = [], ridersB = [];
+            sortedRiders.forEach((rid, i) => {
+                const cycle = Math.floor(i / 2);
+                const pos = i % 2;
+                if ((cycle % 2 === 0 && pos === 0) || (cycle % 2 === 1 && pos === 1)) {
+                    ridersA.push(rid);
+                } else {
+                    ridersB.push(rid);
+                }
+            });
+
+            const groupIdx = ride.groups.indexOf(group);
+            const existingLabels = new Set(ride.groups.map(g => g.label).filter(Boolean));
+            let nextNum = 1;
+            const getNextLabel = () => {
+                while (existingLabels.has(`Group ${nextNum}`)) nextNum++;
+                const label = `Group ${nextNum}`;
+                existingLabels.add(label);
+                nextNum++;
+                return label;
+            };
+
+            const groupA = createGroup(getNextLabel());
+            const groupB = createGroup(getNextLabel());
+            groupA.riders = ridersA;
+            groupB.riders = ridersB;
+            groupA.routeId = group.routeId;
+            groupB.routeId = group.routeId;
+            groupA.sortBy = group.sortBy || 'pace';
+            groupB.sortBy = group.sortBy || 'pace';
+
+            // Distribute coaches
+            const coachSlots = [];
+            if (group.coaches.leader) coachSlots.push({ id: group.coaches.leader, role: 'leader' });
+            if (group.coaches.sweep) coachSlots.push({ id: group.coaches.sweep, role: 'sweep' });
+            if (group.coaches.roam) coachSlots.push({ id: group.coaches.roam, role: 'roam' });
+            (group.coaches.extraRoam || []).forEach(id => {
+                if (id) coachSlots.push({ id, role: 'extraRoam' });
+            });
+
+            const coachMap = {};
+            (data.coaches || []).forEach(c => { coachMap[c.id] = c; });
+            const minLeaderLevel = typeof getAutoAssignSetting === 'function' ? getAutoAssignSetting('minLeaderLevel', 2) : 2;
+
+            // Sort coaches: highest level first for best leader selection
+            coachSlots.sort((a, b) => {
+                const ca = coachMap[a.id], cb = coachMap[b.id];
+                const la = ca ? (parseInt(ca.coachingLicenseLevel || ca.level || '0', 10) || 0) : 0;
+                const lb = cb ? (parseInt(cb.coachingLicenseLevel || cb.level || '0', 10) || 0) : 0;
+                return lb - la;
+            });
+
+            const assignCoachToGroup = (targetGroup, coachId) => {
+                const coach = coachMap[coachId];
+                const level = coach ? (parseInt(coach.coachingLicenseLevel || coach.level || '0', 10) || 0) : 0;
+                if (!targetGroup.coaches.leader && level >= minLeaderLevel) {
+                    targetGroup.coaches.leader = coachId;
+                } else if (!targetGroup.coaches.sweep) {
+                    targetGroup.coaches.sweep = coachId;
+                } else if (!targetGroup.coaches.roam) {
+                    targetGroup.coaches.roam = coachId;
+                } else {
+                    if (!Array.isArray(targetGroup.coaches.extraRoam)) targetGroup.coaches.extraRoam = [];
+                    targetGroup.coaches.extraRoam.push(coachId);
+                }
+            };
+
+            // Alternate coaches between group A and B
+            coachSlots.forEach((slot, i) => {
+                assignCoachToGroup(i % 2 === 0 ? groupA : groupB, slot.id);
+            });
+
+            // Promote if no leader assigned
+            [groupA, groupB].forEach(g => {
+                if (g.coaches.leader) return;
+                const slots = [
+                    { role: 'sweep', id: g.coaches.sweep },
+                    { role: 'roam', id: g.coaches.roam },
+                    ...((g.coaches.extraRoam || []).map(id => ({ role: 'extraRoam', id })))
+                ].filter(s => s.id);
+                if (slots.length === 0) return;
+                slots.sort((a, b) => {
+                    const ca = coachMap[a.id], cb = coachMap[b.id];
+                    const la = ca ? (parseInt(ca.coachingLicenseLevel || ca.level || '0', 10) || 0) : 0;
+                    const lb = cb ? (parseInt(cb.coachingLicenseLevel || cb.level || '0', 10) || 0) : 0;
+                    return lb - la;
+                });
+                const promoted = slots[0];
+                g.coaches.leader = promoted.id;
+                if (promoted.role === 'sweep') g.coaches.sweep = null;
+                else if (promoted.role === 'roam') g.coaches.roam = null;
+                else if (promoted.role === 'extraRoam') {
+                    g.coaches.extraRoam = (g.coaches.extraRoam || []).filter(id => id !== promoted.id);
+                }
+            });
+
+            ride.groups.splice(groupIdx, 1, groupA, groupB);
+            renumberGroups(ride, true);
             saveRideToDB(ride);
             renderAssignments(ride);
         }
