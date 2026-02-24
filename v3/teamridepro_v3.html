@@ -4,15 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tam High MTB Team Roster and Practice Manager</title>
-    <link rel="stylesheet" href="styles.css?v=20241220b">
-    <link rel="stylesheet" href="styles-overrides.css?v=20241220b">
+    <!-- Critical: hide app chrome instantly (before external CSS loads) -->
+    <style>
+        body.app-initializing .sticky-top,
+        body.app-initializing .container,
+        body.app-initializing .practice-sidebar { visibility: hidden !important; }
+    </style>
+    <link rel="stylesheet" href="styles.css?v=20260216u">
+    <link rel="stylesheet" href="styles-overrides.css?v=20260216u">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Rubik+Dirt&display=swap" rel="stylesheet">
     <!-- Supabase JS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Supabase Configuration, Auth, Database Functions, and Roles -->
-    <script src="scripts/supabase-config.js"></script>
-    <script src="scripts/auth.js"></script>
-    <script src="scripts/database.js"></script>
-    <script src="scripts/roles.js"></script>
+    <script src="scripts/supabase-config.js?v=20260216u"></script>
+    <script src="scripts/auth.js?v=20260216u"></script>
+    <script src="scripts/database.js?v=20260216u"></script>
+    <script src="scripts/roles.js?v=20260216u"></script>
     <!-- jsPDF library for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -20,18 +30,48 @@
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client"></script>
 </head>
-<body>
+<body class="app-initializing">
+    <!-- Loading overlay shown between login and app ready -->
+    <div id="loading-overlay" style="display:none; position:fixed; inset:0; z-index:1999; background:url('assets/background.jpg') center/cover no-repeat #f0f0f0; align-items:center; justify-content:center;">
+        <div style="background:rgba(255,255,255,.85); backdrop-filter:blur(8px); border-radius:16px; padding:40px 48px; display:flex; flex-direction:column; align-items:center; gap:16px; box-shadow:0 4px 24px rgba(0,0,0,.12);">
+            <div class="loading-spinner"></div>
+            <div style="color:#444; font-size:15px; font-weight:500;">Loading your team data…</div>
+        </div>
+    </div>
+    <!-- WELCOME SHORTCUT SCREEN (outside .container so it renders independently) -->
+    <div id="welcome-screen" class="welcome-screen" style="display: none;">
+        <div class="welcome-card">
+            <h1 id="welcome-team-name" class="welcome-team-name" style="font-family: 'Rubik Dirt', cursive; font-weight: normal;"></h1>
+            <h2 id="welcome-title" class="welcome-title">Good morning, what would you like to do?</h2>
+            <div class="welcome-actions">
+                <button class="welcome-action-btn" onclick="handleWelcomeAction('rides')">Plan the next practice</button>
+                <button class="welcome-action-btn" onclick="handleWelcomeAction('routes')">Add or edit practice routes</button>
+                <button class="welcome-action-btn" onclick="handleWelcomeAction('roster')">View/update rosters</button>
+                <button class="welcome-action-btn secondary" onclick="handleWelcomeAction('full-site')">Go to the full site</button>
+            </div>
+            <div class="welcome-footer">
+                <label class="welcome-pref-row">
+                    <input type="checkbox" id="welcome-disable-checkbox" onchange="handleWelcomeDisableToggle(this.checked)">
+                    <span>Don't show this welcome screen next time</span>
+                </label>
+                <button class="welcome-logout-btn" onclick="handleLogout()">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="read-only-banner" class="mode-banner mode-banner-readonly" style="display:flex; align-items:center; justify-content:center; gap:12px;">
+        <span id="read-only-banner-text">Read-only mode enabled.</span>
+        <button type="button" data-readonly-allow="true" onclick="enterDeveloperMode()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">Switch to Developer Mode</button>
+    </div>
+    <div id="developer-mode-banner" class="mode-banner mode-banner-developer" style="display:none; align-items:center; justify-content:center; gap:12px;">
+        <span>Developer mode is ON: changes are saved only in this browser and do not affect the live site.</span>
+        <button type="button" onclick="handleExitDeveloperMode()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">Exit Developer Mode</button>
+    </div>
+    <div id="header-scroll-shield" class="header-scroll-shield"></div>
     <div class="sticky-top">
-        <div id="read-only-banner" class="mode-banner mode-banner-readonly">
-            Read-only mode enabled.
-        </div>
-        <div id="developer-mode-banner" class="mode-banner mode-banner-developer">
-            Developer mode is ON: changes are saved only in this browser and do not affect the live site.
-        </div>
         <div class="header-bar">
             <div class="header-title-container">
-                <img src="assets/tam-high-logo.png" alt="Tam High Logo" class="header-logo" id="header-logo" style="border-radius: 50%; object-fit: cover;">
-                <h1>Tam High Mountain Bike Racing Team</h1>
+                <h1 id="header-team-name" style="font-family: 'Rubik Dirt', cursive; font-weight: normal; visibility: hidden;">Tam High Mountain Bike Racing Team</h1>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
                 <div class="user-menu" id="user-menu">
@@ -47,43 +87,48 @@
                     <button class="mobile-menu-button" id="mobile-menu-button" onclick="toggleMobileMenu()" aria-label="Menu">
                     </button>
                     <div class="mobile-menu-dropdown" id="mobile-menu-dropdown">
-                        <button class="mobile-menu-item active" onclick="selectMobileTab('settings')">Team Dashboard</button>
+                        <button class="mobile-menu-item active" onclick="selectMobileTab('settings')">Season Dashboard</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('roster')">Roster</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('routes')">Routes</button>
-                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Reporting</button>
+                        <!-- <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Reporting</button> -->
                         <button class="mobile-menu-item" onclick="selectMobileTab('rides')">Practice Planner</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('assignments')">Rider Assignments</button>
                         <button class="mobile-menu-item" onclick="selectMobileTab('coach-assignments')">Coach Assignments</button>
-                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Practice Reporting</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('site-settings')">Settings</button>
+                        <!-- <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Practice Reporting</button> -->
                     </div>
                 </div>
             </div>
         </div>
         <div class="tabs" id="desktop-tabs" style="display: flex; justify-content: space-between;">
             <div style="display: flex;">
-                <button class="tab active" onclick="switchTab('settings', this)">Team Dashboard</button>
+                <button class="tab" onclick="switchTab('settings', this)">Season Dashboard</button>
                 <button class="tab" onclick="switchTab('roster', this)">Roster</button>
                 <button class="tab" onclick="switchTab('routes', this)">Routes</button>
-                <button class="tab" onclick="switchTab('practice-reporting', this)">Reporting</button>
+                <!-- <button class="tab" onclick="switchTab('practice-reporting', this)">Reporting</button> -->
                 <button class="tab" onclick="switchTab('rides', this)">Practice Planner</button>
             </div>
             <div style="display: flex;">
                 <button class="tab" onclick="switchTab('assignments', this)">Rider Assignments</button>
                 <button class="tab" onclick="switchTab('coach-assignments', this)">Coach Assignments</button>
+                <button class="tab" onclick="switchTab('site-settings', this)">Settings</button>
             </div>
         </div>
     </div>
+    <div id="sticky-top-spacer" class="sticky-top-spacer"></div>
 
     <!-- Practice Sidebars (visible only when a practice is loaded in Practice Planner) -->
     <div id="sidebar-riders" class="practice-sidebar practice-sidebar-left" style="display: none;"
          data-drop-type="rider" data-group-id="unassigned" data-sidebar-drop="true"
          ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
-        <div class="sidebar-collapsed-strip" onclick="expandSidebar('riders')" title="Expand Rider Attendance">
-            <span class="sidebar-collapsed-title">Rider Attendance</span>
+        <div class="sidebar-collapsed-strip" onclick="expandSidebar('riders')" title="Expand Riders">
+            <span class="sidebar-collapsed-title">RIDERS</span>
+            <span id="sidebar-riders-collapsed-stats" class="sidebar-collapsed-stats"></span>
         </div>
         <div class="sidebar-expanded-content">
-        <div class="sidebar-header">Riders <span id="sidebar-riders-count" class="sidebar-count"></span>
-            <button class="sidebar-collapse-btn" onclick="collapseSidebar('riders')" title="Collapse">◀</button>
+        <div class="sidebar-header" style="cursor: pointer;">
+            <span onclick="collapseSidebar('riders')" title="Collapse sidebar" style="flex: 1; display: flex; align-items: center; gap: 6px;">Riders <span class="sidebar-collapse-btn" style="margin-left: auto;">◀</span></span>
+            <button class="sidebar-menu-btn" onclick="event.stopPropagation(); showSidebarMenu(event, 'riders')" title="Sidebar options" style="background: none; border: none; color: #856404; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px; line-height: 1;">⋯</button>
         </div>
         <div class="sidebar-tabs">
             <button class="sidebar-tab" data-filter="attending" onclick="setSidebarFilter('riders','attending')">Attending</button>
@@ -93,13 +138,13 @@
         <div class="sidebar-sort">
             <label for="sidebar-riders-sort">Sort:</label>
             <select id="sidebar-riders-sort" onchange="changeSidebarSort('riders', this.value)">
-                <option value="pace">Endurance</option>
-                <option value="firstName">First Name</option>
+                <option value="firstName" selected>First Name</option>
                 <option value="lastName">Last Name</option>
                 <option value="grade">Grade</option>
                 <option value="gender">Gender</option>
-                <option value="skills">Descending</option>
-                <option value="climbing">Climbing</option>
+                <option value="pace">Endurance Rating</option>
+                <option value="climbing">Climbing Rating</option>
+                <option value="skills">Descending Rating</option>
             </select>
         </div>
         <div id="sidebar-riders-list" class="sidebar-list rider-drop-list"
@@ -112,12 +157,14 @@
     <div id="sidebar-coaches" class="practice-sidebar practice-sidebar-right" style="display: none;"
          data-drop-type="coach" data-group-id="unassigned" data-sidebar-drop="true"
          ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
-        <div class="sidebar-collapsed-strip" onclick="expandSidebar('coaches')" title="Expand Coach Attendance">
-            <span class="sidebar-collapsed-title">Coach Attendance</span>
+        <div class="sidebar-collapsed-strip" onclick="expandSidebar('coaches')" title="Expand Coaches">
+            <span class="sidebar-collapsed-title">COACHES</span>
+            <span id="sidebar-coaches-collapsed-stats" class="sidebar-collapsed-stats"></span>
         </div>
         <div class="sidebar-expanded-content">
-        <div class="sidebar-header">Coaches <span id="sidebar-coaches-count" class="sidebar-count"></span>
-            <button class="sidebar-collapse-btn" onclick="collapseSidebar('coaches')" title="Collapse">▶</button>
+        <div class="sidebar-header" style="cursor: pointer;">
+            <span onclick="collapseSidebar('coaches')" title="Collapse sidebar" style="flex: 1; display: flex; align-items: center; gap: 6px;">Coaches <span class="sidebar-collapse-btn" style="margin-left: auto;">▶</span></span>
+            <button class="sidebar-menu-btn" onclick="event.stopPropagation(); showSidebarMenu(event, 'coaches')" title="Sidebar options" style="background: none; border: none; color: #856404; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px; line-height: 1;">⋯</button>
         </div>
         <div class="sidebar-tabs">
             <button class="sidebar-tab" data-filter="attending" onclick="setSidebarFilter('coaches','attending')">Attending</button>
@@ -127,10 +174,10 @@
         <div class="sidebar-sort">
             <label for="sidebar-coaches-sort">Sort:</label>
             <select id="sidebar-coaches-sort" onchange="changeSidebarSort('coaches', this.value)">
-                <option value="pace">Endurance</option>
-                <option value="firstName">First Name</option>
+                <option value="firstName" selected>First Name</option>
                 <option value="lastName">Last Name</option>
                 <option value="level">Coach Level</option>
+                <option value="pace">Endurance Rating</option>
             </select>
         </div>
         <div id="sidebar-coaches-list" class="sidebar-list coach-drop-list"
@@ -176,7 +223,7 @@
         </div>
 
         <!-- SEASON CALENDAR TAB -->
-        <div id="settings-tab" class="tab-content active">
+        <div id="settings-tab" class="tab-content">
             <div class="section">
                 <div class="season-calendar-wrapper" id="season-calendar-wrapper-settings">
                     <div class="season-calendar-header" style="display: none;">
@@ -190,163 +237,25 @@
                     <input type="date" id="season-end-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
                 </div>
                 <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="btn-small" onclick="openPracticesModal()">Add/Edit Practices</button>
-                    <button class="btn-small secondary" onclick="openAddRacesModal()">Add Races</button>
                     <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button">Season dates. . .</button>
                 </div>
-                <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; margin-top: 16px;">
-                        <label class="field-label" style="margin:0;">Regular Practices</label>
-                        <button class="btn-small secondary" onclick="applySeasonUpdates('practices')" title="Reset all practices in the season">Reset All Practices</button>
-                    </div>
-                    <div id="practice-rows" class="practice-rows"></div>
-                </div>
-                <!-- Site Settings Collapsible Section -->
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px 0;" onclick="toggleSiteSettings()">
-                        <h3 style="margin: 0; color: #555;">Site Settings</h3>
-                        <span id="site-settings-toggle" style="font-size: 18px; color: #666; user-select: none;">▼</span>
-                    </div>
-                    <div id="site-settings-content" style="display: none; margin-top: 16px;">
-                
-                <div class="section" style="margin-top: 0; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Coach Roles</h3>
-                    <div id="coach-roles-container" style="margin-bottom: 20px;">
-                        <!-- Coach roles will be dynamically added here -->
-                    </div>
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                        <input type="text" id="new-coach-role-name" placeholder="Role name (e.g., Head Coach)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        <select id="new-coach-role-coach" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            <option value="">Select Coach</option>
-                        </select>
-                        <button class="btn-small" onclick="addCoachRole()">Add Role</button>
-                    </div>
-                </div>
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Rider Roles</h3>
-                    <div id="rider-roles-container" style="margin-bottom: 20px;">
-                        <!-- Rider roles will be dynamically added here -->
-                    </div>
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                        <input type="text" id="new-rider-role-name" placeholder="Role name (e.g., Captain)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        <select id="new-rider-role-rider" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            <option value="">Select Rider</option>
-                        </select>
-                        <button class="btn-small" onclick="addRiderRole()">Add Role</button>
-                    </div>
-                </div>
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Rating Scales</h3>
-                    <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Endurance Scale (1 to X):</label>
-                        <input type="number" id="fitness-scale" min="3" max="20" style="width: 100px;" onchange="updateScaleSettings()" oninput="updateScaleSettings()" onblur="updateScaleSettings()">
-                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="fitness-scale-display"></span></span>
-                    </div>
-                    <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Endurance Scale Sorting</label>
-                        <select id="pace-scale-order" style="width: 220px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings()">
-                            <option value="fastest_to_slowest">Fastest to Slowest</option>
-                            <option value="slowest_to_fastest">Slowest to Fastest</option>
-                        </select>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                        <button class="btn-small secondary" onclick="flipPaceValuesOnce()">One-time Flip Endurance Values</button>
-                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Fixes inverted endurance values without changing the sorting setting</span>
-                    </div>
-                    <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Climbing Scale:</label>
-                        <select id="climbing-scale" style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings(); updateClimbingDescriptions();">
-                            <option value="">-- Select --</option>
-                            <option value="3">3 Levels</option>
-                            <option value="5">5 Levels</option>
-                        </select>
-                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="climbing-scale-display"></span></span>
-                    </div>
-                    <div id="climbing-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;">
-                        <!-- Descriptions will be populated here -->
-                    </div>
-                    <div class="form-row" style="margin-bottom: 12px;">
-                        <label class="field-label" style="min-width: 200px;">Descending Scale:</label>
-                        <select id="skills-scale" style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings(); updateBikeSkillsDescriptions();">
-                            <option value="">-- Select --</option>
-                            <option value="3">3 Levels</option>
-                            <option value="5">5 Levels</option>
-                        </select>
-                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="skills-scale-display"></span></span>
-                    </div>
-                    <div id="bike-skills-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;">
-                        <!-- Descriptions will be populated here -->
-                    </div>
-                    <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 13px; color: #856404;">
-                        <strong>Note:</strong> Changing scales will automatically convert all existing fitness, climbing, and skills ratings to the new scale.
-                    </div>
-                    <div style="margin-top: 12px;">
-                        <button class="btn-small" onclick="syncScaleSettings()" style="padding: 8px 16px; font-size: 14px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Update Scales</button>
-                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Synchronizes scale settings across all locations</span>
-                    </div>
-                </div>
-                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px;">
-                    <button class="btn-small secondary" onclick="importSeasonSettings()">Import Settings</button>
-                    <button class="btn-small" onclick="saveSeasonSettings()" style="margin-left: auto;">Save Settings</button>
-                </div>
-                
-                <!-- Add Administrators Section -->
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Add Additional Administrators</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Send an invitation link to grant admin access to a new user. They will receive an email with a unique link to create their account.</p>
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                        <input type="email" id="admin-invite-email" placeholder="Enter email address" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
-                        <button class="btn-small" onclick="sendAdminInvitation()" style="background-color: #fc5200; color: white; border-color: #fc5200;">Send Invitation</button>
-                    </div>
-                    <div id="admin-invite-status" style="margin-top: 8px; font-size: 13px; display: none;"></div>
-                    <div id="admin-invitations-list" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
-                        <button class="btn-small secondary" onclick="loadAdminInvitations()" style="margin-bottom: 12px;">Refresh Invitations</button>
-                        <div id="admin-invitations-content">
-                            <p style="color: #666; margin: 0;">Click "Refresh Invitations" to view pending invitations.</p>
+                <div style="display: flex; gap: 24px; margin-top: 16px; align-items: flex-start;">
+                    <div style="flex: 3; min-width: 0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <label class="field-label" style="margin:0;">Regular Practices</label>
+                            <button class="btn-small secondary" onclick="openPracticesModal()">Add/Edit Practices</button>
                         </div>
+                        <div id="practice-rows" class="practice-rows"></div>
                     </div>
-                </div>
-                
-                <!-- Users Section -->
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Registered Users</h3>
-                    <div id="users-list-container" style="margin-bottom: 12px;">
-                        <button class="btn-small secondary" onclick="loadUsersList()">Refresh Users List</button>
-                        <div id="users-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
-                            <p style="color: #666; margin: 0;">Click "Refresh Users List" to load registered users.</p>
+                    <div style="flex: 2; min-width: 0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <label class="field-label" style="margin:0;">Races</label>
+                            <button class="btn-small secondary" onclick="openAddRacesModal()">Add/Edit Races</button>
                         </div>
+                        <div id="dashboard-races-list"></div>
                     </div>
                 </div>
-                
-                <!-- Developer Mode Section -->
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 8px; color: #555;">Developer mode (local-only sandbox)</h3>
-                    <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: #555;">
-                        <input type="checkbox" id="developer-mode-toggle" onchange="handleDeveloperModeToggle(this.checked)" style="transform: scale(1.1); margin-top: 2px;">
-                        <span>
-                            When ON, your changes are saved only in this browser and will <strong>not</strong> affect the live database. Other admins can continue using the site normally.
-                        </span>
-                    </label>
-                    <p style="margin-top: 6px; font-size: 12px; color: #d32f2f;">
-                        Warning: Developer mode is for testing only. Your changes will not be visible to other users and may be lost if this browser&rsquo;s storage is cleared.
-                    </p>
-                </div>
-                
-                <!-- Backup Section -->
-                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h3 style="margin-bottom: 12px; color: #555;">Backups</h3>
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                        <button class="btn-small" onclick="createManualBackup()">Make Backup</button>
-                        <button class="btn-small secondary" onclick="loadBackupsList()">Refresh Backups</button>
-                    </div>
-                    <div id="backups-list-container" style="margin-bottom: 12px;">
-                        <div id="backups-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
-                            <p style="color: #666; margin: 0;">Click "Refresh Backups" to load available backups.</p>
-                        </div>
-                    </div>
-                </div>
-                    </div>
-                </div>
+                <!-- (Site Settings moved to its own Settings tab) -->
             </div>
         </div>
 
@@ -357,24 +266,27 @@
                     <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                         <button id="roster-toggle-riders" class="btn-small active" onclick="toggleRosterView('riders')" style="padding: 10px 20px; font-size: 15px; font-weight: 600;">Riders</button>
                         <button id="roster-toggle-coaches" class="btn-small secondary" onclick="toggleRosterView('coaches')" style="padding: 10px 20px; font-size: 15px; font-weight: 600;">Coaches</button>
+                        <button class="btn-small secondary" onclick="openChooseDisplayFieldsDialog()" style="font-size: 12px; padding: 6px 12px;">Choose Display Fields</button>
                     </div>
                     <div class="group-by-control" id="roster-group-by-container">
                         <label id="roster-group-by-label" for="rider-group-by">Group by:</label>
                         <select id="rider-group-by" onchange="groupRiders(this.value)" style="display: block;">
                             <option value="">None</option>
-                            <option value="name">Name</option>
+                            <option value="firstName">First Name</option>
+                            <option value="lastName">Last Name</option>
                             <option value="gender">Gender</option>
                             <option value="grade">Grade</option>
                             <option value="racingGroup">Racing Group</option>
-                            <option value="pace">Endurance</option>
-                            <option value="skills">Descending</option>
-                            <option value="climbing">Climbing</option>
+                            <option value="pace">Endurance Rating</option>
+                            <option value="climbing">Climbing Rating</option>
+                            <option value="skills">Descending Rating</option>
                         </select>
                         <select id="coach-group-by" onchange="groupCoaches(this.value)" style="display: none;">
                             <option value="">None</option>
-                            <option value="name">Name</option>
+                            <option value="firstName">First Name</option>
+                            <option value="lastName">Last Name</option>
                             <option value="level">Coach Level</option>
-                            <option value="pace">Endurance</option>
+                            <option value="pace">Endurance Rating</option>
                         </select>
                     </div>
                 </div>
@@ -384,10 +296,7 @@
                     <div id="riders-list" class="roster-grid"></div>
                     <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
                         <button class="btn-small" onclick="openAddRiderModal()">Add Team Rider</button>
-                        <button class="btn-small secondary" onclick="importRidersFromCSV()">Import Riders from CSV</button>
-                        <button class="btn-small secondary" onclick="updateRidersFromCSVFile()">Update Roster Changes from CSV</button>
-                        <button class="btn-small secondary" onclick="openGoogleSheetsModal('riders')">Sync from Google Sheet</button>
-                        <button class="btn-small danger" onclick="purgeRiders()">Purge Riders</button>
+                        <button id="btn-csv-riders" class="btn-small secondary" onclick="importRidersFromCSV()">Import Riders from CSV</button>
                     </div>
                     <div id="rider-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
                 </div>
@@ -397,10 +306,7 @@
                     <div id="coaches-list" class="roster-grid"></div>
                     <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
                         <button class="btn-small" onclick="openAddCoachModal()">Add Coach</button>
-                        <button class="btn-small secondary" onclick="importCoachesFromCSV()">Import Coaches from CSV</button>
-                        <button class="btn-small secondary" onclick="updateCoachesFromCSVFile()">Update Roster Changes from CSV</button>
-                        <button class="btn-small secondary" onclick="openGoogleSheetsModal('coaches')">Sync from Google Sheet</button>
-                        <button class="btn-small danger" onclick="purgeCoaches()">Purge Coaches</button>
+                        <button id="btn-csv-coaches" class="btn-small secondary" onclick="importCoachesFromCSV()">Import Coaches from CSV</button>
                     </div>
                     <div id="coach-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
                 </div>
@@ -437,6 +343,96 @@
                 </button>
             </div>
 
+            <!-- Planner Setup: "How would you like to start planning?" -->
+            <div id="practice-planner-setup" class="section practice-planner-home" style="display: none;">
+                <h2 style="margin: 0 0 24px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How would you like to start planning the next practice?</h2>
+                <button type="button" class="practice-planner-home-btn" onclick="openAttendanceMarking()">
+                    Mark Attendance for this practice
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openCopyFromPriorSetup('setup')">
+                    Copy from a Prior Practice
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openManualBuildFromSetup()">
+                    Manually build groups
+                </button>
+            </div>
+
+            <!-- Attendance Marking: center area during attendance mode -->
+            <div id="practice-attendance-view" class="section" style="display: none;">
+                <div style="max-width: 520px; margin: 60px auto 0; text-align: center; padding: 0 20px;">
+                    <p style="font-size: 16px; color: #333; margin: 0 0 28px 0; line-height: 1.5;">
+                        Use radio buttons next to riders and coaches to indicate practice attendees for <strong id="attendance-date-label">[date]</strong>.
+                    </p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 28px;">
+                        <button type="button" class="btn-small" onclick="markAllRidersAttending()" style="padding: 10px 16px; font-size: 13px; font-weight: 600;">Mark all Riders Attending</button>
+                        <button type="button" class="btn-small" onclick="markAllCoachesAttending()" style="padding: 10px 16px; font-size: 13px; font-weight: 600;">Mark all Coaches Attending</button>
+                        <button type="button" class="btn-small secondary" onclick="markAllRidersAbsent()" style="padding: 10px 16px; font-size: 13px; font-weight: 600;">Mark all Riders Absent</button>
+                        <button type="button" class="btn-small secondary" onclick="markAllCoachesAbsent()" style="padding: 10px 16px; font-size: 13px; font-weight: 600;">Mark all Coaches Absent</button>
+                    </div>
+                    <button type="button" class="btn-small" onclick="finishAttendanceMarking()" style="padding: 12px 32px; font-size: 15px; font-weight: 600; background: #4CAF50; color: white; border-color: #4CAF50;">Done with Attendance</button>
+                    <p style="font-size: 12px; color: #888; margin-top: 16px; font-style: italic;">Note: attendance can be easily changed/updated later</p>
+                </div>
+            </div>
+
+            <!-- Post-Attendance: "How would you like to plan ride groups?" -->
+            <div id="practice-post-attendance" class="section practice-planner-home" style="display: none;">
+                <div class="practice-planner-picker-header" style="margin-bottom: 20px;">
+                    <button type="button" class="practice-planner-back-btn" onclick="backToAttendance()">← Back</button>
+                </div>
+                <h2 style="margin: 0 0 24px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How would you like to plan ride groups?</h2>
+                <button type="button" class="practice-planner-home-btn" onclick="openPostAttendanceAutoGenerate()">
+                    Auto-generate groups
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openCopyFromPriorSetup('postAttendance')">
+                    Copy groups from a Prior Practice
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openManualBuildFromSetup()">
+                    Manually Build groups
+                </button>
+            </div>
+
+            <!-- Copy from Prior Practice: inline selection view -->
+            <div id="practice-copy-prior-view" class="section" style="display: none;">
+                <div class="practice-planner-picker-header" style="margin-bottom: 20px;">
+                    <button type="button" class="practice-planner-back-btn" id="copy-prior-back-btn" onclick="closeCopyFromPriorView()">← Back</button>
+                </div>
+                <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: #333; text-align: center;">Select a practice to copy from</h2>
+                <div style="max-width: 560px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+                    <div id="copy-prior-practices-list" style="max-height: 40vh; overflow-y: auto; padding: 8px;"></div>
+                    <table style="width: 100%; border-top: 1px solid #ddd; background: #f9f9f9; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 6px 16px; font-size: 14px; cursor: pointer; width: 30px;" onclick="document.getElementById('copy-prior-include-rider-attendance').click()">
+                                <input type="checkbox" id="copy-prior-include-rider-attendance" style="margin: 0; cursor: pointer;">
+                            </td>
+                            <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-rider-attendance').click()">
+                                Include Rider attendance
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 16px; font-size: 14px; cursor: pointer;" onclick="document.getElementById('copy-prior-include-coach-attendance').click()">
+                                <input type="checkbox" id="copy-prior-include-coach-attendance" checked style="margin: 0; cursor: pointer;">
+                            </td>
+                            <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-coach-attendance').click()">
+                                Include Coach Attendance
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 16px; font-size: 14px; cursor: pointer;" onclick="document.getElementById('copy-prior-include-routes').click()">
+                                <input type="checkbox" id="copy-prior-include-routes" checked style="margin: 0; cursor: pointer;">
+                            </td>
+                            <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-routes').click()">
+                                Include Assigned Routes
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="padding: 12px 16px; text-align: center;">
+                                <button type="button" id="copy-prior-execute-btn" class="btn-small" onclick="executeCopyFromPrior()" style="padding: 12px 32px; font-size: 15px; font-weight: 600; background: #1976d2; color: white; border-color: #1976d2;">Copy Groups</button>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
             <!-- Calendar picker for future/past practice selection -->
             <div id="practice-calendar-picker" class="section" style="display: none;">
                 <div class="practice-planner-picker-header">
@@ -456,41 +452,36 @@
                 <!-- Sticky practice banner -->
                 <div id="practice-banner" class="practice-banner">
                     <div class="practice-banner-inner">
-                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
                                 <button type="button" id="practice-planner-back-btn" class="practice-planner-back-btn" onclick="closePracticePlannerView()" style="flex-shrink: 0;">← Back</button>
-                                <h2 id="ride-title" style="margin: 0; font-size: 16px;"></h2>
+                                <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0;">
+                                    <h2 id="ride-title" style="margin: 0; font-size: 26px; font-weight: 700; white-space: nowrap;"></h2>
+                                    <span id="ride-details" style="font-size: 14px; color: #666; white-space: nowrap;"></span>
+                                </div>
                             </div>
-                            <div id="practice-navigation-buttons" style="display: none; gap: 6px; flex-direction: row;">
-                                <button class="btn-small secondary" onclick="navigateToPriorPractice()" id="prior-practice-btn">← Show Prior Practice</button>
-                                <button class="btn-small secondary" onclick="navigateToNextPractice()" id="next-practice-btn">Show Next Practice →</button>
+                            <div id="practice-navigation-buttons" style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                                <button type="button" id="prior-practice-btn" class="btn-small secondary" onclick="navigateToPriorPractice()" title="Last Practice" style="font-size: 12px; padding: 3px 8px; white-space: nowrap;">◀ Last Practice</button>
+                                <button type="button" id="next-practice-btn" class="btn-small secondary" onclick="navigateToNextPractice()" title="Next Practice" style="font-size: 12px; padding: 3px 8px; white-space: nowrap;">Next Practice ▶</button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                                <button type="button" id="undo-btn" class="btn-small" onclick="undoAssignmentChange()" title="Undo" style="font-size: 14px; padding: 3px 8px; min-width: 0;" disabled>↩</button>
+                                <button type="button" id="redo-btn" class="btn-small" onclick="redoAssignmentChange()" title="Redo" style="font-size: 14px; padding: 3px 8px; min-width: 0;" disabled>↪</button>
+                                <button type="button" class="practice-menu-btn" onclick="showPracticeMenu(event)" title="Practice options" style="background: none; border: 1px solid #ddd; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 18px; font-weight: 700; line-height: 1; color: #555;">⋯</button>
                             </div>
                         </div>
-                        <div id="ride-details" style="font-size: 13px; color: #666;"></div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                             <label for="practice-goals" style="font-weight: 500; color: #555; font-size: 13px; white-space: nowrap;">Practice Goals</label>
                             <input type="text" id="practice-goals" placeholder="Enter practice goals (e.g., Endurance training, Hill climbs, Technical skills)" style="flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" onchange="updatePracticeGoals()">
                         </div>
+                        <div id="practice-banner-toolbar" style="display: none;"></div>
                     </div>
                 </div>
-                <div class="section" style="padding-top: 4px;">
+                <div id="practice-banner-spacer" class="practice-banner-spacer"></div>
+                <div class="section" style="padding-top: 0;">
                     
                     <!-- Group Assignments (always visible when practice is loaded; sidebars handle attendance) -->
-                    <div id="group-assignments-content" style="margin-top: 12px;">
-                        <div class="action-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                            <button id="undo-btn" class="btn-small" onclick="undoAssignmentChange()" title="Undo last change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↶</button>
-                            <button id="redo-btn" class="btn-small" onclick="redoAssignmentChange()" title="Redo last undone change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↷</button>
-                            <div style="width: 1px; height: 20px; background: #ddd; margin: 0 4px;"></div>
-                            <button class="btn-small" onclick="addGroup()">Add Group</button>
-                            <button class="btn-small" onclick="openCopyGroupsFromPriorPracticeDialog()" style="background: #1976D2; color: white; border-color: #1976D2;">Copy Prior Practice</button>
-                            <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
-                            <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Group Rules</button>
-                            <button id="group-color-names-btn" class="btn-small" onclick="toggleGroupColorNames()" style="background: linear-gradient(90deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6); color: white; border: none; font-weight: 600;">Color Names!</button>
-                            <button id="more-groups-btn" class="btn-small secondary" onclick="tryMoreGroups()" style="display: none;">More/Smaller Groups</button>
-                            <button id="fewer-groups-btn" class="btn-small secondary" onclick="tryFewerGroups()" style="display: none;">Fewer/Larger Groups</button>
-                            <button class="btn-small secondary" onclick="unassignAllCoaches()" style="margin-left: auto;">Unassign all Coaches</button>
-                            <button class="btn-small danger" onclick="clearAssignments()">Clear Group Assignments</button>
-                        </div>
+                    <div id="group-assignments-content" style="margin-top: 4px;">
                         <div id="assignments" class="assignments"></div>
                     </div>
                     <div style="margin-top: 20px;">
@@ -518,6 +509,165 @@
             <div class="section">
                 <div id="coach-assignments-container">
                     <!-- Coach assignments will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- SITE SETTINGS TAB -->
+        <div id="site-settings-tab" class="tab-content">
+            <div class="section" style="padding-top: 8px;">
+                <!-- Team Name -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Team Identity</h3>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 140px;">Team Name:</label>
+                        <input type="text" id="team-name-input" placeholder="Enter team name" 
+                               style="flex: 1; max-width: 400px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                               oninput="updateTeamNamePreview(this.value)">
+                        <button class="btn-small" onclick="saveTeamName()" style="margin-left: 8px;">Save</button>
+                    </div>
+                    <div style="font-size: 12px; color: #888; margin-top: 4px;">This name appears in the site header.</div>
+                </div>
+
+                <!-- Welcome Screen Preference -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Personal Preferences</h3>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #555;">
+                        <input type="checkbox" id="welcome-screen-enabled-toggle" onchange="handleWelcomeScreenSettingToggle(this.checked)">
+                        <span>Show welcome screen with shortcut options</span>
+                    </label>
+                </div>
+
+                <!-- Coach Roles -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Coach Roles</h3>
+                    <div id="coach-roles-container" style="margin-bottom: 20px;">
+                        <!-- Coach roles will be dynamically added here -->
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="new-coach-role-name" placeholder="Role name (e.g., Head Coach)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <select id="new-coach-role-coach" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Select Coach</option>
+                        </select>
+                        <button class="btn-small" onclick="addCoachRole()">Add Role</button>
+                    </div>
+                </div>
+
+                <!-- Rider Roles -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Rider Roles</h3>
+                    <div id="rider-roles-container" style="margin-bottom: 20px;">
+                        <!-- Rider roles will be dynamically added here -->
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="new-rider-role-name" placeholder="Role name (e.g., Captain)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <select id="new-rider-role-rider" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Select Rider</option>
+                        </select>
+                        <button class="btn-small" onclick="addRiderRole()">Add Role</button>
+                    </div>
+                </div>
+
+                <!-- Auto-Assign Group Rules -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Group Assignment Rules</h3>
+                    <p style="margin-bottom: 16px; color: #666; font-size: 13px;">
+                        These settings control how the auto-assignment algorithm creates groups and assigns riders and coaches.
+                    </p>
+                    <div id="settings-auto-assign-list">
+                        <!-- Auto-assign settings rendered here by JS -->
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <button class="btn-small" onclick="saveAutoAssignSettingsInline()">Save Group Rules</button>
+                    </div>
+                </div>
+
+                <!-- Rating Scales -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Skill Rating Scale</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 12px;">A single 1-to-N scale shared by Endurance, Climbing and Descending. The skill icon differentiates each dimension.</p>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Scale (2–9 levels):</label>
+                        <input type="number" id="unified-scale" min="2" max="9" style="width: 100px;" onchange="updateScaleSettings()" oninput="updateScaleSettings()" onblur="updateScaleSettings()">
+                        <span style="color: #666; margin-left: 8px;">Current: 1–<span id="unified-scale-display"></span></span>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Endurance Scale Sorting</label>
+                        <select id="pace-scale-order" style="width: 220px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings()">
+                            <option value="fastest_to_slowest">Fastest to Slowest</option>
+                            <option value="slowest_to_fastest">Slowest to Fastest</option>
+                        </select>
+                    </div>
+                    <div id="climbing-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;"></div>
+                    <div id="bike-skills-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;"></div>
+                    <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 13px; color: #856404;">
+                        <strong>Note:</strong> Changing the scale will automatically convert all existing endurance, climbing, and descending ratings proportionally.
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <button class="btn-small" onclick="syncScaleSettings()" style="padding: 8px 16px; font-size: 14px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Update Scale</button>
+                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Applies the new scale and converts all ratings</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px; display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="importSeasonSettings()">Import Settings</button>
+                    <button class="btn-small" onclick="saveSeasonSettings()" style="margin-left: auto;">Save Settings</button>
+                </div>
+
+                <!-- Add Administrators -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Add Additional Administrators</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Send an invitation link to grant admin access to a new user. They will receive an email with a unique link to create their account.</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="email" id="admin-invite-email" placeholder="Enter email address" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        <button class="btn-small" onclick="sendAdminInvitation()" style="background-color: #fc5200; color: white; border-color: #fc5200;">Send Invitation</button>
+                    </div>
+                    <div id="admin-invite-status" style="margin-top: 8px; font-size: 13px; display: none;"></div>
+                    <div id="admin-invitations-list" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                        <button class="btn-small secondary" onclick="loadAdminInvitations()" style="margin-bottom: 12px;">Refresh Invitations</button>
+                        <div id="admin-invitations-content">
+                            <p style="color: #666; margin: 0;">Click "Refresh Invitations" to view pending invitations.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users -->
+                <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Registered Users</h3>
+                    <div id="users-list-container" style="margin-bottom: 12px;">
+                        <button class="btn-small secondary" onclick="loadUsersList()">Refresh Users List</button>
+                        <div id="users-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                            <p style="color: #666; margin: 0;">Click "Refresh Users List" to load registered users.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Developer Mode -->
+                <div id="developer-mode-section" class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 8px; color: #555;">Developer mode (local-only sandbox)</h3>
+                    <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: #555;">
+                        <input type="checkbox" id="developer-mode-toggle" onchange="handleDeveloperModeToggle(this.checked)" style="transform: scale(1.1); margin-top: 2px;">
+                        <span>
+                            When ON, your changes are saved only in this browser and will <strong>not</strong> affect the live database. Other admins can continue using the site normally.
+                        </span>
+                    </label>
+                    <p style="margin-top: 6px; font-size: 12px; color: #d32f2f;">
+                        Warning: Developer mode is for testing only. Your changes will not be visible to other users and may be lost if this browser&rsquo;s storage is cleared.
+                    </p>
+                </div>
+
+                <!-- Backups -->
+                <div class="section" style="margin-bottom: 20px;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Backups</h3>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button class="btn-small" onclick="createManualBackup()">Make Backup</button>
+                        <button class="btn-small secondary" onclick="loadBackupsList()">Refresh Backups</button>
+                    </div>
+                    <div id="backups-list-container" style="margin-bottom: 12px;">
+                        <div id="backups-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                            <p style="color: #666; margin: 0;">Click "Refresh Backups" to load available backups.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -554,16 +704,18 @@
 
         <!-- ROUTES TAB -->
         <div id="routes-tab" class="tab-content">
-            <div class="section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <button class="btn-small" onclick="openRoutesManagerModal()">Add/Edit Routes...</button>
+            <div class="section" style="padding-top: 0;">
+                <div id="routes-toolbar" class="routes-toolbar">
+                    <button class="btn-small" onclick="openAddRouteModal(null)">Add New Route</button>
                     <div style="display: flex; align-items: center; gap: 16px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <label for="routes-view-mode" style="font-size: 14px; color: #666;">View:</label>
-                            <div id="routes-view-mode" class="routes-view-toggle">
-                                <button id="routes-view-thumbnails" class="routes-view-btn" onclick="setRoutesViewMode('thumbnails')">Thumbnails</button>
-                                <button id="routes-view-list" class="routes-view-btn" onclick="setRoutesViewMode('list')">List View</button>
-                            </div>
+                            <label for="routes-group-by" style="font-size: 14px; color: #666;">Group By:</label>
+                            <select id="routes-group-by" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;" onchange="renderRoutes()">
+                                <option value="none">None</option>
+                                <option value="start">Start Location</option>
+                                <option value="distance">Distance</option>
+                                <option value="elevation">Elevation Gain</option>
+                            </select>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <label for="routes-sort-by" style="font-size: 14px; color: #666;">Sort By:</label>
@@ -580,7 +732,7 @@
                         </div>
                     </div>
                 </div>
-                <div id="routes-grid" class="routes-grid">
+                <div id="routes-grid" class="routes-list">
                     <!-- Routes will be loaded dynamically -->
                 </div>
             </div>
@@ -995,134 +1147,71 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-form-container" style="max-height: 70vh; overflow-y: auto;">
-                    <div class="modal-labels-column">
-                        <div class="modal-field-label">Email</div>
-                        <div class="modal-field-label">Cell Phone</div>
-                        <div class="modal-field-label">Work Phone</div>
-                        <div class="modal-field-label">Home Phone</div>
-                        <div class="modal-field-label">Gender</div>
-                        <div class="modal-field-label">Coaching License Level</div>
-                        <div class="modal-field-label">Registered</div>
-                        <div class="modal-field-label">Paid</div>
-                        <div class="modal-field-label">Background Check</div>
-                        <div class="modal-field-label">Level 3 Exam Completed</div>
-                        <div class="modal-field-label">PDU/CEU Units</div>
-                        <div class="modal-field-label">Field Work Hours</div>
-                        <div class="modal-field-label">First Aid Type, Expires</div>
-                        <div class="modal-field-label">CPR Expires</div>
-                        <div class="modal-field-label">Concussion Training Completed</div>
-                        <div class="modal-field-label">NICA Philosophy Completed</div>
-                        <div class="modal-field-label">Athlete Abuse Awareness Completed</div>
-                        <div class="modal-field-label">License Level 1 Completed</div>
-                        <div class="modal-field-label">License Level 2 Completed</div>
-                        <div class="modal-field-label">License Level 3 Completed</div>
-                        <div class="modal-field-label">OTB Skills 101 Classroom Completed</div>
-                        <div class="modal-field-label">OTB Skills 101 Outdoor Completed</div>
-                        <div class="modal-field-label">NICA Leader Summit Completed</div>
-                        <div class="modal-field-label">Endurance (1-10)</div>
-                        <div class="modal-field-label">Climbing</div>
-                        <div class="modal-field-label">Descending</div>
-                        <div class="modal-field-label">Notes</div>
-                    </div>
-                    <div class="modal-inputs-column">
-                        <div class="modal-form-row">
-                            <input type="email" id="edit-coach-email" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-coach-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-coach-work-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-coach-home-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <select id="edit-coach-gender" class="modal-field-input">
-                                <option value="">Select Gender</option>
-                                <option value="M">M</option>
-                                <option value="F">F</option>
-                                <option value="NB">Nonbinary</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-row">
-                            <select id="edit-coach-level" class="modal-field-input">
-                                <option value="N/A">N/A</option>
-                                <option value="1">Level 1</option>
-                                <option value="2">Level 2</option>
-                                <option value="3">Level 3</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-registered" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-paid" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-background-check" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-level3-exam" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-pdu-ceu" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-field-work-hours" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-first-aid" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-cpr-expires" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-concussion-training" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-nica-philosophy" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-abuse-awareness" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-license-level1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-license-level2" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-license-level3" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-otb-classroom" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-otb-outdoor" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-coach-nica-summit" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="number" id="edit-coach-fitness" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="number" id="edit-coach-climbing" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <label for="edit-coach-skills" class="field-label">Descending</label>
-                            <input type="number" id="edit-coach-skills" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <textarea id="edit-coach-notes" rows="3" class="modal-field-input"></textarea>
-                        </div>
-                    </div>
+                <div style="max-height: 70vh; overflow-y: auto;">
+                <table class="modal-edit-table">
+                    <tr><td class="modal-edit-label">Nickname / Display Name</td><td><div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><input type="text" id="edit-coach-nickname" class="modal-field-input" style="flex:1; min-width:120px;" placeholder="Used as display name if set"><label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; cursor:pointer;"><input type="radio" name="coach-nickname-mode" id="edit-coach-nickname-mode-first" value="firstName"> Use for First Name</label><label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; cursor:pointer;"><input type="radio" name="coach-nickname-mode" id="edit-coach-nickname-mode-whole" value="wholeName"> Use for Whole Name</label></div></td></tr>
+                    <tr><td class="modal-edit-label">Email</td><td><input type="email" id="edit-coach-email" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Cell Phone</td><td><input type="tel" id="edit-coach-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Work Phone</td><td><input type="tel" id="edit-coach-work-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Home Phone</td><td><input type="tel" id="edit-coach-home-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Gender</td><td><select id="edit-coach-gender" class="modal-field-input"><option value="">Select Gender</option><option value="M">M</option><option value="F">F</option><option value="NB">Nonbinary</option></select></td></tr>
+                    <tr><td class="modal-edit-label">Coaching License Level</td><td><select id="edit-coach-level" class="modal-field-input"><option value="N/A">N/A</option><option value="1">Level 1</option><option value="2">Level 2</option><option value="3">Level 3</option></select></td></tr>
+                    <tr><td class="modal-edit-label">Registered</td><td><input type="text" id="edit-coach-registered" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Paid</td><td><input type="text" id="edit-coach-paid" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Background Check</td><td><input type="text" id="edit-coach-background-check" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Level 3 Exam Completed</td><td><input type="text" id="edit-coach-level3-exam" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">PDU/CEU Units</td><td><input type="text" id="edit-coach-pdu-ceu" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Field Work Hours</td><td><input type="text" id="edit-coach-field-work-hours" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">First Aid Type, Expires</td><td><input type="text" id="edit-coach-first-aid" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">CPR Expires</td><td><input type="text" id="edit-coach-cpr-expires" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Concussion Training</td><td><input type="text" id="edit-coach-concussion-training" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">NICA Philosophy</td><td><input type="text" id="edit-coach-nica-philosophy" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Abuse Awareness</td><td><input type="text" id="edit-coach-abuse-awareness" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">License Level 1</td><td><input type="text" id="edit-coach-license-level1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">License Level 2</td><td><input type="text" id="edit-coach-license-level2" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">License Level 3</td><td><input type="text" id="edit-coach-license-level3" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">OTB Skills 101 Classroom</td><td><input type="text" id="edit-coach-otb-classroom" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">OTB Skills 101 Outdoor</td><td><input type="text" id="edit-coach-otb-outdoor" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">NICA Leader Summit</td><td><input type="text" id="edit-coach-nica-summit" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Endurance Rating</td><td><input type="number" id="edit-coach-fitness" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Climbing Rating</td><td><input type="number" id="edit-coach-climbing" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Descending Rating</td><td><input type="number" id="edit-coach-skills" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Bike</td><td><div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;"><label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" id="edit-coach-bike-manual" onchange="toggleBikePrimaryDropdown()"> Manual</label><label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" id="edit-coach-bike-electric" onchange="toggleBikePrimaryDropdown()"> Electric</label><select id="edit-coach-bike-primary" class="modal-field-input" style="display: none; width: auto; min-width: 140px;"><option value="manual">Rides Manual most</option><option value="electric">Rides Electric most</option></select></div></td></tr>
+                    <tr><td class="modal-edit-label" style="vertical-align: top; padding-top: 8px;">Notes</td><td><textarea id="edit-coach-notes" rows="3" class="modal-field-input"></textarea></td></tr>
+                    <tr><td class="modal-edit-label" style="vertical-align: top; padding-top: 8px;">Scheduled Absences</td>
+                        <td>
+                            <div id="edit-coach-absences-list" class="absences-list"></div>
+                            <div id="edit-coach-absence-form" class="absence-form" style="display:none;">
+                                <div class="absence-form-row">
+                                    <label>Start Date <input type="date" id="edit-coach-absence-start" class="modal-field-input"></label>
+                                    <label>End Date <input type="date" id="edit-coach-absence-end" class="modal-field-input"></label>
+                                </div>
+                                <div class="absence-form-row">
+                                    <label>Reason
+                                        <select id="edit-coach-absence-reason" class="modal-field-input">
+                                            <option value="injured">Injured</option>
+                                            <option value="vacation">Vacation/Travel</option>
+                                            <option value="suspension">Behavior/Suspension</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="absence-form-actions">
+                                    <button class="btn-small" onclick="saveCoachAbsence()">Save</button>
+                                    <button class="btn-small secondary" onclick="cancelCoachAbsenceForm()">Cancel</button>
+                                </div>
+                            </div>
+                            <button class="btn-small secondary" id="edit-coach-add-absence-btn" onclick="showCoachAbsenceForm()" style="margin-top:4px;">+ Add Absence</button>
+                        </td>
+                    </tr>
+                </table>
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; justify-content: space-between;">
-                <button id="delete-coach-btn" class="btn-small danger" onclick="deleteCoachFromModal()" style="display: none;">Delete Record</button>
+                <div style="display: flex; gap: 8px;">
+                    <button id="delete-coach-btn" class="btn-small danger" onclick="deleteCoachFromModal()" style="display: none;">Delete Record</button>
+                    <button id="archive-coach-btn" class="btn-small" onclick="archiveCoachFromModal()" style="display: none; background:#888; color:#fff;">Archive</button>
+                </div>
                 <div style="display: flex; gap: 8px; margin-left: auto;">
                     <button class="btn-small secondary" onclick="closeEditCoachModal()">Cancel</button>
                     <button class="btn-small" onclick="saveCoachFromModal()">Save Changes</button>
@@ -1162,131 +1251,69 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-form-container" style="max-height: 70vh; overflow-y: auto;">
-                    <div class="modal-labels-column">
-                        <div class="modal-field-label">Email</div>
-                        <div class="modal-field-label">Cell Phone</div>
-                        <div class="modal-field-label">Address</div>
-                        <div class="modal-field-label">Gender</div>
-                        <div class="modal-field-label">Grade</div>
-                        <div class="modal-field-label">Racing Group</div>
-                        <div class="modal-field-label">Birthday</div>
-                        <div class="modal-field-label">Primary Parent/Guardian</div>
-                        <div class="modal-field-label">Primary Parent Cell</div>
-                        <div class="modal-field-label">Primary Parent Email</div>
-                        <div class="modal-field-label">Primary Parent Address</div>
-                        <div class="modal-field-label">Second Parent/Guardian</div>
-                        <div class="modal-field-label">Second Parent Cell</div>
-                        <div class="modal-field-label">Second Parent Email</div>
-                        <div class="modal-field-label">Alternate Contact Name</div>
-                        <div class="modal-field-label">Alternate Contact Relationship</div>
-                        <div class="modal-field-label">Alternate Contact Cell</div>
-                        <div class="modal-field-label">Primary Physician</div>
-                        <div class="modal-field-label">Primary Physician Phone</div>
-                        <div class="modal-field-label">Medical Insurance Company</div>
-                        <div class="modal-field-label">Medical Insurance Account #</div>
-                        <div class="modal-field-label">Allergies/Medical Needs</div>
-                        <div class="modal-field-label">Endurance (1-10)</div>
-                        <div class="modal-field-label">Climbing</div>
-                        <div class="modal-field-label">Descending (1-4)</div>
-                        <div class="modal-field-label">Notes</div>
-                    </div>
-                    <div class="modal-inputs-column">
-                        <div class="modal-form-row">
-                            <input type="email" id="edit-rider-email" placeholder="Email" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-rider-phone" placeholder="(XXX) XXX-XXXX" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-address" placeholder="Address" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <select id="edit-rider-gender" class="modal-field-input" onchange="updateRacingGroupOptions(); updateDefaultPhoto()">
-                                <option value="">Select Gender</option>
-                                <option value="M">M</option>
-                                <option value="F">F</option>
-                                <option value="NB">Nonbinary</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-row">
-                            <select id="edit-rider-grade" class="modal-field-input">
-                                <option value="9th">9th</option>
-                                <option value="10th">10th</option>
-                                <option value="11th">11th</option>
-                                <option value="12th">12th</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-row">
-                            <select id="edit-rider-racing-group" class="modal-field-input">
-                                <option value="">Select Gender First</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-birthday" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-primary-parent-name" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-rider-primary-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="email" id="edit-rider-primary-parent-email" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-primary-parent-address" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-second-parent-name" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-rider-second-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="email" id="edit-rider-second-parent-email" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-alternate-contact-name" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-alternate-contact-relationship" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-rider-alternate-contact-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-primary-physician" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="tel" id="edit-rider-primary-physician-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-medical-insurance-company" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="text" id="edit-rider-medical-insurance-account" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <textarea id="edit-rider-allergies" rows="2" class="modal-field-input"></textarea>
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="number" id="edit-rider-fitness" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="number" id="edit-rider-climbing" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <input type="number" id="edit-rider-skills" min="1" class="modal-field-input">
-                        </div>
-                        <div class="modal-form-row">
-                            <textarea id="edit-rider-notes" rows="3" class="modal-field-input"></textarea>
-                        </div>
-                    </div>
+                <div style="max-height: 70vh; overflow-y: auto;">
+                <table class="modal-edit-table">
+                    <tr><td class="modal-edit-label">Nickname / Display Name</td><td><div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><input type="text" id="edit-rider-nickname" class="modal-field-input" style="flex:1; min-width:120px;" placeholder="Used as display name if set"><label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; cursor:pointer;"><input type="radio" name="rider-nickname-mode" id="edit-rider-nickname-mode-first" value="firstName"> Use for First Name</label><label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; cursor:pointer;"><input type="radio" name="rider-nickname-mode" id="edit-rider-nickname-mode-whole" value="wholeName"> Use for Whole Name</label></div></td></tr>
+                    <tr><td class="modal-edit-label">Email</td><td><input type="email" id="edit-rider-email" placeholder="Email" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Cell Phone</td><td><input type="tel" id="edit-rider-phone" placeholder="(XXX) XXX-XXXX" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Address</td><td><input type="text" id="edit-rider-address" placeholder="Address" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Gender</td><td><select id="edit-rider-gender" class="modal-field-input" onchange="updateRacingGroupOptions(); updateDefaultPhoto()"><option value="">Select Gender</option><option value="M">M</option><option value="F">F</option><option value="NB">Nonbinary</option></select></td></tr>
+                    <tr><td class="modal-edit-label">Grade</td><td><select id="edit-rider-grade" class="modal-field-input"><option value="9th">9th</option><option value="10th">10th</option><option value="11th">11th</option><option value="12th">12th</option></select></td></tr>
+                    <tr><td class="modal-edit-label">Racing Group</td><td><select id="edit-rider-racing-group" class="modal-field-input"><option value="">Select Gender First</option></select></td></tr>
+                    <tr><td class="modal-edit-label">Birthday</td><td><input type="text" id="edit-rider-birthday" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Parent/Guardian</td><td><input type="text" id="edit-rider-primary-parent-name" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Parent Cell</td><td><input type="tel" id="edit-rider-primary-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Parent Email</td><td><input type="email" id="edit-rider-primary-parent-email" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Parent Address</td><td><input type="text" id="edit-rider-primary-parent-address" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Second Parent/Guardian</td><td><input type="text" id="edit-rider-second-parent-name" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Second Parent Cell</td><td><input type="tel" id="edit-rider-second-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Second Parent Email</td><td><input type="email" id="edit-rider-second-parent-email" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Alternate Contact Name</td><td><input type="text" id="edit-rider-alternate-contact-name" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Alternate Contact Relationship</td><td><input type="text" id="edit-rider-alternate-contact-relationship" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Alternate Contact Cell</td><td><input type="tel" id="edit-rider-alternate-contact-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Physician</td><td><input type="text" id="edit-rider-primary-physician" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Primary Physician Phone</td><td><input type="tel" id="edit-rider-primary-physician-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)"></td></tr>
+                    <tr><td class="modal-edit-label">Medical Insurance Company</td><td><input type="text" id="edit-rider-medical-insurance-company" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Medical Insurance Account #</td><td><input type="text" id="edit-rider-medical-insurance-account" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label" style="vertical-align: top; padding-top: 8px;">Allergies/Medical Needs</td><td><textarea id="edit-rider-allergies" rows="2" class="modal-field-input"></textarea></td></tr>
+                    <tr><td class="modal-edit-label">Endurance Rating</td><td><input type="number" id="edit-rider-fitness" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Climbing Rating</td><td><input type="number" id="edit-rider-climbing" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label">Descending Rating</td><td><input type="number" id="edit-rider-skills" min="1" class="modal-field-input"></td></tr>
+                    <tr><td class="modal-edit-label" style="vertical-align: top; padding-top: 8px;">Notes</td><td><textarea id="edit-rider-notes" rows="3" class="modal-field-input"></textarea></td></tr>
+                    <tr><td class="modal-edit-label" style="vertical-align: top; padding-top: 8px;">Scheduled Absences</td>
+                        <td>
+                            <div id="edit-rider-absences-list" class="absences-list"></div>
+                            <div id="edit-rider-absence-form" class="absence-form" style="display:none;">
+                                <div class="absence-form-row">
+                                    <label>Start Date <input type="date" id="edit-rider-absence-start" class="modal-field-input"></label>
+                                    <label>End Date <input type="date" id="edit-rider-absence-end" class="modal-field-input"></label>
+                                </div>
+                                <div class="absence-form-row">
+                                    <label>Reason
+                                        <select id="edit-rider-absence-reason" class="modal-field-input">
+                                            <option value="injured">Injured</option>
+                                            <option value="vacation">Vacation/Travel</option>
+                                            <option value="suspension">Behavior/Suspension</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="absence-form-actions">
+                                    <button class="btn-small" onclick="saveRiderAbsence()">Save</button>
+                                    <button class="btn-small secondary" onclick="cancelRiderAbsenceForm()">Cancel</button>
+                                </div>
+                            </div>
+                            <button class="btn-small secondary" id="edit-rider-add-absence-btn" onclick="showRiderAbsenceForm()" style="margin-top:4px;">+ Add Absence</button>
+                        </td>
+                    </tr>
+                </table>
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; justify-content: space-between;">
-                <button id="delete-rider-btn" class="btn-small danger" onclick="deleteRiderFromModal()" style="display: none;">Delete Record</button>
+                <div style="display: flex; gap: 8px;">
+                    <button id="delete-rider-btn" class="btn-small danger" onclick="deleteRiderFromModal()" style="display: none;">Delete Record</button>
+                    <button id="archive-rider-btn" class="btn-small" onclick="archiveRiderFromModal()" style="display: none; background:#888; color:#fff;">Archive</button>
+                </div>
                 <div style="display: flex; gap: 8px; margin-left: auto;">
                     <button class="btn-small secondary" onclick="closeEditRiderModal()">Cancel</button>
                     <button class="btn-small" onclick="saveRiderFromModal()">Save Changes</button>
@@ -1541,9 +1568,12 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-small secondary" onclick="closeAddRouteModal()">Cancel</button>
-                <button class="btn-small" onclick="saveRoute()">Save Route</button>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <button id="delete-route-btn" class="btn-small danger" onclick="deleteRouteFromEditModal()" style="display: none;">Delete Route</button>
+                <div style="display: flex; gap: 8px; margin-left: auto;">
+                    <button class="btn-small secondary" onclick="closeAddRouteModal()">Cancel</button>
+                    <button class="btn-small" onclick="saveRoute()">Save Route</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1738,17 +1768,19 @@
     </div>
 
     <!-- CSV Field Mapping Modal -->
-    <div id="csv-field-mapping-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeCSVFieldMappingModal();">
+    <div id="csv-field-mapping-modal" class="modal-overlay" aria-hidden="true" style="display: none;">
         <div class="modal" style="max-width: 900px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
             <div class="modal-header">
                 <span id="csv-mapping-modal-title">Map CSV Fields</span>
                 <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Close</button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
-                    <strong>Instructions:</strong> Check the boxes for fields you want to import, and select which CSV column maps to each field. 
-                    Program-dependent fields (Endurance, Climbing, Descending, Ride Group, Photo, Notes) can be mapped but cannot be unchecked.
-                    Select "-- None --" to leave a field blank or use default values.
+                <div id="csv-mapping-instructions" style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
+                    <strong>Instructions:</strong> Map your CSV columns to TeamRide Pro fields below.
+                    Required fields will use default values if no CSV column is selected.
+                    Check optional CSV columns to include them as custom fields.
+                </div>
+                <div id="csv-mapping-warning" style="display:none; margin-bottom: 16px; padding: 12px; background: #fff3e0; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px;">
                 </div>
                 
                 <!-- Name Format Selection -->
@@ -1767,23 +1799,16 @@
                 </div>
                 
                 <div id="csv-field-mapping-container" style="display: flex; flex-direction: column; gap: 8px;">
-                    <!-- Field mappings will be generated here -->
+                    <!-- Required field mappings generated here -->
                 </div>
-                
-                <!-- Additional Fields Section -->
-                <div id="additional-fields-section" style="margin-top: 24px; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label class="field-label" style="margin: 0;">Additional Fields (map unassigned CSV columns):</label>
-                        <button type="button" class="btn-small" onclick="addAdditionalFieldMapping()" style="padding: 4px 12px; font-size: 12px;">+ Add Field</button>
-                    </div>
-                    <div id="additional-fields-list" style="display: flex; flex-direction: column; gap: 8px;">
-                        <!-- Additional field mappings will be added here -->
-                    </div>
+
+                <div id="csv-optional-fields-container" style="margin-top: 20px;">
+                    <!-- Optional CSV columns checklist generated here -->
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
                 <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Cancel</button>
-                <button class="btn-small" onclick="applyCSVFieldMapping()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Mapping & Import</button>
+                <button id="csv-mapping-apply-btn" class="btn-small" onclick="applyCSVFieldMapping()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Import Riders/Coaches</button>
             </div>
         </div>
     </div>
@@ -1791,31 +1816,64 @@
     <!-- CSV Review Modal -->
     <div id="csv-review-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeCSVReviewModal();">
         <div class="modal" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
-            <div class="modal-header">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
                 <span id="csv-review-modal-title">Review CSV Changes</span>
-                <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button id="csv-review-mapping-btn" class="btn-small secondary" onclick="reopenMappingFromReview()" style="font-size:11px;">Mapping Settings...</button>
+                    <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+                </div>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
-                    <strong>Review Changes:</strong> Review the changes below and select which records to include or ignore. Click "Apply Selected Changes" when ready.
+                    <strong>Review Changes:</strong> Review the changes below and make selections for each item, then click "Update Roster" when ready.
                 </div>
                 <div id="csv-review-content" style="max-height: 60vh; overflow-y: auto;">
                     <!-- Review content will be populated here -->
                 </div>
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid #e0e0e0;">
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn-small secondary" onclick="selectAllCSVReviewItems()">Select All</button>
-                    <button class="btn-small secondary" onclick="deselectAllCSVReviewItems()">Deselect All</button>
-                </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; padding: 16px; border-top: 1px solid #e0e0e0;">
                 <div style="display: flex; gap: 8px;">
                     <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
-                    <button class="btn-small" onclick="applyCSVReviewChanges()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Selected Changes</button>
+                    <button class="btn-small" onclick="applyCSVReviewChanges()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Update Roster</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="scripts/app-main.js"></script>
+    <!-- Choose Display Fields Modal -->
+    <div id="display-fields-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeDisplayFieldsModal();">
+        <div class="modal" style="max-width: 480px; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span id="display-fields-modal-title">Choose Display Fields</span>
+                <button class="btn-small secondary" onclick="closeDisplayFieldsModal()">Close</button>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <div id="display-fields-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeDisplayFieldsModal()">Cancel</button>
+                <button class="btn-small" onclick="applyDisplayFieldChanges()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App framework (load order matters) -->
+    <script src="scripts/app-state.js?v=20260216u"></script>
+    <script src="scripts/app-utils.js?v=20260216u"></script>
+    <script src="scripts/app-scales.js?v=20260216u"></script>
+    <!-- Feature modules -->
+    <script src="scripts/app-auth-handlers.js?v=20260216u"></script>
+    <script src="scripts/app-groups.js?v=20260216u"></script>
+    <script src="scripts/app-riders.js?v=20260216u"></script>
+    <script src="scripts/app-coaches.js?v=20260216u"></script>
+    <script src="scripts/app-rides.js?v=20260216u"></script>
+    <script src="scripts/app-season.js?v=20260216u"></script>
+    <script src="scripts/app-csv.js?v=20260216u"></script>
+    <script src="scripts/app-sidebar.js?v=20260216u"></script>
+    <script src="scripts/app-routes.js?v=20260216u"></script>
+    <script src="scripts/app-races.js?v=20260216u"></script>
+    <script src="scripts/app-assignments.js?v=20260216u"></script>
+    <!-- Bootstrap (must be last) -->
+    <script src="scripts/app-main.js?v=20260216u"></script>
 </body>
 </html>

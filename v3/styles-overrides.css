@@ -76,7 +76,7 @@
     display: block;
     width: 100%;
     padding: 16px 20px;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
     text-align: center;
     border: 2px solid #2196F3;
@@ -113,7 +113,8 @@
 }
 .practice-planner-back-btn {
     padding: 8px 16px;
-    font-size: 14px;
+    font-size: 16px;
+    color: #333;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: #fff;
