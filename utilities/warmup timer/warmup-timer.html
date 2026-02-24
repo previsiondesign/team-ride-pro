@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Warmup Timer">
+    <meta name="apple-mobile-web-app-status-bar-style" content="#2196F3">
+    <link rel="manifest" href="manifest.json">
+    <title>Fort Ord Race Warmup Timer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+        body.fullscreen { padding: 0; overflow: hidden; }
+        
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        body.fullscreen .container {
+            max-width: 100%; width: 100%;
+            height: 100vh; height: 100dvh;
+            border-radius: 0; padding: 0;
+            box-shadow: none; background: transparent;
+            display: block; position: relative; overflow: hidden;
+        }
+        
+        h1 { text-align: center; margin-bottom: 30px; font-size: 24px; color: #333; font-weight: 600; }
+        
+        .setup-screen, .timer-screen, .countdown-screen { display: none; }
+        .setup-screen.active, .timer-screen.active, .countdown-screen.active { display: block; }
+        
+        body.fullscreen .setup-screen.active {
+            display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 20px;
+        }
+        body.fullscreen .countdown-screen.active {
+            display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
+        }
+        body.fullscreen .countdown-display {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        body.fullscreen .timer-screen.active {
+            display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
+        }
+        
+        body.fullscreen h1 {
+            display: block; position: absolute;
+            top: max(12px, env(safe-area-inset-top, 0px));
+            left: 50%; transform: translateX(-50%);
+            margin: 0; font-size: 16px; z-index: 10; white-space: nowrap; color: #333;
+        }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen h1 { font-size: 15px; } }
+        @media (orientation: portrait) and (max-width: 400px) { body.fullscreen h1 { font-size: 13px; } }
+        
+        .button { width: 100%; padding: 10px; font-size: 14px; font-weight: 500; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
+        .button:hover { background: #1976D2; }
+        .button-primary { background: #2196F3; color: white; }
+        .button-secondary { background: #757575; color: white; }
+        .button-secondary:hover { background: #616161; }
+        
+        .warmup-steps { width: 100%; max-width: 400px; margin: 0 auto 20px auto; }
+        .warmup-steps table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .warmup-steps th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #ddd; font-size: 10px; text-transform: uppercase; color: #999; font-weight: 500; }
+        .warmup-steps td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+        .warmup-steps tr:last-child td { border-bottom: none; font-weight: 600; padding-top: 8px; border-top: 2px solid #ddd; }
+        .warmup-steps .time-col { width: 70px; white-space: nowrap; color: #666; font-variant-numeric: tabular-nums; }
+        .warmup-steps .step-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .dot-easy { background: #2196F3; }
+        .dot-build { background: #FF9800; }
+        .dot-race { background: #F44336; }
+        .dot-recovery { background: #4CAF50; }
+
+        /* ===== Timer digits ===== */
+        .timer-display { text-align: center; margin: 40px 0; }
+        body.fullscreen .timer-display {
+            position: absolute; top: 26%; left: 50%;
+            transform: translate(-50%, -50%) scaleY(1.5);
+            width: 100%; margin: 0; padding: 0;
+            text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .time {
+            font-size: 72px; font-weight: 600; line-height: 1; color: #333; margin-bottom: 15px;
+            font-variant-numeric: tabular-nums; font-weight: 700;
+            display: inline-block; text-align: center;
+        }
+        body.fullscreen .time {
+            font-size: 42vw; margin: 0; line-height: 1; color: #333; text-align: center;
+            font-variant-numeric: tabular-nums; font-weight: 700;
+            display: block; width: 5ch;
+        }
+        body.fullscreen .time.complete { font-size: 28vw; margin-bottom: 10px; width: auto; }
+        @media (orientation: portrait) { body.fullscreen .time { font-size: 38vw; } }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .time { font-size: 34vw; }
+            body.fullscreen .time.complete { font-size: 22vw; }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .time { font-size: 32vw; }
+            body.fullscreen .time.complete { font-size: 20vw; }
+        }
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .time { font-size: 30vw; }
+            body.fullscreen .time.complete { font-size: 18vw; }
+        }
+
+        /* ===== Phase label ===== */
+        .phase { font-size: 18px; margin-top: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        body.fullscreen .phase {
+            font-size: 5vw; margin: 0; position: absolute;
+            top: 18%; left: 50%;
+            transform: translate(-50%, calc(-50% - 14vw));
+            z-index: 10; font-weight: 700; white-space: nowrap; max-width: 90vw; overflow: hidden;
+        }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .phase { font-size: 8vw; transform: translate(-50%, calc(-50% - 16vw)); top: 20%; }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .phase { font-size: 7vw; transform: translate(-50%, calc(-50% - 14vw)); }
+        }
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .phase { font-size: 7vw; transform: translate(-50%, calc(-50% - 13vw)); }
+        }
+        .phase.phase-easy { color: #1565C0; }
+        .phase.phase-build { color: #E65100; }
+        .phase.phase-race { color: #C62828; }
+        .phase.phase-recovery { color: #2E7D32; }
+        .phase.phase-complete { color: #333; }
+
+        /* ===== Info: top group (step + up next) — close to timer ===== */
+        .info-top { text-align: center; margin-top: 10px; }
+        body.fullscreen .info-top {
+            position: absolute;
+            top: 39%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90vw; max-width: 500px;
+            z-index: 10; text-align: center;
+        }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .info-top { top: 38%; }
+        }
+
+        .step-info { font-size: 15px; color: #333; font-weight: 600; }
+        body.fullscreen .step-info { font-size: 4.5vw; color: #222; font-weight: 600; }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .step-info { font-size: 4.8vw; } }
+
+        .up-next { font-size: 14px; color: #444; font-weight: 500; margin-top: 4px; }
+        body.fullscreen .up-next { font-size: 4.2vw; color: #333; font-weight: 500; margin-top: 1.2vw; }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .up-next { font-size: 4.5vw; } }
+
+        /* ===== Info: middle (description) — flex container spanning gap between top and bottom ===== */
+        .info-middle {
+            text-align: center; margin-top: 12px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        body.fullscreen .info-middle {
+            position: absolute;
+            top: 48%;
+            bottom: 112px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 88vw; max-width: 500px;
+            z-index: 10; text-align: center;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .info-middle {
+                top: 47%;
+                bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 94px);
+            }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .info-middle {
+                top: 46%;
+                bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 86px);
+            }
+        }
+
+        .phase-description {
+            font-size: 14px; color: #555; font-style: italic; line-height: 1.45;
+            max-width: 460px; margin-left: auto; margin-right: auto;
+            padding: 0 4px;
+        }
+        body.fullscreen .phase-description {
+            font-size: 5.4vw; color: #444; font-style: italic; line-height: 1.4;
+            white-space: normal; word-wrap: break-word;
+            transition: font-size 0.15s ease;
+        }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .phase-description { font-size: 5.1vw; }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .phase-description { font-size: 4.8vw; }
+        }
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .phase-description { font-size: 4.5vw; }
+        }
+
+        /* ===== Info: bottom (remaining + completion) — close to controls ===== */
+        .info-bottom { text-align: center; margin-top: 10px; }
+        body.fullscreen .info-bottom {
+            position: absolute;
+            bottom: 68px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90vw; max-width: 500px;
+            z-index: 10; text-align: center;
+        }
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .info-bottom {
+                bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 54px);
+            }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .info-bottom {
+                bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 50px);
+            }
+        }
+
+        .remaining-time { font-size: 14px; color: #444; font-weight: 500; font-variant-numeric: tabular-nums; }
+        body.fullscreen .remaining-time { font-size: 4.2vw; color: #333; font-weight: 500; }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .remaining-time { font-size: 4vw; } }
+
+        .completion-time { font-size: 14px; margin-top: 3px; color: #444; font-weight: 500; font-variant-numeric: tabular-nums; }
+        body.fullscreen .completion-time { font-size: 4.2vw; margin-top: 0.8vw; color: #333; font-weight: 500; }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .completion-time { font-size: 4vw; } }
+
+        /* ===== Progress bar ===== */
+        .overall-progress { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: rgba(0,0,0,0.08); z-index: 20; }
+        .overall-progress-bar { height: 100%; width: 0%; transition: width 1s linear; }
+        .overall-progress-bar.phase-easy { background: #2196F3; }
+        .overall-progress-bar.phase-build { background: #FF9800; }
+        .overall-progress-bar.phase-race { background: #F44336; }
+        .overall-progress-bar.phase-recovery { background: #4CAF50; }
+
+        /* ===== Countdown screen ===== */
+        .countdown-display { text-align: center; }
+        .countdown-number {
+            font-size: 200px; font-weight: 400; line-height: 1; color: #2196F3;
+            font-variant-numeric: tabular-nums; font-weight: 700;
+            display: inline-block; width: 1em; text-align: center;
+        }
+        body.fullscreen .countdown-number {
+            font-size: 42vw; line-height: 1; color: #2196F3; font-weight: 400;
+            font-variant-numeric: tabular-nums; font-weight: 700;
+            display: block; width: 1ch; margin: 0; text-align: center;
+        }
+        @media (orientation: portrait) { body.fullscreen .countdown-number { font-size: 38vw; } }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .countdown-number { font-size: 36vw; } }
+        @media (orientation: portrait) and (max-width: 400px) { body.fullscreen .countdown-number { font-size: 33vw; } }
+        @media (orientation: portrait) and (max-width: 360px) { body.fullscreen .countdown-number { font-size: 30vw; } }
+
+        .countdown-label { font-size: 32px; margin-top: 20px; color: #555; }
+        body.fullscreen .countdown-label { font-size: 5vw; margin-top: 30px; color: #555; font-weight: 500; }
+        @media (orientation: portrait) and (max-width: 500px) { body.fullscreen .countdown-label { font-size: 6vw; margin-top: 25px; } }
+        @media (orientation: portrait) and (max-width: 400px) { body.fullscreen .countdown-label { font-size: 7vw; margin-top: 20px; } }
+
+        /* ===== Controls ===== */
+        .controls { display: flex; gap: 10px; margin-top: 30px; }
+        body.fullscreen .controls {
+            position: absolute;
+            bottom: max(20px, env(safe-area-inset-bottom, 0px));
+            left: 50%; transform: translateX(-50%);
+            width: calc(100% - 40px); gap: 8px; margin: 0; z-index: 10;
+            display: flex; flex-direction: row; justify-content: center; align-items: center;
+        }
+        body.fullscreen .controls .button { padding: 14px 16px; font-size: 16px; font-weight: 600; flex: 1; margin-top: 0; }
+        body.fullscreen .controls .button.pause-button { flex: 1.5; }
+        body.fullscreen .controls .button.reset-button { flex: 1.5; background: #2196F3; }
+        body.fullscreen .controls .button.reset-button:hover { background: #1976D2; }
+        body.fullscreen .controls .button.skip-button { background: #9E9E9E; color: white; flex: 1; }
+        body.fullscreen .controls .button.skip-button:hover { background: #757575; }
+        body.fullscreen .controls .button.skip-button:disabled { opacity: 0.35; cursor: default; }
+
+        @media (orientation: portrait) and (max-width: 500px) {
+            body.fullscreen .controls {
+                bottom: max(16px, env(safe-area-inset-bottom, 0px));
+                width: calc(100% - 30px); gap: 6px;
+            }
+            body.fullscreen .controls .button { padding: 14px 10px; font-size: 16px; }
+        }
+        @media (orientation: portrait) and (max-width: 400px) {
+            body.fullscreen .controls {
+                bottom: max(14px, env(safe-area-inset-bottom, 0px));
+                width: calc(100% - 30px); gap: 6px;
+            }
+            body.fullscreen .controls .button { padding: 12px 8px; font-size: 14px; }
+        }
+        @media (orientation: portrait) and (max-width: 360px) {
+            body.fullscreen .controls {
+                bottom: max(12px, env(safe-area-inset-bottom, 0px));
+                width: calc(100% - 24px); gap: 5px;
+            }
+            body.fullscreen .controls .button { padding: 11px 6px; font-size: 13px; }
+        }
+        .controls .button { margin-top: 0; }
+
+        /* ===== Duration controls on setup screen ===== */
+        .duration-controls {
+            display: flex; gap: 10px; margin-top: 14px; max-width: 400px; width: 100%; align-items: center; justify-content: center;
+        }
+        .duration-controls .button { font-size: 13px; padding: 8px 12px; margin-top: 0; flex: 1; }
+        .duration-controls .button:disabled { opacity: 0.35; cursor: default; }
+        .duration-label { font-size: 14px; font-weight: 600; color: #555; text-align: center; margin-top: 12px; }
+
+        /* ===== Confirmation overlay ===== */
+        .confirm-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background: rgba(0,0,0,0.55); z-index: 100; align-items: center; justify-content: center; }
+        .confirm-overlay.visible { display: flex; }
+        .confirm-box { background: white; border-radius: 12px; padding: 28px 24px 20px; max-width: 320px; width: 85%; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+        .confirm-text { font-size: 17px; font-weight: 600; color: #333; margin-bottom: 20px; line-height: 1.4; }
+        .confirm-buttons { display: flex; gap: 10px; }
+        .confirm-buttons button { flex: 1; padding: 12px 0; font-size: 15px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; }
+        .confirm-yes { background: #2196F3; color: white; }
+        .confirm-yes:hover { background: #1976D2; }
+        .confirm-no { background: #eee; color: #333; }
+        .confirm-no:hover { background: #ddd; }
+        .confirm-reset-row { margin-top: 10px; }
+        .confirm-reset { width: 100%; padding: 12px 0; font-size: 14px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; background: #F44336; color: white; }
+        .confirm-reset:hover { background: #D32F2F; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+        body.phase-easy { background: #E3F2FD; }
+        body.phase-build { background: #FFF3E0; }
+        body.phase-race { background: #FFEBEE; }
+        body.phase-recovery { background: #E8F5E9; }
+        body.fullscreen.phase-easy, body.fullscreen .timer-screen.phase-easy { background: #E3F2FD; }
+        body.fullscreen.phase-build, body.fullscreen .timer-screen.phase-build { background: #FFF3E0; }
+        body.fullscreen.phase-race, body.fullscreen .timer-screen.phase-race { background: #FFEBEE; }
+        body.fullscreen.phase-recovery, body.fullscreen .timer-screen.phase-recovery { background: #E8F5E9; }
+        body.fullscreen .countdown-screen { background: #f5f5f5; }
+        .pulsing { animation: pulse 1s ease-in-out infinite; }
+
+        /* ===== Landscape lock overlay ===== */
+        .landscape-overlay {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh;
+            background: #222; color: white; z-index: 9999;
+            flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 30px;
+        }
+        .landscape-overlay .rotate-icon {
+            font-size: 60px; margin-bottom: 20px;
+            animation: rock 1.5s ease-in-out infinite;
+        }
+        .landscape-overlay .rotate-msg {
+            font-size: 20px; font-weight: 600; line-height: 1.4;
+        }
+        @keyframes rock {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-20deg); }
+            75% { transform: rotate(20deg); }
+        }
+        @media (orientation: landscape) {
+            body.fullscreen .landscape-overlay { display: flex; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fort Ord Race Warmup Timer</h1>
+
+        <div class="setup-screen active">
+            <div class="warmup-steps">
+                <table>
+                    <thead><tr><th class="time-col">Time</th><th>Step</th></tr></thead>
+                    <tbody>
+                        <tr><td class="time-col">10 min</td><td><span class="step-dot dot-easy"></span>Easy spin</td></tr>
+                        <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 40%</td></tr>
+                        <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 50%</td></tr>
+                        <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 60%</td></tr>
+                        <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 70%</td></tr>
+                        <tr><td class="time-col">90 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
+                        <tr><td class="time-col">30 sec</td><td><span class="step-dot dot-race"></span>Interval 1: Race pace</td></tr>
+                        <tr><td class="time-col">90 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
+                        <tr><td class="time-col">30 sec</td><td><span class="step-dot dot-race"></span>Interval 2: Race pace</td></tr>
+                        <tr><td class="time-col">90 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
+                        <tr><td class="time-col">30 sec</td><td><span class="step-dot dot-race"></span>Interval 3: Race pace</td></tr>
+                        <tr><td class="time-col">6 min</td><td><span class="step-dot dot-easy"></span>Easy spin cooldown</td></tr>
+                        <tr><td class="time-col"><strong>30 min</strong></td><td><strong>Total Warmup</strong></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <button class="button button-primary" onclick="startTimer()" style="max-width: 400px;">Start Warmup</button>
+            <div class="duration-label" id="durationLabel">30 min warmup</div>
+            <div class="duration-controls">
+                <button class="button button-secondary" id="shortenBtn" onclick="shortenWarmup()">Shorten by 5 min</button>
+                <button class="button button-secondary" id="extendBtn" onclick="extendWarmup()">Extend by 5 min</button>
+            </div>
+        </div>
+
+        <div class="countdown-screen">
+            <div class="countdown-display">
+                <div class="countdown-number" id="countdownNumber">5</div>
+                <div class="countdown-label">Starting in...</div>
+            </div>
+        </div>
+
+        <div class="timer-screen">
+            <div class="overall-progress"><div class="overall-progress-bar" id="overallProgress"></div></div>
+            <div class="phase" id="phaseDisplay">EASY SPIN</div>
+            <div class="timer-display">
+                <div class="time" id="timeDisplay">00:00</div>
+            </div>
+            <div class="info-top">
+                <div class="step-info" id="stepDisplay">Step 1 of 12</div>
+                <div class="up-next" id="upNextDisplay"></div>
+            </div>
+            <div class="info-middle" id="infoMiddle">
+                <div class="phase-description" id="phaseDescription"></div>
+            </div>
+            <div class="info-bottom">
+                <div class="remaining-time" id="remainingDisplay">30:00 remaining</div>
+                <div class="completion-time" id="completionDisplay"></div>
+            </div>
+            <div class="controls">
+                <button class="button button-secondary skip-button" onclick="onSkipBack()" id="skipBackBtn">&lsaquo; Skip</button>
+                <button class="button button-secondary pause-button" onclick="onPauseResume()" id="pauseButton">Pause/Reset</button>
+                <button class="button button-secondary skip-button" onclick="onSkipForward()" id="skipFwdBtn">Skip &rsaquo;</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="landscape-overlay">
+        <div class="rotate-icon">↻</div>
+        <div class="rotate-msg">Please rotate your device<br>to portrait mode</div>
+        <div style="margin-top:24px;font-size:14px;color:#aaa;line-height:1.5;">Tip: Enable rotation lock in your<br>device settings to prevent this</div>
+    </div>
+
+    <div class="confirm-overlay" id="confirmOverlay">
+        <div class="confirm-box">
+            <div class="confirm-text" id="confirmText">Are you sure?</div>
+            <div class="confirm-buttons">
+                <button class="confirm-yes" id="confirmYes">Yes</button>
+                <button class="confirm-no" id="confirmNo">Cancel</button>
+            </div>
+            <div class="confirm-reset-row" id="confirmResetRow" style="display:none;">
+                <button class="confirm-reset" id="confirmReset">Reset Timer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var PHASE_DESCRIPTIONS = {
+            warmup: "Keep it genuinely easy \u2014 conversational pace, around 60\u201370% max HR. Just get the blood moving and joints loose. Cadence slightly higher than your natural tendency (90+ rpm if you can).",
+            build: "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.",
+            intervals: "Short efforts of 30 seconds at actual race intensity (the kind of hard you\u2019d hit on a punchy climb). Full recovery between each (90 sec easy). These wake up your fast-twitch recruitment and get your body used to the intensity before the gun goes off.",
+            cooldown: "Bring HR back to an easy zone. You want to toe the start line feeling warm and ready but not already in debt."
+        };
+
+        var WARMUP_STEPS = [
+            { duration: 600, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 10 minutes' },
+            { duration: 120, label: 'Build effort to 40%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 40 percent' },
+            { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+            { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+            { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+            { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+            { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+            { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+            { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+            { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+            { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+            { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
+        ];
+
+        var TOTAL_WARMUP = WARMUP_STEPS.reduce(function(sum, s) { return sum + s.duration; }, 0);
+
+        var currentDuration = 30;
+
+        function buildSteps(minutes) {
+            var steps;
+            if (minutes === 25) {
+                steps = [
+                    { duration: 480, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 8 minutes' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 300, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 5 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 6 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            } else if (minutes === 35) {
+                steps = [
+                    { duration: 780, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 13 minutes' },
+                    { duration: 120, label: 'Build effort to 40%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 40 percent' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 4: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 4. Race pace! 30 seconds' },
+                    { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            } else {
+                steps = [
+                    { duration: 600, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 10 minutes' },
+                    { duration: 120, label: 'Build effort to 40%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 40 percent' },
+                    { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
+                    { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
+                    { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 2: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 2. Race pace! 30 seconds' },
+                    { duration: 90,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 90 seconds' },
+                    { duration: 30,  label: 'Interval 3: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 3. Race pace! 30 seconds' },
+                    { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
+                ];
+                PHASE_DESCRIPTIONS.build = "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
+            }
+            return steps;
+        }
+
+        function formatStepDuration(sec) {
+            if (sec >= 60 && sec % 60 === 0) return (sec / 60) + ' min';
+            return sec + ' sec';
+        }
+
+        function rebuildTable() {
+            var tbody = document.querySelector('.warmup-steps tbody');
+            var total = WARMUP_STEPS.reduce(function(s, step) { return s + step.duration; }, 0);
+            var rows = '';
+            for (var i = 0; i < WARMUP_STEPS.length; i++) {
+                var step = WARMUP_STEPS[i];
+                var dotClass = 'dot-' + step.type;
+                var lbl = step.descKey === 'cooldown' ? step.label + ' cooldown' : step.label;
+                rows += '<tr><td class="time-col">' + formatStepDuration(step.duration) + '</td><td><span class="step-dot ' + dotClass + '"></span>' + lbl + '</td></tr>';
+            }
+            rows += '<tr><td class="time-col"><strong>' + Math.round(total / 60) + ' min</strong></td><td><strong>Total Warmup</strong></td></tr>';
+            tbody.innerHTML = rows;
+        }
+
+        function setDuration(minutes) {
+            currentDuration = minutes;
+            WARMUP_STEPS = buildSteps(minutes);
+            TOTAL_WARMUP = WARMUP_STEPS.reduce(function(s, step) { return s + step.duration; }, 0);
+            rebuildTable();
+            document.getElementById('shortenBtn').disabled = (minutes <= 25);
+            document.getElementById('extendBtn').disabled = (minutes >= 35);
+            document.getElementById('durationLabel').textContent = minutes + ' min warmup';
+        }
+
+        function shortenWarmup() { if (currentDuration > 25) setDuration(currentDuration - 5); }
+        function extendWarmup() { if (currentDuration < 35) setDuration(currentDuration + 5); }
+
+        var currentStepIndex = 0;
+        var timeRemaining = 0;
+        var timerInterval = null;
+        var countdownInterval = null;
+        var isPaused = false;
+        var isComplete = false;
+        var countdownRemaining = 5;
+        var nextStepAnnouncementDone = false;
+
+        var phaseStartTime = null;
+        var phaseDuration = 0;
+        var pausedTime = 0;
+        var pauseStartTime = null;
+        var overallStartTime = null;
+        var overallPausedTime = 0;
+
+        var audioContext = null;
+
+        var pendingAction = null;
+        function showConfirm(message, callback, showReset) {
+            document.getElementById('confirmText').textContent = message;
+            document.getElementById('confirmResetRow').style.display = showReset ? 'block' : 'none';
+            document.getElementById('confirmOverlay').classList.add('visible');
+            pendingAction = callback;
+        }
+        document.getElementById('confirmYes').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('confirmOverlay').classList.remove('visible');
+            if (pendingAction) pendingAction();
+            pendingAction = null;
+        });
+        document.getElementById('confirmNo').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('confirmOverlay').classList.remove('visible');
+            pendingAction = null;
+        });
+        document.getElementById('confirmReset').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('confirmOverlay').classList.remove('visible');
+            pendingAction = null;
+            setTimeout(function() { showConfirm('Are you sure you want to reset the timer?', stopTimer); }, 200);
+        });
+        document.getElementById('confirmOverlay').addEventListener('click', function(e) {
+            if (e.target === this) { this.classList.remove('visible'); pendingAction = null; }
+        });
+
+        function onSkipBack() {
+            if (isComplete) return;
+            if (currentStepIndex > 0) showConfirm('Skip to previous step?', skipBack);
+        }
+        function onSkipForward() {
+            if (isComplete) return;
+            if (currentStepIndex < WARMUP_STEPS.length - 1) showConfirm('Skip to next step?', skipForward);
+            else showConfirm('Finish warmup?', completeTimer);
+        }
+        function onPauseResume() {
+            if (isComplete) { stopTimer(); return; }
+            if (!isPaused) showConfirm('Pause the timer?', pauseResume, true);
+            else pauseResume();
+        }
+
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioContext.state === 'suspended') audioContext.resume();
+                } catch (e) { console.log('Audio context not supported:', e); }
+            } else if (audioContext.state === 'suspended') { audioContext.resume(); }
+        }
+
+        var voicesLoaded = false;
+        var voicesCache = [];
+        function loadVoices() {
+            if ('speechSynthesis' in window) {
+                voicesCache = window.speechSynthesis.getVoices();
+                if (voicesCache.length > 0) voicesLoaded = true;
+            }
+        }
+        if ('speechSynthesis' in window) {
+            loadVoices();
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+            var loadAttempts = 0;
+            var forceLoadVoices = setInterval(function() {
+                loadVoices(); loadAttempts++;
+                if (voicesLoaded || loadAttempts > 10) clearInterval(forceLoadVoices);
+            }, 100);
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                setTimeout(function() {
+                    var u = new SpeechSynthesisUtterance(text);
+                    u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+                    if (!voicesLoaded || voicesCache.length === 0) loadVoices();
+                    if (voicesCache.length > 0) {
+                        var pv = voicesCache.find(function(v) {
+                            return v.lang.includes('en') && (v.name.includes('Google') || v.name.includes('Microsoft') || v.name.includes('Samantha') || v.name.includes('Enhanced'));
+                        });
+                        if (pv) u.voice = pv;
+                        else { var ev = voicesCache.find(function(v) { return v.lang.startsWith('en'); }); if (ev) u.voice = ev; }
+                    }
+                    u.onerror = function(e) { console.log('Speech error:', e.error); };
+                    window.speechSynthesis.speak(u);
+                }, 50);
+            }
+        }
+
+        function playDing() {
+            initAudioContext();
+            if (!audioContext || audioContext.state === 'closed') return;
+            try {
+                if (audioContext.state === 'suspended') audioContext.resume().then(function() { playDingSound(); }).catch(function() {});
+                else playDingSound();
+            } catch (e) { console.log('Audio error:', e); }
+        }
+        function playDingSound() {
+            if (!audioContext) return;
+            var now = audioContext.currentTime;
+            [523.25, 659.25, 783.99].forEach(function(freq, i) {
+                var osc = audioContext.createOscillator();
+                var gain = audioContext.createGain();
+                osc.type = 'sine'; osc.frequency.setValueAtTime(freq, now);
+                var d = i * 0.02, at = 0.01, dt = 0.3 + i * 0.1, sl = 0.1, rt = 0.5;
+                gain.gain.setValueAtTime(0, now + d);
+                gain.gain.linearRampToValueAtTime(1.0, now + d + at);
+                gain.gain.exponentialRampToValueAtTime(sl, now + d + at + dt);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + d + at + dt + rt);
+                osc.connect(gain); gain.connect(audioContext.destination);
+                osc.start(now + d); osc.stop(now + d + at + dt + rt);
+            });
+        }
+
+        function autoResizePhaseText(el) {
+            if (!document.body.classList.contains('fullscreen')) return;
+            el.style.fontSize = ''; void el.offsetHeight;
+            var mw = window.innerWidth * 0.9, min = 12;
+            var fs = parseFloat(window.getComputedStyle(el).fontSize), orig = fs;
+            while (el.scrollWidth > mw && fs > min) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
+            if (fs < orig * 0.7) el.style.fontSize = ((fs / window.innerWidth) * 100) + 'vw';
+        }
+        function autoResizeDescription() {
+            var el = document.getElementById('phaseDescription');
+            var box = document.getElementById('infoMiddle');
+            if (!el || !box || !el.textContent) return;
+            el.style.fontSize = '';
+            void el.offsetHeight;
+            var avail = box.clientHeight;
+            if (avail <= 0) return;
+            var fs = parseFloat(window.getComputedStyle(el).fontSize);
+            var minFs = Math.max(11, fs * 0.45);
+            var tries = 0;
+            while (el.scrollHeight > avail && fs > minFs && tries < 40) {
+                fs -= 0.5;
+                el.style.fontSize = fs + 'px';
+                tries++;
+            }
+        }
+
+        var resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                var p = document.getElementById('phaseDisplay');
+                if (p && document.body.classList.contains('fullscreen')) autoResizePhaseText(p);
+                autoResizeDescription();
+            }, 100);
+        });
+
+        function getRemainingWarmupSeconds() {
+            var r = timeRemaining;
+            for (var i = currentStepIndex + 1; i < WARMUP_STEPS.length; i++) r += WARMUP_STEPS[i].duration;
+            return r;
+        }
+        function formatRemainingTime(s) {
+            return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' remaining';
+        }
+        function formatCompletionTime(sec) {
+            var d = new Date(Date.now() + sec * 1000);
+            var h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'pm' : 'am';
+            h = h % 12; if (h === 0) h = 12;
+            return 'Completion Time ' + h + ':' + String(m).padStart(2, '0') + ' ' + ap;
+        }
+
+        function jumpToStep(idx) {
+            if (idx < 0 || idx >= WARMUP_STEPS.length) return;
+            window.speechSynthesis.cancel();
+            nextStepAnnouncementDone = false;
+            var skip = 0;
+            if (idx > currentStepIndex) {
+                skip += timeRemaining;
+                for (var i = currentStepIndex + 1; i < idx; i++) skip += WARMUP_STEPS[i].duration;
+            } else {
+                skip -= (phaseDuration - timeRemaining);
+                for (var i = currentStepIndex - 1; i >= idx; i--) skip -= WARMUP_STEPS[i].duration;
+            }
+            overallStartTime -= skip * 1000;
+            currentStepIndex = idx;
+            var step = WARMUP_STEPS[currentStepIndex];
+            phaseStartTime = Date.now(); phaseDuration = step.duration; timeRemaining = step.duration; pausedTime = 0;
+            if (isPaused) pauseStartTime = Date.now();
+            playDing();
+            if (step.type !== 'race') setTimeout(function() { speak(step.announce); }, 600);
+            updateDisplay();
+        }
+        function skipBack() { if (currentStepIndex > 0) jumpToStep(currentStepIndex - 1); }
+        function skipForward() {
+            if (currentStepIndex < WARMUP_STEPS.length - 1) jumpToStep(currentStepIndex + 1);
+            else completeTimer();
+        }
+
+        function nextStepIsRacePace() {
+            return currentStepIndex < WARMUP_STEPS.length - 1 && WARMUP_STEPS[currentStepIndex + 1].type === 'race';
+        }
+
+        function startTimer() {
+            currentStepIndex = 0; isPaused = false; isComplete = false;
+            countdownRemaining = 5; nextStepAnnouncementDone = false;
+            phaseStartTime = null; pausedTime = 0; pauseStartTime = null;
+            overallStartTime = null; overallPausedTime = 0;
+            document.getElementById('timeDisplay').classList.remove('complete');
+            document.getElementById('phaseDisplay').classList.remove('complete', 'phase-complete');
+            var pb = document.getElementById('pauseButton');
+            pb.textContent = 'Pause/Reset'; pb.className = 'button button-secondary pause-button';
+            document.getElementById('skipFwdBtn').disabled = false;
+            initAudioContext();
+            if ('speechSynthesis' in window) {
+                var t = new SpeechSynthesisUtterance(''); t.volume = 0;
+                window.speechSynthesis.speak(t); window.speechSynthesis.cancel();
+            }
+            document.body.classList.add('fullscreen');
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().then(function() {
+                        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function() {});
+                    }).catch(function() {});
+                }
+            } catch(e) {}
+            document.querySelector('.setup-screen').classList.remove('active');
+            document.querySelector('.timer-screen').classList.remove('active');
+            document.querySelector('.countdown-screen').classList.add('active');
+            document.getElementById('countdownNumber').textContent = countdownRemaining;
+            var cst = Date.now(), cd = 5, lsc = 6;
+            countdownInterval = setInterval(function() {
+                var el = Math.floor((Date.now() - cst) / 1000);
+                countdownRemaining = Math.max(0, cd - el);
+                document.getElementById('countdownNumber').textContent = countdownRemaining;
+                if (countdownRemaining <= 3 && countdownRemaining > 0 && countdownRemaining !== lsc) {
+                    speak(countdownRemaining.toString()); lsc = countdownRemaining;
+                }
+                if (countdownRemaining <= 0) { clearInterval(countdownInterval); startActualTimer(); }
+            }, 100);
+        }
+
+        function startActualTimer() {
+            document.querySelector('.countdown-screen').classList.remove('active');
+            document.querySelector('.timer-screen').classList.add('active');
+            var step = WARMUP_STEPS[currentStepIndex];
+            phaseStartTime = Date.now(); overallStartTime = Date.now();
+            phaseDuration = step.duration; timeRemaining = step.duration; pausedTime = 0;
+            playDing();
+            setTimeout(function() { speak(step.announce); }, 600);
+            updateDisplay();
+            timerInterval = setInterval(tick, 100);
+        }
+
+        function tick() {
+            if (isPaused) { if (pauseStartTime === null) pauseStartTime = Date.now(); return; }
+            if (pauseStartTime !== null) {
+                var pd = Math.floor((Date.now() - pauseStartTime) / 1000);
+                pausedTime += pd; overallPausedTime += pd; pauseStartTime = null;
+            }
+            var now = Date.now();
+            var elapsed = Math.floor((now - phaseStartTime - pausedTime * 1000) / 1000);
+            var prev = timeRemaining;
+            timeRemaining = Math.max(0, phaseDuration - elapsed);
+
+            var currentIsRace = WARMUP_STEPS[currentStepIndex].type === 'race';
+
+            // Pre-announce race pace intervals at 12 seconds (from recovery/build leading in)
+            if (nextStepIsRacePace() && timeRemaining <= 12 && timeRemaining > 3) {
+                if (!nextStepAnnouncementDone && prev > 12) {
+                    nextStepAnnouncementDone = true;
+                    speak('Get ready! ' + WARMUP_STEPS[currentStepIndex + 1].label + '!');
+                }
+            }
+
+            // Standard "next up" at 10s — skip if current step is race pace (keep it silent during efforts)
+            if (!nextStepIsRacePace() && !currentIsRace && currentStepIndex < WARMUP_STEPS.length - 1 && timeRemaining <= 10 && timeRemaining > 3) {
+                if (!nextStepAnnouncementDone && prev > 10) {
+                    nextStepAnnouncementDone = true;
+                    speak('Next up: ' + WARMUP_STEPS[currentStepIndex + 1].label);
+                }
+            }
+
+            // 3-2-1 countdown for all transitions
+            if (currentStepIndex < WARMUP_STEPS.length - 1 && timeRemaining <= 3 && timeRemaining > 0 && timeRemaining !== prev) {
+                speak(timeRemaining.toString());
+            }
+            // Last step countdown
+            if (currentStepIndex === WARMUP_STEPS.length - 1 && timeRemaining <= 3 && timeRemaining > 0 && timeRemaining !== prev) {
+                speak(timeRemaining.toString());
+            }
+
+            if (timeRemaining <= 0) {
+                currentStepIndex++;
+                nextStepAnnouncementDone = false;
+                if (currentStepIndex >= WARMUP_STEPS.length) { completeTimer(); return; }
+                var ns = WARMUP_STEPS[currentStepIndex];
+                playDing();
+                phaseStartTime = Date.now(); phaseDuration = ns.duration; timeRemaining = ns.duration; pausedTime = 0;
+                // Don't re-announce race pace (3-2-1 + "Get ready" already covered it)
+                if (ns.type !== 'race') {
+                    setTimeout(function() { speak(ns.announce); }, 600);
+                }
+            }
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            var m = Math.floor(timeRemaining / 60), s = timeRemaining % 60;
+            document.getElementById('timeDisplay').textContent = m + ':' + String(s).padStart(2, '0');
+            var step = WARMUP_STEPS[currentStepIndex];
+            var pe = document.getElementById('phaseDisplay');
+            pe.textContent = step.label.toUpperCase();
+            pe.className = 'phase phase-' + step.type;
+            setTimeout(function() { autoResizePhaseText(pe); }, 0);
+            document.getElementById('stepDisplay').textContent = 'Step ' + (currentStepIndex + 1) + ' of ' + WARMUP_STEPS.length;
+            var un = document.getElementById('upNextDisplay');
+            un.textContent = currentStepIndex < WARMUP_STEPS.length - 1 ? 'Up next: ' + WARMUP_STEPS[currentStepIndex + 1].label : 'Final step';
+            document.getElementById('phaseDescription').textContent = PHASE_DESCRIPTIONS[step.descKey] || '';
+            var tr = getRemainingWarmupSeconds();
+            document.getElementById('remainingDisplay').textContent = formatRemainingTime(tr);
+            document.getElementById('completionDisplay').textContent = formatCompletionTime(tr);
+            var ts = document.querySelector('.timer-screen');
+            ts.className = 'timer-screen active phase-' + step.type;
+            document.body.className = 'fullscreen phase-' + step.type;
+            var oe = Math.floor((Date.now() - overallStartTime - overallPausedTime * 1000) / 1000);
+            var pct = Math.min(100, (oe / TOTAL_WARMUP) * 100);
+            var pb = document.getElementById('overallProgress');
+            pb.style.width = pct + '%'; pb.className = 'overall-progress-bar phase-' + step.type;
+            document.getElementById('skipBackBtn').disabled = (currentStepIndex === 0);
+            if (timeRemaining <= 3) ts.classList.add('pulsing'); else ts.classList.remove('pulsing');
+            setTimeout(autoResizeDescription, 0);
+        }
+
+        function pauseResume() {
+            isPaused = !isPaused;
+            if (isPaused) pauseStartTime = Date.now();
+            else if (pauseStartTime !== null) {
+                var pd = Math.floor((Date.now() - pauseStartTime) / 1000);
+                pausedTime += pd; overallPausedTime += pd; pauseStartTime = null;
+            }
+            document.getElementById('pauseButton').textContent = isPaused ? 'Resume' : 'Pause/Reset';
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval); clearInterval(countdownInterval);
+            window.speechSynthesis.cancel(); isComplete = false;
+            if (wakeLock !== null) wakeLock.release().then(function() { wakeLock = null; }).catch(function() {});
+            phaseStartTime = null; pausedTime = 0; pauseStartTime = null;
+            document.body.className = '';
+            document.querySelector('.timer-screen').className = 'timer-screen';
+            try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e) {}
+            document.querySelector('.countdown-screen').classList.remove('active');
+            document.querySelector('.setup-screen').classList.add('active');
+            var pb = document.getElementById('pauseButton');
+            pb.textContent = 'Pause/Reset'; pb.className = 'button button-secondary pause-button';
+        }
+
+        function completeTimer() {
+            clearInterval(timerInterval); clearInterval(countdownInterval);
+            window.speechSynthesis.cancel(); isComplete = true;
+            if (wakeLock !== null) wakeLock.release().then(function() { wakeLock = null; }).catch(function() {});
+            playDing();
+            setTimeout(function() { speak('Warmup complete! You are ready to race!'); }, 600);
+            document.getElementById('timeDisplay').textContent = 'DONE';
+            document.getElementById('timeDisplay').classList.add('complete');
+            document.getElementById('phaseDisplay').textContent = 'WARMUP COMPLETE';
+            document.getElementById('phaseDisplay').className = 'phase phase-complete';
+            document.getElementById('stepDisplay').textContent = 'You are ready to race!';
+            document.getElementById('upNextDisplay').textContent = '';
+            document.getElementById('phaseDescription').textContent = '';
+            document.getElementById('remainingDisplay').textContent = '';
+            document.getElementById('completionDisplay').textContent = '';
+            document.getElementById('overallProgress').style.width = '100%';
+            var pb = document.getElementById('pauseButton');
+            pb.textContent = 'Reset'; pb.className = 'button button-secondary reset-button';
+            document.getElementById('skipBackBtn').disabled = true;
+            document.getElementById('skipFwdBtn').disabled = true;
+        }
+
+        var wakeLock = null;
+        var wakeLockSupported = 'wakeLock' in navigator;
+        async function requestWakeLock() {
+            try {
+                if (wakeLockSupported) {
+                    if (wakeLock !== null) await wakeLock.release().catch(function() {});
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', function() {
+                        if (timerInterval !== null || countdownInterval !== null) requestWakeLock();
+                    });
+                }
+            } catch (e) { console.log('Wake Lock error:', e); }
+        }
+        document.addEventListener('visibilitychange', async function() {
+            if (!document.hidden && wakeLockSupported && (timerInterval !== null || countdownInterval !== null)) await requestWakeLock();
+        });
+        var originalStartTimer = startTimer;
+        startTimer = function() { requestWakeLock(); originalStartTimer(); };
+
+        if (document.documentElement.requestFullscreen) {
+            document.addEventListener('click', function(e) {
+                if (document.body.classList.contains('fullscreen') && !document.fullscreenElement && !e.target.closest('.confirm-overlay')) {
+                    document.documentElement.requestFullscreen().catch(function() {});
+                }
+            }, { once: false });
+        }
+
+        if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('service-worker.js').then(function(r) { console.log('SW registered:', r.scope); }).catch(function(e) { console.log('SW failed:', e); });
+            });
+        }
+    </script>
+</body></html>

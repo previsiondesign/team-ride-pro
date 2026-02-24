@@ -1,0 +1,34 @@
+# ============================================
+# .cursorignore - Reduce Cursor memory usage
+# ============================================
+
+# Large backup file (29K lines) - biggest single cause of memory pressure
+scripts/app-main-BACKUP.js
+
+# SQL migration files - only run manually, not actively edited
+sql/
+
+# Documentation - not code, doesn't need indexing
+docs/
+
+# Utilities (interval timer iOS app etc.) - separate project
+utilities/
+
+# Server directory - separate Node.js project
+server/
+
+# Twilio recovery codes
+twilo/
+
+# Deployment configs
+render.yaml
+railway.json
+
+# Misc text files
+rider fields.txt
+
+# Build artifacts
+node_modules/
+dist/
+build/
+.cache/
