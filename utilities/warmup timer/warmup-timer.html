@@ -774,7 +774,13 @@
                 window.speechSynthesis.speak(t); window.speechSynthesis.cancel();
             }
             document.body.classList.add('fullscreen');
-            try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); } catch(e) {}
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().then(function() {
+                        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function() {});
+                    }).catch(function() {});
+                }
+            } catch(e) {}
             document.querySelector('.setup-screen').classList.remove('active');
             document.querySelector('.timer-screen').classList.remove('active');
             document.querySelector('.countdown-screen').classList.add('active');
@@ -900,6 +906,7 @@
             phaseStartTime = null; pausedTime = 0; pauseStartTime = null;
             document.body.className = '';
             document.querySelector('.timer-screen').className = 'timer-screen';
+            try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e) {}
             document.querySelector('.countdown-screen').classList.remove('active');
             document.querySelector('.setup-screen').classList.add('active');
             var pb = document.getElementById('pauseButton');
