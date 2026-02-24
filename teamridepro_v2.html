@@ -1,0 +1,1737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tam High MTB Team Roster and Practice Manager</title>
+    <link rel="stylesheet" href="styles.css?v=20241220b">
+    <link rel="stylesheet" href="styles-overrides.css?v=20241220b">
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase Configuration, Auth, Database Functions, and Roles -->
+    <script src="scripts/supabase-config.js"></script>
+    <script src="scripts/auth.js"></script>
+    <script src="scripts/database.js"></script>
+    <script src="scripts/roles.js"></script>
+    <!-- jsPDF library for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- Google API Client Library for OAuth and Sheets API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header-bar">
+            <div class="header-title-container">
+                <img src="assets/tam-high-logo.png" alt="Tam High Logo" class="header-logo" id="header-logo" style="border-radius: 50%; object-fit: cover;">
+                <h1>Tam High Mountain Bike Racing Team</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="user-menu" id="user-menu">
+                    <div class="user-info">
+                        <span class="user-name" id="user-name">Adam Phillips</span>
+                        <span class="user-role" id="user-role">Coach</span>
+                    </div>
+                    <div class="user-menu-buttons">
+                        <button class="btn-small secondary" onclick="handleLogout()" data-readonly-allow="true">Sign Out</button>
+                    </div>
+                </div>
+                <div class="mobile-menu-container">
+                    <button class="mobile-menu-button" id="mobile-menu-button" onclick="toggleMobileMenu()" aria-label="Menu">
+                    </button>
+                    <div class="mobile-menu-dropdown" id="mobile-menu-dropdown">
+                        <button class="mobile-menu-item active" onclick="selectMobileTab('settings')">Team Dashboard</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('roster')">Roster</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('routes')">Routes</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Reporting</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('rides')">Practice Planner</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('assignments')">Rider Assignments</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('coach-assignments')">Coach Assignments</button>
+                        <button class="mobile-menu-item" onclick="selectMobileTab('practice-reporting')">Practice Reporting</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tabs" id="desktop-tabs" style="display: flex; justify-content: space-between;">
+                    <div style="display: flex;">
+                <button class="tab active" onclick="switchTab('settings', this)">Team Dashboard</button>
+                <button class="tab" onclick="switchTab('roster', this)">Roster</button>
+                <button class="tab" onclick="switchTab('routes', this)">Routes</button>
+                <button class="tab" onclick="switchTab('practice-reporting', this)">Reporting</button>
+                <button class="tab" onclick="switchTab('rides', this)">Practice Planner</button>
+            </div>
+            <div style="display: flex;">
+                <button class="tab" onclick="switchTab('assignments', this)">Rider Assignments</button>
+                <button class="tab" onclick="switchTab('coach-assignments', this)">Coach Assignments</button>
+            </div>
+        </div>
+
+        <div id="read-only-banner" style="display: none; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 10px 12px; border-radius: 6px; margin: 12px 0;">
+            Read-only mode enabled.
+        </div>
+        <div id="developer-mode-banner" style="display: none; background: #e3f2fd; border: 1px solid #90caf9; color: #0d47a1; padding: 10px 12px; border-radius: 6px; margin: 12px 0;">
+            Developer mode is ON: changes are saved only in this browser and do not affect the live site.
+        </div>
+
+        <!-- Lock conflict: another user is logged in -->
+        <div id="lock-conflict-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10000; justify-content: center; align-items: center;">
+            <div id="lock-conflict-dialog" style="background: white; border-radius: 8px; padding: 24px; max-width: 420px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <p id="lock-conflict-message" style="margin: 0 0 16px; font-size: 15px; color: #333;"></p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button type="button" class="btn-small" id="lock-conflict-readonly">Continue in Read-Only mode</button>
+                    <button type="button" class="btn-small secondary" id="lock-conflict-request">Request access from <span id="lock-conflict-name"></span></button>
+                    <button type="button" class="btn-small secondary" id="lock-conflict-developer">Access in Developer Mode</button>
+                </div>
+            </div>
+            <div id="lock-conflict-waiting" style="display: none; background: white; border-radius: 8px; padding: 24px; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); text-align: center;">
+                <p id="lock-conflict-waiting-text" style="margin: 0 0 16px; font-size: 15px; color: #333;">Waiting for response…</p>
+                <button type="button" class="btn-small secondary" id="lock-conflict-waiting-cancel">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Lock holder: allow / deny request popup (cannot be dismissed without answering) -->
+        <div id="take-over-request-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10001; justify-content: center; align-items: center;" data-modal="take-over">
+            <div class="take-over-request-content" style="background: white; border-radius: 8px; padding: 24px; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <p id="take-over-request-message" style="margin: 0 0 8px; font-size: 15px; color: #333;"></p>
+                <p id="take-over-request-countdown" style="margin: 0 0 16px; font-size: 13px; color: #666;"></p>
+                <div id="take-over-request-buttons" style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-small" id="take-over-allow">Yes</button>
+                    <button type="button" class="btn-small secondary" id="take-over-deny">No</button>
+                </div>
+                <div id="take-over-deny-reason" style="display: none; margin-top: 12px;">
+                    <label class="field-label" for="take-over-deny-reason-input">Reason (required)</label>
+                    <textarea id="take-over-deny-reason-input" rows="3" class="modal-field-input" placeholder="Enter reason for declining..."></textarea>
+                    <button type="button" class="btn-small" id="take-over-deny-submit" style="margin-top: 8px;">Submit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEASON CALENDAR TAB -->
+        <div id="settings-tab" class="tab-content active">
+            <div class="section">
+                <div class="season-calendar-wrapper" id="season-calendar-wrapper-settings">
+                    <div class="season-calendar-header" style="display: none;">
+                        <h3 style="margin:0;">Season Calendar</h3>
+                    </div>
+                    <div id="season-calendar-settings" class="season-calendar-empty">
+                        Set your season dates and practices to see the calendar here.
+                    </div>
+                    <!-- Hidden inputs for backwards compatibility with existing code -->
+                    <input type="date" id="season-start-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
+                    <input type="date" id="season-end-date" style="display: none;" onchange="updateSeasonDateRange(); updateSeasonDateRangeButton();">
+                </div>
+                <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn-small" onclick="openPracticesModal()">Add/Edit Practices</button>
+                    <button class="btn-small secondary" onclick="openAddRacesModal()">Add Races</button>
+                    <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button">Season dates. . .</button>
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; margin-top: 16px;">
+                        <label class="field-label" style="margin:0;">Regular Practices</label>
+                        <button class="btn-small secondary" onclick="applySeasonUpdates('practices')" title="Reset all practices in the season">Reset All Practices</button>
+                    </div>
+                    <div id="practice-rows" class="practice-rows"></div>
+                </div>
+                <!-- Site Settings Collapsible Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px 0;" onclick="toggleSiteSettings()">
+                        <h3 style="margin: 0; color: #555;">Site Settings</h3>
+                        <span id="site-settings-toggle" style="font-size: 18px; color: #666; user-select: none;">▼</span>
+                    </div>
+                    <div id="site-settings-content" style="display: none; margin-top: 16px;">
+                
+                <div class="section" style="margin-top: 0; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Coach Roles</h3>
+                    <div id="coach-roles-container" style="margin-bottom: 20px;">
+                        <!-- Coach roles will be dynamically added here -->
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="new-coach-role-name" placeholder="Role name (e.g., Head Coach)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <select id="new-coach-role-coach" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Select Coach</option>
+                        </select>
+                        <button class="btn-small" onclick="addCoachRole()">Add Role</button>
+                    </div>
+                </div>
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Rider Roles</h3>
+                    <div id="rider-roles-container" style="margin-bottom: 20px;">
+                        <!-- Rider roles will be dynamically added here -->
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="new-rider-role-name" placeholder="Role name (e.g., Captain)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <select id="new-rider-role-rider" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Select Rider</option>
+                        </select>
+                        <button class="btn-small" onclick="addRiderRole()">Add Role</button>
+                    </div>
+                </div>
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Rating Scales</h3>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Relative Pace Scale (1 to X):</label>
+                        <input type="number" id="fitness-scale" min="3" max="20" style="width: 100px;" onchange="updateScaleSettings()" oninput="updateScaleSettings()" onblur="updateScaleSettings()">
+                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="fitness-scale-display"></span></span>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Pace Scale Sorting</label>
+                        <select id="pace-scale-order" style="width: 220px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings()">
+                            <option value="fastest_to_slowest">Fastest to Slowest</option>
+                            <option value="slowest_to_fastest">Slowest to Fastest</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <button class="btn-small secondary" onclick="flipPaceValuesOnce()">One-time Flip Pace Values</button>
+                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Fixes inverted pace values without changing the sorting setting</span>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label class="field-label" style="min-width: 200px;">Bike Skills Scale:</label>
+                        <select id="skills-scale" style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateScaleSettings(); updateBikeSkillsDescriptions();">
+                            <option value="">-- Select --</option>
+                            <option value="3">3 Levels</option>
+                            <option value="5">5 Levels</option>
+                        </select>
+                        <span style="color: #666; margin-left: 8px;">Current: 1-<span id="skills-scale-display"></span></span>
+                    </div>
+                    <div id="bike-skills-descriptions" style="margin-top: 12px; margin-bottom: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; line-height: 1.6;">
+                        <!-- Descriptions will be populated here -->
+                    </div>
+                    <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 13px; color: #856404;">
+                        <strong>Note:</strong> Changing scales will automatically convert all existing fitness and skills ratings to the new scale.
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <button class="btn-small" onclick="syncScaleSettings()" style="padding: 8px 16px; font-size: 14px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Update Scales</button>
+                        <span style="margin-left: 8px; font-size: 12px; color: #666;">Synchronizes scale settings across all locations</span>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="importSeasonSettings()">Import Settings</button>
+                    <button class="btn-small" onclick="saveSeasonSettings()" style="margin-left: auto;">Save Settings</button>
+                </div>
+                
+                <!-- Add Administrators Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Add Additional Administrators</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Send an invitation link to grant admin access to a new user. They will receive an email with a unique link to create their account.</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="email" id="admin-invite-email" placeholder="Enter email address" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        <button class="btn-small" onclick="sendAdminInvitation()" style="background-color: #fc5200; color: white; border-color: #fc5200;">Send Invitation</button>
+                    </div>
+                    <div id="admin-invite-status" style="margin-top: 8px; font-size: 13px; display: none;"></div>
+                    <div id="admin-invitations-list" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                        <button class="btn-small secondary" onclick="loadAdminInvitations()" style="margin-bottom: 12px;">Refresh Invitations</button>
+                        <div id="admin-invitations-content">
+                            <p style="color: #666; margin: 0;">Click "Refresh Invitations" to view pending invitations.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Users Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Registered Users</h3>
+                    <div id="users-list-container" style="margin-bottom: 12px;">
+                        <button class="btn-small secondary" onclick="loadUsersList()">Refresh Users List</button>
+                        <div id="users-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                            <p style="color: #666; margin: 0;">Click "Refresh Users List" to load registered users.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Developer Mode Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 8px; color: #555;">Developer mode (local-only sandbox)</h3>
+                    <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: #555;">
+                        <input type="checkbox" id="developer-mode-toggle" onchange="handleDeveloperModeToggle(this.checked)" style="transform: scale(1.1); margin-top: 2px;">
+                        <span>
+                            When ON, your changes are saved only in this browser and will <strong>not</strong> affect the live database. Other admins can continue using the site normally.
+                        </span>
+                    </label>
+                    <p style="margin-top: 6px; font-size: 12px; color: #d32f2f;">
+                        Warning: Developer mode is for testing only. Your changes will not be visible to other users and may be lost if this browser&rsquo;s storage is cleared.
+                    </p>
+                </div>
+                
+                <!-- Backup Section -->
+                <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 12px; color: #555;">Backups</h3>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button class="btn-small" onclick="createManualBackup()">Make Backup</button>
+                        <button class="btn-small secondary" onclick="loadBackupsList()">Refresh Backups</button>
+                    </div>
+                    <div id="backups-list-container" style="margin-bottom: 12px;">
+                        <div id="backups-list" style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px;">
+                            <p style="color: #666; margin: 0;">Click "Refresh Backups" to load available backups.</p>
+                        </div>
+                    </div>
+                </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROSTER TAB -->
+        <div id="roster-tab" class="tab-content">
+            <div class="section" style="padding-top: 8px;">
+                <div class="roster-controls" style="margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <button id="roster-toggle-riders" class="btn-small active" onclick="toggleRosterView('riders')" style="padding: 10px 20px; font-size: 15px; font-weight: 600;">Riders</button>
+                        <button id="roster-toggle-coaches" class="btn-small secondary" onclick="toggleRosterView('coaches')" style="padding: 10px 20px; font-size: 15px; font-weight: 600;">Coaches</button>
+                    </div>
+                    <div class="group-by-control" id="roster-group-by-container">
+                        <label id="roster-group-by-label" for="rider-group-by">Group by:</label>
+                        <select id="rider-group-by" onchange="groupRiders(this.value)" style="display: block;">
+                            <option value="">None</option>
+                            <option value="name">Name</option>
+                            <option value="gender">Gender</option>
+                            <option value="grade">Grade</option>
+                            <option value="racingGroup">Racing Group</option>
+                            <option value="pace">Pace</option>
+                            <option value="skills">Bike Skills</option>
+                        </select>
+                        <select id="coach-group-by" onchange="groupCoaches(this.value)" style="display: none;">
+                            <option value="">None</option>
+                            <option value="name">Name</option>
+                            <option value="level">Coach Level</option>
+                            <option value="pace">Pace</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- RIDERS VIEW -->
+                <div id="roster-riders-view">
+                    <div id="riders-list" class="roster-grid"></div>
+                    <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn-small" onclick="openAddRiderModal()">Add Team Rider</button>
+                        <button class="btn-small secondary" onclick="importRidersFromCSV()">Import Riders from CSV</button>
+                        <button class="btn-small secondary" onclick="updateRidersFromCSVFile()">Update Roster Changes from CSV</button>
+                        <button class="btn-small secondary" onclick="openGoogleSheetsModal('riders')">Sync from Google Sheet</button>
+                        <button class="btn-small danger" onclick="purgeRiders()">Purge Riders</button>
+                    </div>
+                    <div id="rider-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
+                </div>
+
+                <!-- COACHES VIEW -->
+                <div id="roster-coaches-view" style="display: none;">
+                    <div id="coaches-list" class="roster-grid"></div>
+                    <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn-small" onclick="openAddCoachModal()">Add Coach</button>
+                        <button class="btn-small secondary" onclick="importCoachesFromCSV()">Import Coaches from CSV</button>
+                        <button class="btn-small secondary" onclick="updateCoachesFromCSVFile()">Update Roster Changes from CSV</button>
+                        <button class="btn-small secondary" onclick="openGoogleSheetsModal('coaches')">Sync from Google Sheet</button>
+                        <button class="btn-small danger" onclick="purgeCoaches()">Purge Coaches</button>
+                    </div>
+                    <div id="coach-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIDES TAB -->
+        <div id="rides-tab" class="tab-content">
+            <!-- Practice Planner home: 3 choice buttons -->
+            <div id="practice-planner-home" class="section practice-planner-home">
+                <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">What do you want to do?</h2>
+                <button type="button" class="practice-planner-home-btn primary" id="plan-next-practice-btn" onclick="openPlanNextPractice()">
+                    Plan the Next Practice on <span id="next-practice-date-label">[loading…]</span>
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openPlanFuturePracticePicker()">
+                    Plan another future practice
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openReviewPriorPracticePicker()">
+                    Review a Prior Practice
+                </button>
+            </div>
+
+            <!-- Group method choice: Build new vs Copy from prior -->
+            <div id="practice-group-method-home" class="section practice-planner-home" style="display: none;">
+                <div class="practice-planner-picker-header" style="margin-bottom: 20px;">
+                    <button type="button" class="practice-planner-back-btn" onclick="closeGroupMethodView()">← Back</button>
+                </div>
+                <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How do you want to make these groups?</h2>
+                <button type="button" class="practice-planner-home-btn" onclick="openBuildNewGroups()">
+                    Build new groups
+                </button>
+                <button type="button" class="practice-planner-home-btn" onclick="openCopyGroupsFromPrior()">
+                    Copy groups from a prior practice
+                </button>
+            </div>
+
+            <!-- Calendar picker for future/past practice selection -->
+            <div id="practice-calendar-picker" class="section" style="display: none;">
+                <div class="practice-planner-picker-header">
+                    <button type="button" class="practice-planner-back-btn" onclick="closePracticeCalendarPicker()">← Back</button>
+                    <span id="practice-calendar-picker-title" style="font-weight: 600; font-size: 16px;">Select a practice</span>
+                </div>
+                <div id="practice-calendar-picker-calendar" class="season-calendar-empty">
+                    <!-- Calendar rendered here -->
+                </div>
+            </div>
+
+            <div class="section">
+                <div id="practice-navigation" style="display: none; margin-bottom: 16px;"></div>
+            </div>
+
+            <div id="current-ride" style="display: none;">
+                <div class="section">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <button type="button" id="practice-planner-back-btn" class="practice-planner-back-btn" onclick="closePracticePlannerView()" style="flex-shrink: 0;">← Back</button>
+                            <h2 id="ride-title" style="margin: 0;"></h2>
+                        </div>
+                        <div id="practice-navigation-buttons" style="display: none; gap: 8px; flex-direction: row;">
+                            <button class="btn-small secondary" onclick="navigateToPriorPractice()" id="prior-practice-btn">← Show Prior Practice</button>
+                            <button class="btn-small secondary" onclick="navigateToNextPractice()" id="next-practice-btn">Show Next Practice →</button>
+                        </div>
+                    </div>
+                    <div id="ride-details" style="margin-top: 8px; margin-bottom: 15px; font-size: 14px; color: #666;"></div>
+                    <div style="margin-top: 10px; margin-bottom: 15px;">
+                        <label for="practice-goals" style="display: block; margin-bottom: 6px; font-weight: 500; color: #555;">Practice Goals</label>
+                        <input type="text" id="practice-goals" placeholder="Enter practice goals (e.g., Endurance training, Hill climbs, Technical skills)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;" onchange="updatePracticeGoals()">
+                    </div>
+                    
+                    <!-- Practice Attendance Section -->
+                    <div style="margin-top: 20px; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" onclick="togglePracticeAttendance()">
+                            <strong style="font-size: 16px;">Practice Attendance</strong>
+                            <span id="practice-attendance-arrow" style="font-size: 18px;">▼</span>
+                        </div>
+                        <div id="practice-attendance-content" style="display: none; margin-top: 8px; padding: 8px 0; background: #fff; position: relative;">
+                            <div id="practice-attendance-resize-handle" style="position: absolute; bottom: 0; left: 0; right: 0; height: 8px; cursor: ns-resize; background: transparent; z-index: 10;" onmousedown="startResizeAttendance(event)"></div>
+                            <div id="practice-attendance-lists-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 400px; overflow: hidden;">
+                                <div id="practice-riders-list" class="assignment-column" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+                                    <!-- Riders will be populated here -->
+                                </div>
+                                <div id="practice-coaches-list" class="assignment-column" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+                                    <!-- Coaches will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Group Assignments Section -->
+                    <div style="margin-top: 20px; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" onclick="toggleGroupAssignments()">
+                            <strong style="font-size: 16px;">Group Assignments</strong>
+                            <span id="group-assignments-arrow" style="font-size: 18px;">▶</span>
+                        </div>
+                        <div id="group-assignments-content" style="display: none; margin-top: 12px;">
+                            <div class="action-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                                <button id="undo-btn" class="btn-small" onclick="undoAssignmentChange()" title="Undo last change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↶</button>
+                                <button id="redo-btn" class="btn-small" onclick="redoAssignmentChange()" title="Redo last undone change" style="padding: 6px 10px; font-size: 18px; line-height: 1; opacity: 0.5; cursor: not-allowed; min-width: 32px;" disabled>↷</button>
+                                <div style="width: 1px; height: 20px; background: #ddd; margin: 0 4px;"></div>
+                                <button class="btn-small" onclick="addGroup()">Add Group</button>
+                                <button class="btn-small" onclick="openCopyGroupsFromPriorPracticeDialog()" style="background: #1976D2; color: white; border-color: #1976D2;">Copy Prior Practice</button>
+                                <button class="btn-small" onclick="autoAssign()">Autofill Group Assignments</button>
+                                <button class="btn-small secondary" onclick="openAutoAssignSettingsModal()">Group Rules</button>
+                                <button id="group-color-names-btn" class="btn-small" onclick="toggleGroupColorNames()" style="background: linear-gradient(90deg, #e74c3c, #e67e22, #f1c40f, #2ecc71, #3498db, #9b59b6); color: white; border: none; font-weight: 600;">Color Names!</button>
+                                <button id="more-groups-btn" class="btn-small secondary" onclick="tryMoreGroups()" style="display: none;">More/Smaller Groups</button>
+                                <button id="fewer-groups-btn" class="btn-small secondary" onclick="tryFewerGroups()" style="display: none;">Fewer/Larger Groups</button>
+                                <button class="btn-small secondary" onclick="unassignAllCoaches()" style="margin-left: auto;">Unassign all Coaches</button>
+                                <button class="btn-small danger" onclick="clearAssignments()">Clear Group Assignments</button>
+                            </div>
+                            <div id="unassigned-new-attendees" style="display: none; margin-bottom: 16px; position: relative; overflow: visible;">
+                                <!-- Unassigned new attendees will be shown here -->
+                            </div>
+                            <div id="assignments" class="assignments"></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong>Auto-Assignment Debug Output</strong>
+                            <button class="btn-small" onclick="copyDebugToClipboard()" id="copy-debug-btn" style="display: none;">Copy to Clipboard</button>
+                        </div>
+                        <pre id="auto-assign-debug" class="debug-output" style="display: none;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIDE ASSIGNMENTS TAB -->
+        <div id="assignments-tab" class="tab-content">
+            <div class="section">
+                <div id="ride-assignments-container">
+                    <!-- Ride assignments will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- COACH ASSIGNMENTS TAB -->
+        <div id="coach-assignments-tab" class="tab-content">
+            <div class="section">
+                <div id="coach-assignments-container">
+                    <!-- Coach assignments will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- PRACTICE REPORTING TAB -->
+        <div id="practice-reporting-tab" class="tab-content">
+            <div class="section">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <h2 id="practice-reporting-title" style="margin: 0;">Practice Reporting</h2>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn-small secondary" id="practice-reporting-prev" onclick="navigatePracticeReporting(-1)" title="Previous practice">←</button>
+                        <div id="practice-reporting-date" style="font-size: 14px; font-weight: 600; color: #333;">No practices found</div>
+                        <button class="btn-small secondary" id="practice-reporting-next" onclick="navigatePracticeReporting(1)" title="Next practice">→</button>
+                    </div>
+                </div>
+                <div id="practice-reporting-summary" style="margin-top: 6px; font-size: 12px; color: #666;"></div>
+                <div style="margin-top: 12px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: #f5f5f5;">
+                            <tr>
+                                <th onclick="togglePracticeReportingSort()" data-readonly-allow="true" style="text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; color: #555; cursor: pointer;">
+                                    Rider <span id="practice-reporting-sort-indicator">↑</span>
+                                </th>
+                                <th style="text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; color: #555;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="practice-reporting-table-body">
+                            <tr><td colspan="2" style="padding: 12px; color: #666;">No practice data yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROUTES TAB -->
+        <div id="routes-tab" class="tab-content">
+            <div class="section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <button class="btn-small" onclick="openRoutesManagerModal()">Add/Edit Routes...</button>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="routes-view-mode" style="font-size: 14px; color: #666;">View:</label>
+                            <div id="routes-view-mode" class="routes-view-toggle">
+                                <button id="routes-view-thumbnails" class="routes-view-btn" onclick="setRoutesViewMode('thumbnails')">Thumbnails</button>
+                                <button id="routes-view-list" class="routes-view-btn" onclick="setRoutesViewMode('list')">List View</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="routes-sort-by" style="font-size: 14px; color: #666;">Sort By:</label>
+                            <select id="routes-sort-by" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;" onchange="renderRoutes()">
+                                <option value="name-asc">Name (A to Z)</option>
+                                <option value="name-desc">Name (Z to A)</option>
+                                <option value="start-asc">Start Location (A to Z)</option>
+                                <option value="start-desc">Start Location (Z to A)</option>
+                                <option value="distance-asc">Distance (shortest to longest)</option>
+                                <option value="distance-desc">Distance (longest to shortest)</option>
+                                <option value="elevation-asc">Elev Gain (least to most)</option>
+                                <option value="elevation-desc">Elev Gain (most to least)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="routes-grid" class="routes-grid">
+                    <!-- Routes will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="season-setup-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 900px; width: min(900px, 95%);">
+            <div class="modal-header">
+                <span>Season Setup</span>
+                <button class="btn-small secondary" onclick="closeSeasonSetupModal()">Close</button>
+                </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div style="flex:1;">
+                        <label class="field-label">Season Date Range</label>
+                        <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button-setup" style="width: 100%; text-align: left; justify-content: flex-start; padding: 8px 12px; background: white; border: 1px solid #ddd; cursor: pointer; color: #333;">
+                            Select Date Range
+                        </button>
+                        <!-- Hidden inputs for backwards compatibility with existing code - sharing IDs with main settings inputs -->
+                        <input type="date" id="season-start-date-setup" style="display: none;" onchange="syncSeasonDatesToMain();">
+                        <input type="date" id="season-end-date-setup" style="display: none;" onchange="syncSeasonDatesToMain();">
+                    </div>
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <label class="field-label" style="margin:0;">Regular Practices</label>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-small secondary" onclick="addPracticeRow()">Add Recurring Practice</button>
+                            <button class="btn-small secondary" onclick="openAddSinglePracticeModal()">Add single practice</button>
+                            <button class="btn-small secondary" onclick="openAddRacesModal()">Add Races</button>
+                        </div>
+                    </div>
+                    <div id="practice-rows" class="practice-rows"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="importSeasonSettings()">Import Settings</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="closeSeasonSetupModal()">Cancel</button>
+                    <button class="btn-small" onclick="saveSeasonSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="location-map-modal" class="modal-overlay" style="z-index: 2100;" aria-hidden="true">
+        <div class="modal" style="max-width: 800px; width: min(800px, 95%);">
+            <div class="modal-header">
+                <span>Select Meet Location</span>
+                <button class="btn-small secondary" onclick="closeLocationMapModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 12px;">
+                    <label for="location-previous" class="field-label">Previous Locations</label>
+                    <select id="location-previous" onchange="selectPreviousLocation(this.value)" style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer;">
+                        <option value="">-- Select from previous locations --</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label for="location-search" class="field-label">Search Location</label>
+                    <input type="text" id="location-search" placeholder="Search for a location..." style="width: 100%; padding: 8px; margin-bottom: 8px;" onkeypress="if(event.key === 'Enter') searchLocation();">
+                    <button class="btn-small" onclick="searchLocation()">Search</button>
+                </div>
+                <div id="map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 12px; background: #f0f0f0; position: relative; z-index: 1;">
+                    <div id="map-placeholder" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #666; z-index: 0;">
+                        <p>Map will load here</p>
+                        <p style="font-size: 12px; margin-top: 8px;">Click on the map to set location</p>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div style="flex: 1;">
+                        <label for="location-latitude" class="field-label">Latitude</label>
+                        <input type="number" id="location-latitude" step="0.000001" placeholder="0.000000" style="width: 100%;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="location-longitude" class="field-label">Longitude</label>
+                        <input type="number" id="location-longitude" step="0.000001" placeholder="0.000000" style="width: 100%;">
+                    </div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <label for="location-address" class="field-label">Address</label>
+                    <input type="text" id="location-address" placeholder="Address will appear here" style="width: 100%;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeLocationMapModal()">Cancel</button>
+                <button class="btn-small" onclick="saveLocation()">Save Location</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roster Refinement Modal -->
+    <div id="roster-refinement-modal" class="modal-overlay" style="z-index: 2000;" aria-hidden="true">
+        <div class="modal-content" style="width: 900px; height: 80vh; max-width: 900px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; background: #ffffff !important; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <div class="modal-header" style="background-color: #2196F3; color: white;">
+                <h3>Refine Roster</h3>
+                <button class="modal-close" onclick="closeRosterRefinement()" aria-label="Close">&times;</button>
+            </div>
+            <div style="padding: 16px; overflow-y: auto; flex: 1; background: #ffffff !important;">
+                <div style="margin-bottom: 16px;">
+                    <label for="roster-filter-type" style="display: block; margin-bottom: 8px; font-weight: 500;">Filter by...</label>
+                    <select id="roster-filter-type" onchange="updateRosterFilterOptions()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        <option value="">-- Select filter type --</option>
+                        <option value="grade">Grade</option>
+                        <option value="gender">Gender</option>
+                        <option value="racingGroup">Racing Group</option>
+                    </select>
+                </div>
+                <div id="roster-filter-options" style="margin-bottom: 16px; display: none;">
+                    <!-- Filter checkboxes will be populated here -->
+                </div>
+                <div style="margin-bottom: 16px; border-top: 1px solid #ddd; padding-top: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <strong>Riders (<span id="roster-filtered-count">0</span> shown)</strong>
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: #f5f5f5; position: sticky; top: 0;">
+                                <tr>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd; width: 30px;"></th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Name</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Grade</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Gender</th>
+                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Racing Group</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roster-filtered-list">
+                                <!-- Riders will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeRosterRefinement()">Cancel</button>
+                <button class="btn-small" onclick="saveRosterRefinement()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Exceptions Modal (deleted individual practices within a series) -->
+    <div id="view-exceptions-modal" class="modal-overlay" style="z-index: 2000;" aria-hidden="true" onclick="if(event.target === this) closeViewExceptionsDialog()">
+        <div class="modal-content" style="width: 480px; max-width: 95vw; background: #ffffff !important; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <div class="modal-header" style="background-color: #FF9800; color: white;">
+                <h3>View Exceptions</h3>
+                <button class="modal-close" onclick="closeViewExceptionsDialog()" aria-label="Close">&times;</button>
+            </div>
+            <div style="padding: 16px;">
+                <p id="view-exceptions-intro" style="margin: 0 0 12px 0; color: #555; font-size: 14px;">These dates were removed from the calendar. Restore to show them again.</p>
+                <ul id="view-exceptions-list" style="list-style: none; margin: 0; padding: 0;">
+                    <!-- Filled by openViewExceptionsDialog -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeViewExceptionsDialog()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-practice-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <div class="modal-header">
+                <span>Add Additional Practice</span>
+                <button class="btn-small secondary" onclick="closeAddPracticeModal()">Close</button>
+                </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div style="flex:1;">
+                        <label for="practice-date" class="field-label">Date</label>
+                        <input type="date" id="practice-date">
+                    </div>
+                    <div style="flex:1;">
+                        <label for="practice-time" class="field-label">Time</label>
+                        <input type="time" id="practice-time">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeAddPracticeModal()">Cancel</button>
+                <button class="btn-small" onclick="saveAddPractice()">Add Practice</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-races-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 700px; width: min(700px, 95%);">
+            <div class="modal-header">
+                <span>Add Races</span>
+                <button class="btn-small secondary" onclick="closeAddRacesModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div id="races-list-container" style="margin-bottom: 16px;">
+                    <!-- Race entries will be added here -->
+                </div>
+                <button class="btn-small secondary" onclick="addRaceEntry()" style="margin-bottom: 12px;">+ Add Another Race</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeAddRacesModal()">Cancel</button>
+                <button class="btn-small" onclick="saveRaces()">Save Races</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="practices-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 900px; width: min(900px, 95%);">
+            <div class="modal-header">
+                <span>Add/Edit Practices</span>
+                <button class="btn-small secondary" onclick="closePracticesModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <label class="field-label" style="margin:0;">Regular Practices</label>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-small" onclick="addPracticeRowInModal()">Add Recurring Practice</button>
+                        <button class="btn-small secondary" onclick="openAddSinglePracticeModalInModal()">Add Single Practice</button>
+                        <button class="btn-small secondary" onclick="applySeasonUpdates('practices')" title="Update calendar after changing regular practices">Update Practices</button>
+                    </div>
+                </div>
+                <div id="practice-rows-modal" class="practice-rows"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closePracticesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="time-range-picker-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 500px; width: min(500px, 95%);">
+            <div class="modal-header">
+                <span>Set Practice Time Range</span>
+                <button class="btn-small secondary" onclick="closeTimeRangePickerModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row" style="flex-direction: column; gap: 20px;">
+                    <div style="flex: 1;">
+                        <label class="field-label">Start Time</label>
+                        <input type="time" id="time-range-start" style="width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label class="field-label">End Time</label>
+                        <input type="time" id="time-range-end" style="width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; text-align: center;">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Time Range</div>
+                        <div id="time-range-preview" style="font-size: 18px; font-weight: 600; color: #333;">—</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeTimeRangePickerModal()">Cancel</button>
+                <button class="btn-small" onclick="saveTimeRange()">Save Time Range</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="season-date-range-picker-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 700px; width: min(700px, 95%);">
+            <div class="modal-header">
+                <span>Select Season Date Range</span>
+                <button class="btn-small secondary" onclick="closeSeasonDateRangePickerModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                        <button type="button" onclick="navigateSeasonDateRangeMonths(-1)" style="background: none; border: none; cursor: pointer; font-size: 20px; color: #666; padding: 8px;">&lt;</button>
+                        <div id="season-date-range-months-display" style="font-size: 16px; font-weight: 600; color: #333;"></div>
+                        <button type="button" onclick="navigateSeasonDateRangeMonths(1)" style="background: none; border: none; cursor: pointer; font-size: 20px; color: #666; padding: 8px;">&gt;</button>
+                    </div>
+                    <div id="season-date-range-calendars" style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <!-- Calendars will be rendered here -->
+                    </div>
+                    <div id="season-date-range-preview" style="margin-top: 20px; padding: 12px; background: #f5f5f5; border-radius: 4px; text-align: center;">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Selected Range</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #333;">—</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="clearSeasonDateRange()">Clear</button>
+                <button class="btn-small secondary" onclick="closeSeasonDateRangePickerModal()">Cancel</button>
+                <button class="btn-small" onclick="saveSeasonDateRange()">Save Date Range</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auto-assign-settings-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 700px; width: min(700px, 95%);">
+            <div class="modal-header">
+                <span>Auto-Assign Settings</span>
+                <button class="btn-small secondary" onclick="closeAutoAssignSettingsModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Adjust these settings to control how the auto-assignment algorithm creates groups and assigns riders and coaches.
+                    </p>
+                    <div id="auto-assign-settings-list">
+                        <!-- Settings will be rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeAutoAssignSettingsModal()">Cancel</button>
+                <button class="btn-small" onclick="saveAutoAssignSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="copy-groups-prior-practice-modal" class="modal-overlay" aria-hidden="true" onclick="if(event.target === this) closeCopyGroupsFromPriorPracticeDialog()">
+        <div class="modal" style="max-width: 600px; width: min(600px, 95%);">
+            <div class="modal-header">
+                <span>Copy Prior Practice</span>
+                <button class="btn-small secondary" onclick="closeCopyGroupsFromPriorPracticeDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Select a prior practice to copy group assignments from:
+                    </p>
+                    <div id="prior-practices-list" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Prior practices will be rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeCopyGroupsFromPriorPracticeDialog()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="photo-crop-modal" class="modal-overlay" aria-hidden="true" onclick="if(event.target === this) closePhotoCropDialog()">
+        <div class="modal" style="max-width: 600px; width: min(600px, 95%);">
+            <div class="modal-header">
+                <span>Crop Photo</span>
+                <button class="btn-small secondary" onclick="closePhotoCropDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Drag to reposition, scroll to zoom. Photo will be cropped to a square.
+                    </p>
+                    <div style="position: relative; width: 100%; max-width: 500px; margin: 0 auto; background: #f0f0f0; border: 2px solid #ddd; overflow: hidden; touch-action: none;">
+                        <canvas id="photo-crop-canvas" style="display: block; max-width: 100%; cursor: move;"></canvas>
+                        <div id="photo-crop-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; border: 2px solid #2196F3; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);"></div>
+                    </div>
+                    <div style="margin-top: 16px; text-align: center;">
+                        <input type="range" id="photo-crop-zoom" min="1" max="3" step="0.1" value="1" style="width: 200px;" oninput="updatePhotoCropZoom(this.value)">
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">Zoom</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closePhotoCropDialog()">Cancel</button>
+                <button class="btn-small" onclick="applyPhotoCrop()">Apply Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="group-count-selection-modal" class="modal-overlay" onclick="if(event.target === this) closeGroupCountSelectionDialog()" style="display: none;">
+        <div class="modal" style="max-width: 500px; width: min(500px, 95%);">
+            <div class="modal-header">
+                <span>Select Number of Groups</span>
+                <button class="btn-small secondary" onclick="closeGroupCountSelectionDialog()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                        Insufficient coaches available to create compliant groups. Please select the number of groups to create:
+                    </p>
+                    <div id="group-count-options" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Options will be rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeGroupCountSelectionDialog()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-coach-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="edit-coach-modal-title">Edit Coach</span>
+                <button class="btn-small secondary" onclick="closeEditCoachModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-photo-section">
+                    <div class="modal-photo-container">
+                        <div class="modal-photo" id="edit-coach-photo-container" style="position: relative;">
+                            <img id="edit-coach-photo-preview" src="" alt="Coach photo" style="display: none; width: 100%; height: 100%; object-fit: cover;">
+                            <span id="edit-coach-photo-placeholder" class="photo-placeholder" style="display: flex;">🚴</span>
+                            <div class="photo-edit-overlay">
+                                <span class="photo-edit-icon">✏️</span>
+                            </div>
+                            <input type="file" id="edit-coach-photo-input" accept="image/*" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;" onchange="handleCoachPhotoUploadInModal(this)">
+                        </div>
+                    </div>
+                    <div class="modal-name-field">
+                        <div class="modal-name-row">
+                            <div class="modal-name-col">
+                                <label for="edit-coach-first-name" class="field-label">First Name</label>
+                                <input type="text" id="edit-coach-first-name">
+                            </div>
+                            <div class="modal-name-col">
+                                <label for="edit-coach-last-name" class="field-label">Last Name</label>
+                                <input type="text" id="edit-coach-last-name">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-form-container" style="max-height: 70vh; overflow-y: auto;">
+                    <div class="modal-labels-column">
+                        <div class="modal-field-label">Email</div>
+                        <div class="modal-field-label">Cell Phone</div>
+                        <div class="modal-field-label">Work Phone</div>
+                        <div class="modal-field-label">Home Phone</div>
+                        <div class="modal-field-label">Gender</div>
+                        <div class="modal-field-label">Coaching License Level</div>
+                        <div class="modal-field-label">Registered</div>
+                        <div class="modal-field-label">Paid</div>
+                        <div class="modal-field-label">Background Check</div>
+                        <div class="modal-field-label">Level 3 Exam Completed</div>
+                        <div class="modal-field-label">PDU/CEU Units</div>
+                        <div class="modal-field-label">Field Work Hours</div>
+                        <div class="modal-field-label">First Aid Type, Expires</div>
+                        <div class="modal-field-label">CPR Expires</div>
+                        <div class="modal-field-label">Concussion Training Completed</div>
+                        <div class="modal-field-label">NICA Philosophy Completed</div>
+                        <div class="modal-field-label">Athlete Abuse Awareness Completed</div>
+                        <div class="modal-field-label">License Level 1 Completed</div>
+                        <div class="modal-field-label">License Level 2 Completed</div>
+                        <div class="modal-field-label">License Level 3 Completed</div>
+                        <div class="modal-field-label">OTB Skills 101 Classroom Completed</div>
+                        <div class="modal-field-label">OTB Skills 101 Outdoor Completed</div>
+                        <div class="modal-field-label">NICA Leader Summit Completed</div>
+                        <div class="modal-field-label">Relative Pace (1-10)</div>
+                        <div class="modal-field-label">Notes</div>
+                    </div>
+                    <div class="modal-inputs-column">
+                        <div class="modal-form-row">
+                            <input type="email" id="edit-coach-email" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-coach-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-coach-work-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-coach-home-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <select id="edit-coach-gender" class="modal-field-input">
+                                <option value="">Select Gender</option>
+                                <option value="M">M</option>
+                                <option value="F">F</option>
+                                <option value="NB">Nonbinary</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-row">
+                            <select id="edit-coach-level" class="modal-field-input">
+                                <option value="N/A">N/A</option>
+                                <option value="1">Level 1</option>
+                                <option value="2">Level 2</option>
+                                <option value="3">Level 3</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-registered" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-paid" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-background-check" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-level3-exam" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-pdu-ceu" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-field-work-hours" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-first-aid" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-cpr-expires" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-concussion-training" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-nica-philosophy" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-abuse-awareness" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-license-level1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-license-level2" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-license-level3" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-otb-classroom" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-otb-outdoor" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-coach-nica-summit" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="number" id="edit-coach-fitness" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <label for="edit-coach-skills" class="field-label">Bike Skills</label>
+                            <input type="number" id="edit-coach-skills" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <textarea id="edit-coach-notes" rows="3" class="modal-field-input"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button id="delete-coach-btn" class="btn-small danger" onclick="deleteCoachFromModal()" style="display: none;">Delete Record</button>
+                <div style="display: flex; gap: 8px; margin-left: auto;">
+                    <button class="btn-small secondary" onclick="closeEditCoachModal()">Cancel</button>
+                    <button class="btn-small" onclick="saveCoachFromModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-rider-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="edit-rider-modal-title">Edit Team Rider</span>
+                <button class="btn-small secondary" onclick="closeEditRiderModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-photo-section">
+                    <div class="modal-photo-container">
+                        <div class="modal-photo" id="edit-rider-photo-container" style="position: relative;">
+                            <img id="edit-rider-photo-preview" src="" alt="Rider photo" style="display: none; width: 100%; height: 100%; object-fit: cover;">
+                            <span id="edit-rider-photo-placeholder" class="photo-placeholder" style="display: flex;">👤</span>
+                            <div class="photo-edit-overlay">
+                                <span class="photo-edit-icon">✏️</span>
+                            </div>
+                            <input type="file" id="edit-rider-photo-input" accept="image/*" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;" onchange="handleRiderPhotoUploadInModal(this)">
+                        </div>
+                    </div>
+                    <div class="modal-name-field">
+                        <div class="modal-name-row">
+                            <div class="modal-name-col">
+                                <label for="edit-rider-first-name" class="field-label">First Name</label>
+                                <input type="text" id="edit-rider-first-name">
+                            </div>
+                            <div class="modal-name-col">
+                                <label for="edit-rider-last-name" class="field-label">Last Name</label>
+                                <input type="text" id="edit-rider-last-name">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-form-container" style="max-height: 70vh; overflow-y: auto;">
+                    <div class="modal-labels-column">
+                        <div class="modal-field-label">Email</div>
+                        <div class="modal-field-label">Cell Phone</div>
+                        <div class="modal-field-label">Address</div>
+                        <div class="modal-field-label">Gender</div>
+                        <div class="modal-field-label">Grade</div>
+                        <div class="modal-field-label">Racing Group</div>
+                        <div class="modal-field-label">Birthday</div>
+                        <div class="modal-field-label">Primary Parent/Guardian</div>
+                        <div class="modal-field-label">Primary Parent Cell</div>
+                        <div class="modal-field-label">Primary Parent Email</div>
+                        <div class="modal-field-label">Primary Parent Address</div>
+                        <div class="modal-field-label">Second Parent/Guardian</div>
+                        <div class="modal-field-label">Second Parent Cell</div>
+                        <div class="modal-field-label">Second Parent Email</div>
+                        <div class="modal-field-label">Alternate Contact Name</div>
+                        <div class="modal-field-label">Alternate Contact Relationship</div>
+                        <div class="modal-field-label">Alternate Contact Cell</div>
+                        <div class="modal-field-label">Primary Physician</div>
+                        <div class="modal-field-label">Primary Physician Phone</div>
+                        <div class="modal-field-label">Medical Insurance Company</div>
+                        <div class="modal-field-label">Medical Insurance Account #</div>
+                        <div class="modal-field-label">Allergies/Medical Needs</div>
+                        <div class="modal-field-label">Relative Pace (1-10)</div>
+                        <div class="modal-field-label">Bike Skills (1-4)</div>
+                        <div class="modal-field-label">Notes</div>
+                    </div>
+                    <div class="modal-inputs-column">
+                        <div class="modal-form-row">
+                            <input type="email" id="edit-rider-email" placeholder="Email" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-rider-phone" placeholder="(XXX) XXX-XXXX" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-address" placeholder="Address" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <select id="edit-rider-gender" class="modal-field-input" onchange="updateRacingGroupOptions(); updateDefaultPhoto()">
+                                <option value="">Select Gender</option>
+                                <option value="M">M</option>
+                                <option value="F">F</option>
+                                <option value="NB">Nonbinary</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-row">
+                            <select id="edit-rider-grade" class="modal-field-input">
+                                <option value="9th">9th</option>
+                                <option value="10th">10th</option>
+                                <option value="11th">11th</option>
+                                <option value="12th">12th</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-row">
+                            <select id="edit-rider-racing-group" class="modal-field-input">
+                                <option value="">Select Gender First</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-birthday" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-primary-parent-name" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-rider-primary-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="email" id="edit-rider-primary-parent-email" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-primary-parent-address" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-second-parent-name" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-rider-second-parent-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="email" id="edit-rider-second-parent-email" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-alternate-contact-name" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-alternate-contact-relationship" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-rider-alternate-contact-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-primary-physician" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="tel" id="edit-rider-primary-physician-phone" class="modal-field-input" maxlength="14" oninput="formatPhoneNumber(this)">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-medical-insurance-company" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="text" id="edit-rider-medical-insurance-account" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <textarea id="edit-rider-allergies" rows="2" class="modal-field-input"></textarea>
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="number" id="edit-rider-fitness" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <input type="number" id="edit-rider-skills" min="1" class="modal-field-input">
+                        </div>
+                        <div class="modal-form-row">
+                            <textarea id="edit-rider-notes" rows="3" class="modal-field-input"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button id="delete-rider-btn" class="btn-small danger" onclick="deleteRiderFromModal()" style="display: none;">Delete Record</button>
+                <div style="display: flex; gap: 8px; margin-left: auto;">
+                    <button class="btn-small secondary" onclick="closeEditRiderModal()">Cancel</button>
+                    <button class="btn-small" onclick="saveRiderFromModal()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notes-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <span id="notes-modal-title">Notes</span>
+                <button class="btn-small secondary" onclick="closeNotesModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <p id="notes-modal-content" style="white-space: pre-wrap; margin: 0;"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeNotesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login/Auth Modal -->
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="login-container">
+            <h2 class="login-title">Tam High MTB Team</h2>
+            <p id="login-subtitle" class="login-subtitle">Sign in to access the practice manager</p>
+            <div id="login-logout-notice" style="display: none; margin: 8px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 6px; font-size: 13px; color: #856404;"></div>
+            
+            <div id="auth-error" class="error-message" style="display: none;"></div>
+            
+            <!-- Simplified Login Form (for riders/coaches) -->
+            <div id="simplified-login-form" style="display: none;">
+                <form onsubmit="event.preventDefault(); handleSimplifiedLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                        <label class="field-label" for="simplified-login-input">Phone or Email</label>
+                        <input type="text" id="simplified-login-input" class="modal-field-input" placeholder="Enter phone number or email address" autocomplete="tel email" required>
+                    </div>
+                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;" id="simplified-login-button">Send Verification Code</button>
+                    <div style="text-align: center; margin-top: 16px;">
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); showAdminLogin();">Admin Login</a>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Verification Code Form (appears after code is sent) -->
+            <div id="verification-code-form" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;" id="verification-code-message">
+                        We've sent a verification code to <strong id="verification-phone-email"></strong>. Please enter it below.
+                    </p>
+                    <div>
+                        <label class="field-label" for="verification-code-input">Verification Code</label>
+                        <input type="text" id="verification-code-input" class="modal-field-input" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: bold;" onkeypress="if(event.key === 'Enter') handleVerifyCode()">
+                    </div>
+                    <button type="button" class="btn-small" style="width: 100%; margin-top: 8px;" id="verify-code-button" onclick="handleVerifyCode()">Verify Code</button>
+                    <div style="text-align: center; margin-top: 12px;">
+                        <a href="#" class="auth-link" id="resend-code-link" onclick="event.preventDefault(); handleResendVerificationCode();">Resend Code</a>
+                        <span style="margin: 0 8px;">|</span>
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); showSimplifiedLogin();">Change Phone/Email</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Admin Login Form -->
+            <div id="login-form">
+                <form onsubmit="event.preventDefault(); handleLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                        <label class="field-label" for="login-email">Email</label>
+                        <input type="email" id="login-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email" required>
+                    </div>
+                    <div>
+                        <label class="field-label" for="login-password">Password</label>
+                        <input type="password" id="login-password" class="modal-field-input" placeholder="Password" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;">Sign In</button>
+                    <div style="text-align: center; margin-top: 8px;">
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); showPasswordReset();">Forgot password?</a>
+                    </div>
+                    <div id="resend-verification" style="text-align: center; margin-top: 8px; display: none;">
+                        <a href="#" class="auth-link" onclick="event.preventDefault(); handleResendVerification();">Resend verification email</a>
+                    </div>
+                </form>
+                
+                <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                    <span style="font-size: 14px; color: #64748b;">Need Admin Access? </span>
+                    <a href="#" class="auth-link" onclick="event.preventDefault(); showAdminRequest();">Request</a>
+                </div>
+            </div>
+            
+            <div id="admin-request-form" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;">To get admin access, you need to receive an invitation from an existing administrator. Please contact your team administrator to request access.</p>
+                    <p style="font-size: 13px; color: #999; margin-top: 8px;">If you have received an invitation link, please use that link to create your account.</p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="#" class="auth-link" onclick="event.preventDefault(); showLogin();">Back to sign in</a>
+                </div>
+            </div>
+            
+            <div id="password-reset-form" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Enter your email to receive a password reset link.</p>
+                    <div>
+                        <label class="field-label" for="reset-email">Email</label>
+                        <input type="email" id="reset-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email">
+                    </div>
+                    <button class="btn-small" onclick="handlePasswordReset()" style="width: 100%; margin-top: 8px;">Send Reset Link</button>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="#" class="auth-link" onclick="event.preventDefault(); showLogin();">Back to sign in</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD ROUTE MODAL -->
+    <div id="routes-manager-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 1000px; width: min(1000px, 95%);">
+            <div class="modal-header">
+                <span>Manage Routes</span>
+                <button class="btn-small secondary" onclick="closeRoutesManagerModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div id="routes-manager-list" style="max-height: 500px; overflow-y: auto;">
+                    <!-- Routes list will be loaded dynamically -->
+                </div>
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: center;">
+                    <button class="btn-small" onclick="openAddRouteModal(null)">Add New Route</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-route-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header" id="add-route-modal-header">
+                <span id="add-route-modal-title">Add New Route</span>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Use Strava Route toggle button -->
+                    <div id="strava-toggle-section">
+                        <button type="button" id="strava-toggle-btn" class="btn-small" onclick="toggleStravaRouteSection()" style="background-color: #fc5200; color: white; border-color: #fc5200; width: 100%; padding: 10px 16px; font-size: 14px; font-weight: 600;">Use Strava Route</button>
+                    </div>
+                    <!-- Strava embed code section (hidden by default) -->
+                    <div id="strava-embed-section" style="display: none;">
+                        <div style="position: relative;">
+                            <label for="route-embed-code" class="field-label" style="display: flex; align-items: center; gap: 6px;">
+                                Strava Embed Code
+                                <span class="info-icon" style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #666; color: white; font-size: 11px; font-weight: bold; cursor: help; user-select: none;" onmouseenter="showEmbedCodeTooltip(event)" onmouseleave="hideEmbedCodeTooltip()">i</span>
+                            </label>
+                            <div id="embed-code-tooltip" style="position: absolute; background-color: #333; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; z-index: 10000; pointer-events: none; display: none; max-width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); white-space: normal; line-height: 1.4;">To get the embed code: Go to your Strava route page → Click the "Share" button → Copy the embed code</div>
+                            <textarea id="route-embed-code" class="modal-field-input" rows="6" placeholder="Paste the Strava embed iframe code here..."></textarea>
+                            <div id="fetch-route-data-container" style="margin-top: 12px;">
+                                <button type="button" id="fetch-route-data-btn" class="btn-small" onclick="fetchRouteDataFromEmbed()" disabled>
+                                    Auto-fill Route Info from Strava
+                                </button>
+                                <span id="fetch-route-status" style="margin-left: 8px; font-size: 12px; color: #666;"></span>
+                                <div style="margin-top: 6px; font-size: 11px; color: #888; font-style: italic;">
+                                    Note: Initial autofill may take up to 30 seconds if the server is sleeping.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="route-name" class="field-label">Route Name</label>
+                        <input type="text" id="route-name" class="modal-field-input" placeholder="Enter route name">
+                    </div>
+                    <div>
+                        <label for="route-start-location" class="field-label">Start Location</label>
+                        <select id="route-start-location" class="modal-field-input">
+                            <option value="">-- Select start location --</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div style="flex:1;">
+                            <label for="route-distance" class="field-label">Distance (Optional)</label>
+                            <input type="text" id="route-distance" class="modal-field-input" placeholder="Will be auto-filled from Strava">
+                        </div>
+                        <div style="flex:1;">
+                            <label for="route-elevation" class="field-label">Elevation Gain (Optional)</label>
+                            <input type="text" id="route-elevation" class="modal-field-input" placeholder="Will be auto-filled from Strava">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="field-label">Most appropriate Relative Pace Range</label>
+                        <div id="route-fitness-slider-container" style="position: relative; padding: 5px 0;">
+                            <div id="route-fitness-slider-track" style="position: relative; height: 6px; background: #e0e0e0; border-radius: 3px; margin: 8px 0;">
+                                <div id="route-fitness-slider-range" style="position: absolute; height: 100%; background: #2196F3; border-radius: 3px; left: 0%; width: 100%; top: 0;"></div>
+                                <div id="route-fitness-min-handle" class="slider-handle" data-slider="fitness" data-type="min" style="position: absolute; left: 0%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <div id="route-fitness-max-handle" class="slider-handle" data-slider="fitness" data-type="max" style="position: absolute; left: 100%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <input type="range" id="route-fitness-min" min="1" max="5" value="1" step="1" style="display: none;" oninput="updateFitnessRange()">
+                                <input type="range" id="route-fitness-max" min="2" max="5" value="5" step="1" style="display: none;" oninput="updateFitnessRange()">
+                            </div>
+                            <div id="route-fitness-labels" style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #666;">
+                                <!-- Labels will be generated dynamically -->
+                            </div>
+                            <div style="text-align: center; margin-top: 4px; font-size: 12px; font-weight: 600; color: #2196F3;">
+                                <span id="route-fitness-min-value">1</span> - <span id="route-fitness-max-value">5</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="field-label">Most appropriate Bike Skills Range</label>
+                        <div id="route-skills-slider-container" style="position: relative; padding: 5px 0;">
+                            <div id="route-skills-slider-track" style="position: relative; height: 6px; background: #e0e0e0; border-radius: 3px; margin: 8px 0;">
+                                <div id="route-skills-slider-range" style="position: absolute; height: 100%; background: #2196F3; border-radius: 3px; left: 0%; width: 100%; top: 0;"></div>
+                                <div id="route-skills-min-handle" class="slider-handle" data-slider="skills" data-type="min" style="position: absolute; left: 0%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <div id="route-skills-max-handle" class="slider-handle" data-slider="skills" data-type="max" style="position: absolute; left: 100%; transform: translate(-50%, -50%); width: 20px; height: 20px; background: #2196F3; border-radius: 50%; cursor: grab; z-index: 5; box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: auto; top: 50%;"></div>
+                                <input type="range" id="route-skills-min" min="1" max="3" value="1" step="1" style="display: none;" oninput="updateSkillsRange()">
+                                <input type="range" id="route-skills-max" min="2" max="3" value="3" step="1" style="display: none;" oninput="updateSkillsRange()">
+                            </div>
+                            <div id="route-skills-labels" style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #666;">
+                                <!-- Labels will be generated dynamically -->
+                            </div>
+                            <div style="text-align: center; margin-top: 4px; font-size: 12px; font-weight: 600; color: #2196F3;">
+                                <span id="route-skills-min-value">1</span> - <span id="route-skills-max-value">3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="route-description" class="field-label">Notes (Optional)</label>
+                        <textarea id="route-description" class="modal-field-input" rows="3" placeholder="Brief description of the route..."></textarea>
+                    </div>
+                    <div id="route-cached-preview-section">
+                        <label for="route-cached-preview-file" class="field-label">Cached map preview (optional)</label>
+                        <input type="file" id="route-cached-preview-file" class="modal-field-input" accept="image/*" onchange="onRouteCachedPreviewFileChange(event)">
+                        <small style="display: block; margin-top: 6px; font-size: 11px; color: #888;">Upload a screenshot of the route map to avoid loading live Strava embeds and keep the page fast.</small>
+                        <span id="route-cached-preview-status" style="font-size: 12px; color: #666; margin-top: 4px; display: none;"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-small secondary" onclick="closeAddRouteModal()">Cancel</button>
+                <button class="btn-small" onclick="saveRoute()">Save Route</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Practice Context Menu -->
+    <div id="practice-context-menu" class="context-menu" style="display: none; position: absolute; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10000; min-width: 180px;">
+        <button class="context-menu-item" onclick="deletePracticeFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Delete Practice</button>
+        <button class="context-menu-item" onclick="cancelPracticeFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Cancel Practice</button>
+        <button id="restore-practice-btn" class="context-menu-item" onclick="restoreCancelledPractice()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333; display: none;">Restore Practice</button>
+        <button class="context-menu-item" onclick="reschedulePracticeFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Reschedule Practice</button>
+    </div>
+    
+    <!-- Pace/Skills Badge Context Menu -->
+    <div id="badge-context-menu" class="context-menu" style="display: none; position: fixed; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10001; min-width: 150px;">
+        <button class="context-menu-item" id="badge-increase-btn" onclick="handleBadgeAdjust('increase')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333; border-bottom: 1px solid #eee;">Increase</button>
+        <button class="context-menu-item" id="badge-decrease-btn" onclick="handleBadgeAdjust('decrease')" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Decrease</button>
+    </div>
+    
+    <div id="coach-move-context-menu" class="context-menu" style="display: none; position: absolute; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10000; min-width: 180px;">
+        <div id="coach-move-role-options"></div>
+        <hr style="margin: 4px 0; border: none; border-top: 1px solid #ddd;">
+        <div id="coach-move-group-options"></div>
+    </div>
+
+    <!-- Cancel Practice Modal -->
+    <div id="cancel-practice-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <span>Cancel Practice</span>
+                <button class="btn-small secondary" onclick="closeCancelPracticeModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <p style="font-size: 14px; color: #666; margin: 0;">Please select a reason for cancelling this practice:</p>
+                    <div>
+                        <label for="cancel-reason" class="field-label">Cancellation Reason</label>
+                        <select id="cancel-reason" class="modal-field-input">
+                            <option value="Weather">Weather</option>
+                            <option value="Staffing">Staffing</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeCancelPracticeModal()">Cancel</button>
+                <button class="btn-small" onclick="confirmCancelPractice()" style="background-color: #f44336; color: white; border-color: #f44336;">Cancel Practice</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clone Practice Modal -->
+    <div id="clone-practice-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <span>Clone Entire Practice</span>
+                <button class="btn-small secondary" onclick="closeClonePracticeModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 14px; color: #666; margin: 0 0 16px 0;">
+                    Select a practice date to clone. This will copy all groups, assignments, and attendance settings to the current practice date.
+                </p>
+                <div id="clone-practice-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;">
+                    <!-- Practice list will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeClonePracticeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule Practice Modal -->
+    <div id="reschedule-practice-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal" style="max-width: 500px;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span>Reschedule Practice</span>
+                <button class="btn-small secondary" onclick="closeReschedulePracticeModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <div>
+                        <label for="reschedule-date" class="field-label">New Date</label>
+                        <input type="date" id="reschedule-date" class="modal-field-input">
+                    </div>
+                    <div class="form-row">
+                        <div style="flex: 1;">
+                            <label for="reschedule-time" class="field-label">Time</label>
+                            <input type="time" id="reschedule-time" class="modal-field-input">
+                        </div>
+                        <div style="flex: 1;">
+                            <label for="reschedule-end-time" class="field-label">End Time</label>
+                            <input type="time" id="reschedule-end-time" class="modal-field-input">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="reschedule-location" class="field-label">Location</label>
+                        <input type="text" id="reschedule-location" class="modal-field-input" placeholder="Enter location">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeReschedulePracticeModal()">Cancel</button>
+                <button class="btn-small" onclick="confirmReschedulePractice()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Reschedule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Sheets Sync Modal -->
+    <div id="google-sheets-modal" class="modal-overlay" aria-hidden="true" style="display: none;">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <span id="google-sheets-modal-title">Sync from Google Sheet</span>
+                <button class="btn-small secondary" onclick="closeGoogleSheetsModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <!-- Simple Option: Public Sheet -->
+                    <div style="padding: 12px; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #2e7d32;">✓ Easiest Option: Make Sheet Viewable by Link</div>
+                        <div style="font-size: 12px; color: #666; line-height: 1.5; margin-bottom: 8px;">
+                            <strong>No setup required!</strong> Just make your Google Sheet viewable:
+                            <ol style="margin: 8px 0; padding-left: 20px;">
+                                <li>Open your Google Sheet</li>
+                                <li>Click <strong>"Share"</strong> button (top right)</li>
+                                <li>Change to <strong>"Anyone with the link"</strong> → <strong>"Viewer"</strong></li>
+                                <li>Click <strong>"Done"</strong></li>
+                            </ol>
+                            The sheet will be readable but not editable by others. This works immediately with no configuration!
+                        </div>
+                    </div>
+                    
+                    <!-- Google Sheet URL -->
+                    <div>
+                        <label class="field-label">Google Sheet URL:</label>
+                        <input type="text" id="modal-google-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" value="">
+                        <button class="btn-small" onclick="saveModalGoogleSheetUrl()" style="margin-top: 8px; padding: 6px 12px;">Save Link</button>
+                    </div>
+                    
+                    <!-- Advanced Option: Private Sheet with OAuth (Collapsible) -->
+                    <details style="padding: 12px; background: #fff3e0; border: 1px solid #ff9800; border-radius: 4px;">
+                        <summary style="font-weight: 600; cursor: pointer; color: #e65100; margin-bottom: 8px;">Advanced: Access Private Sheets (Requires Setup)</summary>
+                        <div style="margin-top: 12px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+                                If you need to keep the sheet completely private, you can set up Google OAuth. This requires a free Google Cloud account (no paid subscription needed).
+                            </div>
+                            
+                            <!-- Google OAuth Client ID Configuration -->
+                            <div style="padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 12px;">
+                                <label class="field-label" style="margin-bottom: 8px; display: block;">Google OAuth Client ID:</label>
+                                <input type="text" id="modal-google-client-id" placeholder="Enter your Google OAuth Client ID" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px;" value="">
+                                <button class="btn-small" onclick="saveGoogleClientId()" style="padding: 6px 12px; margin-bottom: 8px;">Save Client ID</button>
+                                <div style="font-size: 11px; color: #666; line-height: 1.4;">
+                                    <strong>Free Setup (5 minutes):</strong><br>
+                                    1. Go to <a href="https://console.cloud.google.com/" target="_blank" style="color: #2196F3;">Google Cloud Console</a> (free account)<br>
+                                    2. Create a project (free)<br>
+                                    3. Enable "Google Sheets API" (free)<br>
+                                    4. Create OAuth 2.0 credentials → Web application (free)<br>
+                                    5. Add your domain to authorized origins<br>
+                                    6. Copy the Client ID and paste above
+                                </div>
+                            </div>
+                            
+                            <!-- Google Authorization -->
+                            <div style="padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                    <label class="field-label" style="margin: 0;">Google Access:</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span id="modal-google-auth-status" style="font-size: 12px; color: #666;">Not authorized</span>
+                                        <button id="modal-google-auth-btn" class="btn-small" onclick="requestGoogleAuthorization()" style="padding: 6px 12px; background: #4285f4; color: white; border: none;">Sign in with Google</button>
+                                    </div>
+                                </div>
+                                <div style="font-size: 12px; color: #666;">
+                                    After saving your Client ID above, click "Sign in with Google" to authorize access.
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                    
+                    <!-- Info Note -->
+                    <div style="padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 12px; color: #856404;">
+                        <div id="modal-google-sheets-note"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeGoogleSheetsModal()">Cancel</button>
+                <button id="modal-sync-button" class="btn-small" onclick="syncFromModal()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Sync Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Field Mapping Modal -->
+    <div id="csv-field-mapping-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeCSVFieldMappingModal();">
+        <div class="modal" style="max-width: 900px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span id="csv-mapping-modal-title">Map CSV Fields</span>
+                <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
+                    <strong>Instructions:</strong> Check the boxes for fields you want to import, and select which CSV column maps to each field. 
+                    Program-dependent fields (Pace, Bike Skills, Ride Group, Photo, Notes) can be mapped but cannot be unchecked.
+                    Select "-- None --" to leave a field blank or use default values.
+                </div>
+                
+                <!-- Name Format Selection -->
+                <div style="margin-bottom: 16px; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">
+                    <label class="field-label" style="margin-bottom: 8px; display: block;">Name Format:</label>
+                    <div style="display: flex; gap: 16px; align-items: center;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="name-format" id="name-format-split" value="split" checked>
+                            <span>First Name + Last Name (separate fields)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="name-format" id="name-format-single" value="single">
+                            <span>Single Name Field</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="csv-field-mapping-container" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Field mappings will be generated here -->
+                </div>
+                
+                <!-- Additional Fields Section -->
+                <div id="additional-fields-section" style="margin-top: 24px; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label class="field-label" style="margin: 0;">Additional Fields (map unassigned CSV columns):</label>
+                        <button type="button" class="btn-small" onclick="addAdditionalFieldMapping()" style="padding: 4px 12px; font-size: 12px;">+ Add Field</button>
+                    </div>
+                    <div id="additional-fields-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Additional field mappings will be added here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Cancel</button>
+                <button class="btn-small" onclick="applyCSVFieldMapping()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Mapping & Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Review Modal -->
+    <div id="csv-review-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeCSVReviewModal();">
+        <div class="modal" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span id="csv-review-modal-title">Review CSV Changes</span>
+                <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; font-size: 12px;">
+                    <strong>Review Changes:</strong> Review the changes below and select which records to include or ignore. Click "Apply Selected Changes" when ready.
+                </div>
+                <div id="csv-review-content" style="max-height: 60vh; overflow-y: auto;">
+                    <!-- Review content will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="selectAllCSVReviewItems()">Select All</button>
+                    <button class="btn-small secondary" onclick="deselectAllCSVReviewItems()">Deselect All</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-small secondary" onclick="closeCSVReviewModal()">Cancel</button>
+                    <button class="btn-small" onclick="applyCSVReviewChanges()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Apply Selected Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts/app-main.js"></script>
+</body>
+</html>

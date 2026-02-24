@@ -1,35 +1,6 @@
 // API Wrapper Functions for Supabase Database Operations
 // Note: Don't initialize client here - it will be initialized by supabase-config.js
 
-// Known safe columns for each table — fields NOT in this list are stored in extra_data JSONB
-const RIDER_SAFE_COLUMNS = new Set([
-    'name', 'nickname', 'phone', 'email', 'grade', 'gender', 'racing_group',
-    'fitness', 'endurance', 'climbing', 'skills', 'descending',
-    'photo', 'notes', 'archived', 'extra_data'
-]);
-
-const COACH_SAFE_COLUMNS = new Set([
-    'name', 'nickname', 'phone', 'email', 'level',
-    'fitness', 'endurance', 'climbing', 'skills', 'descending',
-    'bike_manual', 'bike_electric', 'bike_primary',
-    'photo', 'notes', 'archived', 'extra_data'
-]);
-
-// Filter an object to only include keys present in the safe columns set
-function filterSafeColumns(obj, safeSet) {
-    const safe = {};
-    const extra = {};
-    for (const [key, value] of Object.entries(obj)) {
-        if (key === 'id') continue; // never include id in write payload
-        if (safeSet.has(key)) {
-            safe[key] = value;
-        } else {
-            extra[key] = value;
-        }
-    }
-    return { safe, extra };
-}
-
 // ============ RIDERS ============
 
 async function getAllRiders() {
@@ -47,23 +18,19 @@ async function getAllRiders() {
     }
     
     // Map database structure to app structure
-    // v3 reads from endurance/climbing/descending columns (falls back to fitness/skills for pre-migration data)
     return (data || []).map(rider => ({
         ...(rider.extra_data || {}),
         id: rider.id,
         name: rider.name,
-        nickname: rider.nickname || '',
         phone: rider.phone,
         email: rider.email,
         grade: rider.grade,
         gender: rider.gender,
         racingGroup: rider.racing_group,
-        fitness: rider.endurance || rider.fitness,
-        climbing: rider.climbing || '3',
-        skills: rider.descending || rider.skills,
+        fitness: rider.fitness,
+        skills: rider.skills,
         photo: rider.photo,
-        notes: rider.notes,
-        archived: rider.archived || false
+        notes: rider.notes
     }));
 }
 
@@ -82,23 +49,20 @@ async function getRiderById(id) {
         return null;
     }
     
-    // Map database structure to app structure (v3 columns)
+    // Map database structure to app structure
     return {
         ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
-        nickname: data.nickname || '',
         phone: data.phone,
         email: data.email,
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.endurance || data.fitness,
-        climbing: data.climbing || '3',
-        skills: data.descending || data.skills,
+        fitness: data.fitness,
+        skills: data.skills,
         photo: data.photo,
-        notes: data.notes,
-        archived: data.archived || false
+        notes: data.notes
     };
 }
 
@@ -106,31 +70,23 @@ async function createRider(riderData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
-    // Map app structure to database structure (v3 writes to endurance/climbing/descending columns)
-    // Only include columns known to exist in the schema; everything else goes in extra_data
-    const candidateData = {
+    // Map app structure to database structure
+    const dbData = {
         name: riderData.name,
-        nickname: riderData.nickname || null,
         phone: riderData.phone,
         email: riderData.email || null,
         grade: riderData.grade,
         gender: riderData.gender,
         racing_group: riderData.racing_group || riderData.racingGroup,
         fitness: riderData.fitness,
-        endurance: riderData.fitness,
-        climbing: riderData.climbing || '3',
         skills: riderData.skills,
-        descending: riderData.skills,
         photo: riderData.photo || null,
         notes: riderData.notes || null,
-        archived: riderData.archived || false
+        extra_data: (() => {
+            const { id, ...rest } = riderData || {};
+            return rest;
+        })()
     };
-    const { safe: dbData } = filterSafeColumns(candidateData, RIDER_SAFE_COLUMNS);
-    // Always store full app data in extra_data as a backup
-    dbData.extra_data = (() => {
-        const { id, ...rest } = riderData || {};
-        return rest;
-    })();
     
     const { data, error } = await client
         .from('riders')
@@ -145,18 +101,14 @@ async function createRider(riderData) {
         ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
-        nickname: data.nickname || '',
         phone: data.phone,
         email: data.email,
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.endurance || data.fitness,
-        climbing: data.climbing || '3',
-        skills: data.descending || data.skills,
+        fitness: data.fitness,
         photo: data.photo,
-        notes: data.notes,
-        archived: data.archived || false
+        notes: data.notes
     };
 }
 
@@ -164,30 +116,21 @@ async function updateRider(id, riderData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
-    // Map app structure to database structure (v3 writes to both old and new columns for compatibility)
-    // Only include columns known to exist in the schema to prevent schema cache errors
-    const candidateData = {};
-    if (riderData.name !== undefined) candidateData.name = riderData.name;
-    if (riderData.nickname !== undefined) candidateData.nickname = riderData.nickname;
-    if (riderData.phone !== undefined) candidateData.phone = riderData.phone;
-    if (riderData.email !== undefined) candidateData.email = riderData.email;
-    if (riderData.grade !== undefined) candidateData.grade = riderData.grade;
-    if (riderData.gender !== undefined) candidateData.gender = riderData.gender;
-    if (riderData.racing_group !== undefined) candidateData.racing_group = riderData.racing_group;
-    if (riderData.racingGroup !== undefined) candidateData.racing_group = riderData.racingGroup;
-    if (riderData.fitness !== undefined) { candidateData.fitness = riderData.fitness; candidateData.endurance = riderData.fitness; }
-    if (riderData.climbing !== undefined) candidateData.climbing = riderData.climbing;
-    if (riderData.skills !== undefined) { candidateData.skills = riderData.skills; candidateData.descending = riderData.skills; }
-    if (riderData.photo !== undefined) candidateData.photo = riderData.photo;
-    if (riderData.notes !== undefined) candidateData.notes = riderData.notes;
-    if (riderData.archived !== undefined) candidateData.archived = riderData.archived;
-    
-    const { safe: dbData } = filterSafeColumns(candidateData, RIDER_SAFE_COLUMNS);
-    // Always update extra_data with full app data as backup
-    dbData.extra_data = (() => {
-        const { id: _id, ...rest } = riderData || {};
-        return rest;
-    })();
+    // Map app structure to database structure
+    const dbData = {};
+    if (riderData.name !== undefined) dbData.name = riderData.name;
+    if (riderData.phone !== undefined) dbData.phone = riderData.phone;
+    if (riderData.email !== undefined) dbData.email = riderData.email;
+    if (riderData.grade !== undefined) dbData.grade = riderData.grade;
+    if (riderData.gender !== undefined) dbData.gender = riderData.gender;
+    if (riderData.racing_group !== undefined) dbData.racing_group = riderData.racing_group;
+    if (riderData.racingGroup !== undefined) dbData.racing_group = riderData.racingGroup;
+    if (riderData.fitness !== undefined) dbData.fitness = riderData.fitness;
+    if (riderData.skills !== undefined) dbData.skills = riderData.skills;
+    if (riderData.photo !== undefined) dbData.photo = riderData.photo;
+    if (riderData.notes !== undefined) dbData.notes = riderData.notes;
+    if (riderData.extra_data !== undefined) dbData.extra_data = riderData.extra_data;
+    if (riderData.extraData !== undefined) dbData.extra_data = riderData.extraData;
     
     const { data, error } = await client
         .from('riders')
@@ -203,18 +146,14 @@ async function updateRider(id, riderData) {
         ...(data.extra_data || {}),
         id: data.id,
         name: data.name,
-        nickname: data.nickname || '',
         phone: data.phone,
         email: data.email,
         grade: data.grade,
         gender: data.gender,
         racingGroup: data.racing_group,
-        fitness: data.endurance || data.fitness,
-        climbing: data.climbing || '3',
-        skills: data.descending || data.skills,
+        fitness: data.fitness,
         photo: data.photo,
-        notes: data.notes,
-        archived: data.archived || false
+        notes: data.notes
     };
 }
 
@@ -251,8 +190,21 @@ async function getAllCoaches() {
         return [];
     }
     
-    // Map database structure to app structure (v3 columns)
-    return (data || []).map(coach => mapCoachDbToApp(coach));
+    // Map database structure to app structure
+    return (data || []).map(coach => ({
+        ...(coach.extra_data || {}),
+        id: coach.id,
+        name: coach.name,
+        phone: coach.phone,
+        email: coach.email,
+        level: coach.level,
+        coachingLicenseLevel: coach.level,
+        fitness: coach.fitness,
+        skills: coach.skills,
+        photo: coach.photo,
+        notes: coach.notes,
+        user_id: coach.user_id
+    }));
 }
 
 async function getCoachById(id) {
@@ -270,38 +222,41 @@ async function getCoachById(id) {
         return null;
     }
     
-    // Map database structure to app structure (v3 columns)
-    return mapCoachDbToApp(data);
+    // Map database structure to app structure
+    return {
+        ...(data.extra_data || {}),
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        level: data.level,
+        coachingLicenseLevel: data.level,
+        fitness: data.fitness,
+        skills: data.skills,
+        photo: data.photo,
+        notes: data.notes,
+        user_id: data.user_id
+    };
 }
 
 async function createCoach(coachData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
-    // Only include columns known to exist in the schema; everything else goes in extra_data
-    const candidateData = {
+    const dbData = {
         name: coachData.name,
-        nickname: coachData.nickname || null,
         phone: coachData.phone || null,
         email: coachData.email || null,
         level: coachData.coachingLicenseLevel || coachData.level || '1',
         fitness: coachData.fitness || '5',
-        endurance: coachData.fitness || '5',
-        climbing: coachData.climbing || '3',
         skills: coachData.skills || null,
-        descending: coachData.skills || null,
         photo: coachData.photo || null,
         notes: coachData.notes || null,
-        bike_manual: coachData.bikeManual !== false,
-        bike_electric: coachData.bikeElectric || false,
-        bike_primary: coachData.bikePrimary || 'manual',
-        archived: coachData.archived || false
+        extra_data: (() => {
+            const { id, ...rest } = coachData || {};
+            return rest;
+        })()
     };
-    const { safe: dbData } = filterSafeColumns(candidateData, COACH_SAFE_COLUMNS);
-    dbData.extra_data = (() => {
-        const { id, ...rest } = coachData || {};
-        return rest;
-    })();
     
     const { data, error } = await client
         .from('coaches')
@@ -310,37 +265,38 @@ async function createCoach(coachData) {
         .single();
     
     if (error) throw error;
-    return mapCoachDbToApp(data);
+    return {
+        ...(data.extra_data || {}),
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        level: data.level,
+        coachingLicenseLevel: data.level,
+        fitness: data.fitness,
+        skills: data.skills,
+        photo: data.photo,
+        notes: data.notes,
+        user_id: data.user_id
+    };
 }
 
 async function updateCoach(id, coachData) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
-    // Only include columns known to exist in the schema to prevent schema cache errors
-    const candidateData = {};
-    if (coachData.name !== undefined) candidateData.name = coachData.name;
-    if (coachData.nickname !== undefined) candidateData.nickname = coachData.nickname;
-    if (coachData.phone !== undefined) candidateData.phone = coachData.phone;
-    if (coachData.email !== undefined) candidateData.email = coachData.email;
-    if (coachData.level !== undefined) candidateData.level = coachData.level;
-    if (coachData.coachingLicenseLevel !== undefined) candidateData.level = coachData.coachingLicenseLevel;
-    if (coachData.fitness !== undefined) { candidateData.fitness = coachData.fitness; candidateData.endurance = coachData.fitness; }
-    if (coachData.climbing !== undefined) candidateData.climbing = coachData.climbing;
-    if (coachData.skills !== undefined) { candidateData.skills = coachData.skills; candidateData.descending = coachData.skills; }
-    if (coachData.photo !== undefined) candidateData.photo = coachData.photo;
-    if (coachData.notes !== undefined) candidateData.notes = coachData.notes;
-    if (coachData.bikeManual !== undefined) candidateData.bike_manual = coachData.bikeManual;
-    if (coachData.bikeElectric !== undefined) candidateData.bike_electric = coachData.bikeElectric;
-    if (coachData.bikePrimary !== undefined) candidateData.bike_primary = coachData.bikePrimary;
-    if (coachData.archived !== undefined) candidateData.archived = coachData.archived;
-    
-    const { safe: dbData } = filterSafeColumns(candidateData, COACH_SAFE_COLUMNS);
-    // Always update extra_data with full app data as backup
-    dbData.extra_data = (() => {
-        const { id: _id, ...rest } = coachData || {};
-        return rest;
-    })();
+    const dbData = {};
+    if (coachData.name !== undefined) dbData.name = coachData.name;
+    if (coachData.phone !== undefined) dbData.phone = coachData.phone;
+    if (coachData.email !== undefined) dbData.email = coachData.email;
+    if (coachData.level !== undefined) dbData.level = coachData.level;
+    if (coachData.coachingLicenseLevel !== undefined) dbData.level = coachData.coachingLicenseLevel;
+    if (coachData.fitness !== undefined) dbData.fitness = coachData.fitness;
+    if (coachData.skills !== undefined) dbData.skills = coachData.skills;
+    if (coachData.photo !== undefined) dbData.photo = coachData.photo;
+    if (coachData.notes !== undefined) dbData.notes = coachData.notes;
+    if (coachData.extra_data !== undefined) dbData.extra_data = coachData.extra_data;
+    if (coachData.extraData !== undefined) dbData.extra_data = coachData.extraData;
     
     const { data, error } = await client
         .from('coaches')
@@ -350,43 +306,19 @@ async function updateCoach(id, coachData) {
         .single();
     
     if (error) throw error;
-    return mapCoachDbToApp(data);
-}
-
-function mapCoachDbToApp(coach) {
-    const extra = (coach && coach.extra_data && typeof coach.extra_data === 'object') ? coach.extra_data : {};
-
-    const bikeManual = coach && coach.bike_manual !== undefined && coach.bike_manual !== null
-        ? coach.bike_manual !== false
-        : (extra.bikeManual !== undefined ? extra.bikeManual !== false : true);
-
-    const bikeElectric = coach && coach.bike_electric !== undefined && coach.bike_electric !== null
-        ? !!coach.bike_electric
-        : !!extra.bikeElectric;
-
-    const bikePrimary = coach && coach.bike_primary !== undefined && coach.bike_primary !== null
-        ? coach.bike_primary
-        : (extra.bikePrimary || 'manual');
-
     return {
-        ...extra,
-        id: coach.id,
-        name: coach.name,
-        nickname: coach.nickname || '',
-        phone: coach.phone,
-        email: coach.email,
-        level: coach.level,
-        coachingLicenseLevel: coach.level,
-        fitness: coach.endurance || coach.fitness,
-        climbing: coach.climbing || '3',
-        skills: coach.descending || coach.skills,
-        photo: coach.photo,
-        notes: coach.notes,
-        user_id: coach.user_id,
-        bikeManual,
-        bikeElectric,
-        bikePrimary,
-        archived: coach.archived || false
+        ...(data.extra_data || {}),
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        level: data.level,
+        coachingLicenseLevel: data.level,
+        fitness: data.fitness,
+        skills: data.skills,
+        photo: data.photo,
+        notes: data.notes,
+        user_id: data.user_id
     };
 }
 
@@ -477,12 +409,6 @@ function buildRideDbData(rideData) {
     if (Array.isArray(rideData.availableRiders)) {
         extra.availableRiders = rideData.availableRiders;
     }
-    // Persist group color names in settings as fallback (groups JSONB column may lose them on some RLS configs)
-    if (Array.isArray(rideData.groups)) {
-        const colorMap = {};
-        rideData.groups.forEach(g => { if (g && g.id && g.colorName) colorMap[g.id] = g.colorName; });
-        if (Object.keys(colorMap).length > 0) extra._groupColorNames = colorMap;
-    }
     if (Object.keys(extra).length > 0) dbData.settings = extra;
 
     return dbData;
@@ -526,15 +452,6 @@ function mapRideDbToApp(row) {
     // Use settings.availableRiders as source of truth when present (column may not persist due to RLS/schema)
     if (row.settings && Array.isArray(row.settings.availableRiders)) {
         result.availableRiders = row.settings.availableRiders;
-    }
-    // Restore group color names from settings fallback if the groups column lost them
-    if (row.settings && row.settings._groupColorNames && Array.isArray(result.groups)) {
-        const colorMap = row.settings._groupColorNames;
-        result.groups.forEach(g => {
-            if (g && g.id && !g.colorName && colorMap[g.id]) {
-                g.colorName = colorMap[g.id];
-            }
-        });
     }
     return result;
 }
@@ -822,24 +739,21 @@ const SEASON_APP_TO_DB = {
     startDate: 'start_date',
     endDate: 'end_date',
     practices: 'practices',
-    fitnessScale: 'endurance_scale',
-    climbingScale: 'climbing_scale',
-    skillsScale: 'descending_scale',
-    paceScaleOrder: 'endurance_scale_order',
+    fitnessScale: 'fitness_scale',
+    skillsScale: 'skills_scale',
+    paceScaleOrder: 'pace_scale_order',
     groupPaceOrder: 'group_pace_order',
     csvFieldMappings: 'csv_field_mappings',
     timeEstimationSettings: 'time_estimation_settings',
     coachRoles: 'coach_roles',
     riderRoles: 'rider_roles',
-    teamName: 'team_name',
     settings: 'settings'
 };
 const SEASON_DB_TO_APP = Object.fromEntries(Object.entries(SEASON_APP_TO_DB).map(([app, db]) => [db, app]));
 
 const SEASON_DEFAULTS = {
-    fitnessScale: 6,
-    climbingScale: 6,
-    skillsScale: 6,
+    fitnessScale: 5,
+    skillsScale: 3,
     paceScaleOrder: 'fastest_to_slowest',
     groupPaceOrder: 'fastest_to_slowest',
     timeEstimationSettings: {
@@ -884,15 +798,13 @@ function mapSeasonDbToApp(row) {
     result.start_date = row.start_date;
     result.end_date = row.end_date;
     result.practices = row.practices || [];
-    result.fitnessScale = row.endurance_scale !== null && row.endurance_scale !== undefined ? row.endurance_scale : (row.fitness_scale !== null && row.fitness_scale !== undefined ? row.fitness_scale : SEASON_DEFAULTS.fitnessScale);
-    result.climbingScale = row.climbing_scale !== null && row.climbing_scale !== undefined ? row.climbing_scale : SEASON_DEFAULTS.climbingScale;
-    result.skillsScale = row.descending_scale !== null && row.descending_scale !== undefined ? row.descending_scale : (row.skills_scale !== null && row.skills_scale !== undefined ? row.skills_scale : SEASON_DEFAULTS.skillsScale);
-    result.paceScaleOrder = row.endurance_scale_order || row.pace_scale_order || SEASON_DEFAULTS.paceScaleOrder;
+    result.fitnessScale = row.fitness_scale !== null && row.fitness_scale !== undefined ? row.fitness_scale : SEASON_DEFAULTS.fitnessScale;
+    result.skillsScale = row.skills_scale !== null && row.skills_scale !== undefined ? row.skills_scale : SEASON_DEFAULTS.skillsScale;
+    result.paceScaleOrder = row.pace_scale_order || SEASON_DEFAULTS.paceScaleOrder;
     result.groupPaceOrder = row.group_pace_order || SEASON_DEFAULTS.groupPaceOrder;
     result.csvFieldMappings = row.csv_field_mappings || {};
     result.coachRoles = Array.isArray(row.coach_roles) ? row.coach_roles : [];
     result.riderRoles = Array.isArray(row.rider_roles) ? row.rider_roles : [];
-    result.teamName = row.team_name || '';
     result.timeEstimationSettings = row.time_estimation_settings && typeof row.time_estimation_settings === 'object'
         ? row.time_estimation_settings
         : SEASON_DEFAULTS.timeEstimationSettings;
@@ -1012,54 +924,6 @@ async function setUserRole(userId, role) {
     
     if (error) throw error;
     return data;
-}
-
-// ============ USER PREFERENCES ============
-// Stores per-user UI settings (cross-device), e.g. welcome-screen toggle and last tab.
-async function getUserPreference(prefKey) {
-    const client = getSupabaseClient();
-    if (!client) return null;
-    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-    if (!currentUser || !currentUser.id) return null;
-    if (!prefKey) return null;
-
-    const { data, error } = await client
-        .from('user_preferences')
-        .select('pref_value')
-        .eq('user_id', currentUser.id)
-        .eq('pref_key', prefKey)
-        .maybeSingle();
-
-    if (error) {
-        // PGRST116 means no rows returned, which is normal for first-time users
-        if (error.code === 'PGRST116') return null;
-        throw error;
-    }
-    return data ? data.pref_value : null;
-}
-
-async function setUserPreference(prefKey, prefValue) {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('Supabase client not initialized');
-    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-    if (!currentUser || !currentUser.id) throw new Error('Not authenticated');
-    if (!prefKey) throw new Error('Preference key is required');
-
-    const payload = {
-        user_id: currentUser.id,
-        pref_key: prefKey,
-        pref_value: prefValue === undefined ? null : prefValue,
-        updated_at: new Date().toISOString()
-    };
-
-    const { data, error } = await client
-        .from('user_preferences')
-        .upsert(payload, { onConflict: 'user_id,pref_key' })
-        .select('pref_value')
-        .maybeSingle();
-
-    if (error) throw error;
-    return data ? data.pref_value : prefValue;
 }
 
 async function getAllUsersWithRoles() {
@@ -1579,9 +1443,8 @@ async function getAllBackups() {
     
     const { data, error } = await client
         .from('backups')
-        .select('id, backup_name, backup_type, created_at, created_by')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .select('*')
+        .order('created_at', { ascending: false });
     
     if (error) {
         console.error('Error fetching backups:', error);
@@ -1641,8 +1504,7 @@ async function getAllUsersWithLoginInfo() {
                 lastLogin: null,
                 matchedType: user.matched_type || null,
                 matchedId: user.matched_id || null,
-                isDisabled: user.is_disabled === true,
-                allowDevAccess: user.allow_dev_access === true
+                isDisabled: user.is_disabled === true
             }));
         }
 
@@ -1739,30 +1601,6 @@ async function enableAdminUser(userId) {
             role: 'coach-admin'
         }], { onConflict: 'user_id' });
     if (upsertError) throw upsertError;
-}
-
-async function setAllowDevAccess(userId, allowed) {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('Supabase client not initialized');
-    const { error } = await client
-        .from('user_roles')
-        .update({ allow_dev_access: !!allowed })
-        .eq('user_id', userId);
-    if (error) throw error;
-}
-
-async function getCurrentUserDevAccess() {
-    const client = getSupabaseClient();
-    if (!client) return false;
-    const { data: { session } } = await client.auth.getSession();
-    if (!session || !session.user) return false;
-    const { data, error } = await client
-        .from('user_roles')
-        .select('allow_dev_access')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-    if (error || !data) return false;
-    return data.allow_dev_access === true;
 }
 
 // ============ ADMIN EDIT LOCK ============
@@ -2137,116 +1975,4 @@ async function sendVerificationCode(phoneOrEmail, code, isEmail = false) {
         }
         throw error;
     }
-}
-
-// ============ SCHEDULED ABSENCES ============
-
-async function loadScheduledAbsences() {
-    const client = getSupabaseClient();
-    if (!client) return [];
-
-    const { data, error } = await client
-        .from('scheduled_absences')
-        .select('*')
-        .order('start_date');
-
-    if (error) {
-        console.error('Error fetching scheduled absences:', error);
-        return [];
-    }
-
-    return (data || []).map(row => ({
-        id: row.id,
-        personType: row.person_type,
-        personId: row.person_id,
-        startDate: row.start_date,
-        endDate: row.end_date,
-        reason: row.reason,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-    }));
-}
-
-async function createScheduledAbsence(absence) {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('No Supabase client');
-
-    const { data, error } = await client
-        .from('scheduled_absences')
-        .insert({
-            person_type: absence.personType,
-            person_id: absence.personId,
-            start_date: absence.startDate,
-            end_date: absence.endDate,
-            reason: absence.reason
-        })
-        .select()
-        .single();
-
-    if (error) {
-        console.error('Error creating scheduled absence:', error);
-        throw error;
-    }
-
-    return {
-        id: data.id,
-        personType: data.person_type,
-        personId: data.person_id,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        reason: data.reason,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
-    };
-}
-
-async function updateScheduledAbsence(id, updates) {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('No Supabase client');
-
-    const payload = {};
-    if (updates.endDate !== undefined) payload.end_date = updates.endDate;
-    if (updates.startDate !== undefined) payload.start_date = updates.startDate;
-    if (updates.reason !== undefined) payload.reason = updates.reason;
-    payload.updated_at = new Date().toISOString();
-
-    const { data, error } = await client
-        .from('scheduled_absences')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single();
-
-    if (error) {
-        console.error('Error updating scheduled absence:', error);
-        throw error;
-    }
-
-    return {
-        id: data.id,
-        personType: data.person_type,
-        personId: data.person_id,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        reason: data.reason,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
-    };
-}
-
-async function deleteScheduledAbsence(id) {
-    const client = getSupabaseClient();
-    if (!client) throw new Error('No Supabase client');
-
-    const { error } = await client
-        .from('scheduled_absences')
-        .delete()
-        .eq('id', id);
-
-    if (error) {
-        console.error('Error deleting scheduled absence:', error);
-        throw error;
-    }
-
-    return true;
 }
