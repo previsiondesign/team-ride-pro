@@ -194,7 +194,7 @@
             renderRiders();
             renderCoaches();
             renderRides();
-            renderRoutes();
+            if (typeof renderRoutes === 'function') renderRoutes();
             
             // Team name already applied from loadApplicationData() — no duplicate call needed
 
