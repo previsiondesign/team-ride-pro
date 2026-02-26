@@ -1728,11 +1728,13 @@
 
             const records = _displayFieldsType === 'riders' ? (data.riders || []) : (data.coaches || []);
             const alwaysShow = new Set(['name', 'actions']);
+            const colKeyToDataKey = { pace: 'fitness' };
             const populatedFields = new Set();
             for (const rec of records) {
                 for (const col of pool) {
                     if (alwaysShow.has(col.key) || populatedFields.has(col.key)) continue;
-                    const val = rec[col.key];
+                    const dataKey = colKeyToDataKey[col.key] || col.key;
+                    const val = rec[dataKey];
                     if (val !== undefined && val !== null && val !== '' && val !== 0) {
                         populatedFields.add(col.key);
                     }
