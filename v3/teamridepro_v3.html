@@ -10,8 +10,8 @@
         body.app-initializing .container,
         body.app-initializing .practice-sidebar { visibility: hidden !important; }
     </style>
-    <link rel="stylesheet" href="styles.css?v=20260216u">
-    <link rel="stylesheet" href="styles-overrides.css?v=20260216u">
+    <link rel="stylesheet" href="styles.css?v=20260217a">
+    <link rel="stylesheet" href="styles-overrides.css?v=20260217a">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,10 +19,10 @@
     <!-- Supabase JS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Supabase Configuration, Auth, Database Functions, and Roles -->
-    <script src="scripts/supabase-config.js?v=20260216u"></script>
-    <script src="scripts/auth.js?v=20260216u"></script>
-    <script src="scripts/database.js?v=20260216u"></script>
-    <script src="scripts/roles.js?v=20260216u"></script>
+    <script src="scripts/supabase-config.js?v=20260217a"></script>
+    <script src="scripts/auth.js?v=20260217a"></script>
+    <script src="scripts/database.js?v=20260217a"></script>
+    <script src="scripts/roles.js?v=20260217a"></script>
     <!-- jsPDF library for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -59,12 +59,18 @@
         </div>
     </div>
 
-    <div id="read-only-banner" class="mode-banner mode-banner-readonly" style="display:flex; align-items:center; justify-content:center; gap:12px;">
+    <div id="read-only-banner" class="mode-banner mode-banner-readonly" style="display:none; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;">
         <span id="read-only-banner-text">Read-only mode enabled.</span>
+        <span id="read-only-user-status" style="font-size:11px; opacity:0.85;"></span>
+        <button type="button" data-readonly-allow="true" onclick="refreshReadOnlyData()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">↻ Fetch Latest Data</button>
+        <button type="button" id="read-only-request-access-btn" data-readonly-allow="true" onclick="requestAccessFromBanner()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap; display:none;">Request Access</button>
         <button type="button" data-readonly-allow="true" onclick="enterDeveloperMode()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">Switch to Developer Mode</button>
     </div>
-    <div id="developer-mode-banner" class="mode-banner mode-banner-developer" style="display:none; align-items:center; justify-content:center; gap:12px;">
+    <div id="developer-mode-banner" class="mode-banner mode-banner-developer" style="display:none; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;">
         <span>Developer mode is ON: changes are saved only in this browser and do not affect the live site.</span>
+        <span id="dev-mode-user-status" style="font-size:11px; opacity:0.85;"></span>
+        <button type="button" onclick="reloadFreshDataInDevMode()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">↻ Reload from Supabase</button>
+        <button type="button" id="dev-mode-request-access-btn" onclick="requestAccessFromBanner()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap; display:none;">Request Access</button>
         <button type="button" onclick="handleExitDeveloperMode()" style="padding:3px 10px; font-size:12px; border:1px solid rgba(255,255,255,.5); border-radius:4px; background:rgba(255,255,255,.15); color:inherit; cursor:pointer; white-space:nowrap;">Exit Developer Mode</button>
     </div>
     <div id="header-scroll-shield" class="header-scroll-shield"></div>
@@ -346,7 +352,7 @@
 
             <!-- Planner Setup: "How would you like to start planning?" -->
             <div id="practice-planner-setup" class="section practice-planner-home" style="display: none;">
-                <h2 style="margin: 0 0 24px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How would you like to start planning the next practice?</h2>
+                <h2 id="planner-setup-heading" style="margin: 0 0 24px 0; font-size: 22px; font-weight: 600; color: #333; text-align: center;">How would you like to start planning the next practice?</h2>
                 <button type="button" class="practice-planner-home-btn" onclick="openAttendanceMarking()">
                     Mark Attendance for this practice
                 </button>
@@ -482,10 +488,10 @@
                 <div class="section" style="padding-top: 0;">
                     
                     <!-- Group Assignments (always visible when practice is loaded; sidebars handle attendance) -->
-                    <div id="group-assignments-content" style="margin-top: 4px;">
+                    <div id="group-assignments-content" style="margin-top: 0;">
                         <div id="assignments" class="assignments"></div>
                     </div>
-                    <div style="margin-top: 20px;">
+                    <div id="auto-assign-debug-section" style="margin-top: 20px; display: none;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <strong>Auto-Assignment Debug Output</strong>
                             <button class="btn-small" onclick="copyDebugToClipboard()" id="copy-debug-btn" style="display: none;">Copy to Clipboard</button>
@@ -1582,6 +1588,7 @@
 
     <!-- Practice Context Menu -->
     <div id="practice-context-menu" class="context-menu" style="display: none; position: absolute; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10000; min-width: 180px;">
+        <button id="go-to-planner-btn" class="context-menu-item" onclick="goToPracticePlannerFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #1976d2; font-weight: 500; display: none;">Go to Practice Planner</button>
         <button class="context-menu-item" onclick="deletePracticeFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Delete Practice</button>
         <button class="context-menu-item" onclick="cancelPracticeFromContext()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333;">Cancel Practice</button>
         <button id="restore-practice-btn" class="context-menu-item" onclick="restoreCancelledPractice()" style="width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; font-size: 14px; color: #333; display: none;">Restore Practice</button>
@@ -1784,20 +1791,9 @@
                 <div id="csv-mapping-warning" style="display:none; margin-bottom: 16px; padding: 12px; background: #fff3e0; border: 1px solid #ff9800; border-radius: 4px; font-size: 12px;">
                 </div>
                 
-                <!-- Name Format Selection -->
-                <div style="margin-bottom: 16px; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">
-                    <label class="field-label" style="margin-bottom: 8px; display: block;">Name Format:</label>
-                    <div style="display: flex; gap: 16px; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                            <input type="radio" name="name-format" id="name-format-split" value="split" checked>
-                            <span>First Name + Last Name (separate fields)</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                            <input type="radio" name="name-format" id="name-format-single" value="single">
-                            <span>Single Name Field</span>
-                        </label>
-                    </div>
-                </div>
+                <!-- Name format is always "split" (First + Last) -->
+                <input type="radio" name="name-format" id="name-format-split" value="split" checked style="display:none;">
+                <input type="radio" name="name-format" id="name-format-single" value="single" style="display:none;">
                 
                 <div id="csv-field-mapping-container" style="display: flex; flex-direction: column; gap: 8px;">
                     <!-- Required field mappings generated here -->
@@ -1810,6 +1806,23 @@
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
                 <button class="btn-small secondary" onclick="closeCSVFieldMappingModal()">Cancel</button>
                 <button id="csv-mapping-apply-btn" class="btn-small" onclick="applyCSVFieldMapping()" style="background-color: #2196F3; color: white; border-color: #2196F3;">Import Riders/Coaches</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Field Order Modal -->
+    <div id="csv-field-order-modal" class="modal-overlay" aria-hidden="true" style="display: none;">
+        <div class="modal" style="max-width: 600px; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span>Arrange Field Order on Record Cards</span>
+                <button class="btn-small secondary" onclick="cancelFieldOrderModal()" style="float:right;">Cancel</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px; color:#555; margin-bottom:12px;">Drag or use arrows to reorder the fields as they will appear on rider/coach cards. Name fields are fixed at the top.</p>
+                <div id="csv-field-order-list" style="border:1px solid #ddd; border-radius:4px; background:#fafafa; min-height:60px;"></div>
+            </div>
+            <div class="modal-footer" style="text-align:right; padding:12px 16px;">
+                <button class="btn primary" onclick="applyFieldOrder()">Continue</button>
             </div>
         </div>
     </div>
@@ -1858,23 +1871,73 @@
         </div>
     </div>
 
+    <!-- Dev Mode Exit Modal -->
+    <div id="dev-mode-exit-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeDevModeExitModal();">
+        <div class="modal" style="max-width: 480px;" onclick="event.stopPropagation();">
+            <div class="modal-header">
+                <span>Exit Developer Mode</span>
+                <button class="btn-small secondary" onclick="closeDevModeExitModal()">Close</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;">
+                    You are exiting Developer Mode. What would you like to do with the changes you made?
+                </p>
+                <div id="dev-mode-exit-activity" style="display:none; margin: 12px 0; padding: 10px 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; font-size: 13px; color: #92400e;"></div>
+            </div>
+            <div class="modal-footer" style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button id="dev-mode-exit-discard" class="btn-small" onclick="executeDevModeExit('discard')" style="background-color: #2196F3; color: white; border-color: #2196F3; padding: 10px 16px; font-size: 13px; width: 100%;">
+                    Discard Changes from Dev Mode
+                </button>
+                <button id="dev-mode-exit-save" class="btn-small secondary" onclick="executeDevModeExit('save')" style="padding: 10px 16px; font-size: 13px; width: 100%;">
+                    Save Changes Made in Dev Mode to Database
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dev Mode Save Confirmation Modal -->
+    <div id="dev-mode-save-confirm-modal" class="modal-overlay" aria-hidden="true" style="display: none;" onclick="if(event.target === this) closeDevModeSaveConfirmModal();">
+        <div class="modal" style="max-width: 480px;" onclick="event.stopPropagation();">
+            <div class="modal-header" style="background: #fef2f2; border-bottom: 1px solid #fca5a5;">
+                <span style="color: #991b1b;">Confirm: Overwrite Database</span>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p style="margin: 0 0 12px 0; font-size: 14px; color: #334155; font-weight: 500;">
+                    This action will overwrite the live database with your local changes.
+                </p>
+                <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b;">
+                    Any changes saved by other users while you were in Developer Mode will be lost.
+                </p>
+                <div id="dev-mode-save-confirm-activity" style="display:none; margin: 12px 0; padding: 10px 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; font-size: 13px; color: #92400e;"></div>
+            </div>
+            <div class="modal-footer" style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
+                <button id="dev-mode-save-cancel" class="btn-small" onclick="closeDevModeSaveConfirmModal()" style="background-color: #2196F3; color: white; border-color: #2196F3; padding: 10px 16px; font-size: 13px; width: 100%;">
+                    Go Back — Don't Save
+                </button>
+                <button id="dev-mode-save-execute" class="btn-small secondary" onclick="executeDevModeExit('force-save')" style="padding: 10px 16px; font-size: 13px; width: 100%; color: #991b1b; border-color: #fca5a5;">
+                    Yes, Overwrite Database with My Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- App framework (load order matters) -->
-    <script src="scripts/app-state.js?v=20260216u"></script>
-    <script src="scripts/app-utils.js?v=20260216u"></script>
-    <script src="scripts/app-scales.js?v=20260216u"></script>
+    <script src="scripts/app-state.js?v=20260217a"></script>
+    <script src="scripts/app-utils.js?v=20260217a"></script>
+    <script src="scripts/app-scales.js?v=20260217a"></script>
     <!-- Feature modules -->
-    <script src="scripts/app-auth-handlers.js?v=20260216u"></script>
-    <script src="scripts/app-groups.js?v=20260216u"></script>
-    <script src="scripts/app-riders.js?v=20260216u"></script>
-    <script src="scripts/app-coaches.js?v=20260216u"></script>
-    <script src="scripts/app-rides.js?v=20260216u"></script>
-    <script src="scripts/app-season.js?v=20260216u"></script>
-    <script src="scripts/app-csv.js?v=20260216u"></script>
-    <script src="scripts/app-sidebar.js?v=20260216u"></script>
-    <script src="scripts/app-routes.js?v=20260216u"></script>
-    <script src="scripts/app-races.js?v=20260216u"></script>
-    <script src="scripts/app-assignments.js?v=20260216u"></script>
+    <script src="scripts/app-auth-handlers.js?v=20260217a"></script>
+    <script src="scripts/app-groups.js?v=20260217a"></script>
+    <script src="scripts/app-riders.js?v=20260217a"></script>
+    <script src="scripts/app-coaches.js?v=20260217a"></script>
+    <script src="scripts/app-rides.js?v=20260217a"></script>
+    <script src="scripts/app-season.js?v=20260217a"></script>
+    <script src="scripts/app-csv.js?v=20260217a"></script>
+    <script src="scripts/app-sidebar.js?v=20260217a"></script>
+    <script src="scripts/app-routes.js?v=20260217a"></script>
+    <script src="scripts/app-races.js?v=20260217a"></script>
+    <script src="scripts/app-assignments.js?v=20260217a"></script>
     <!-- Bootstrap (must be last) -->
-    <script src="scripts/app-main.js?v=20260216u"></script>
+    <script src="scripts/app-main.js?v=20260217a"></script>
 </body>
 </html>

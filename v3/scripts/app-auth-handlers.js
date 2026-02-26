@@ -471,8 +471,10 @@
                 // Reset developer mode on logout
                 isDeveloperMode = false;
                 window.isDeveloperMode = false;
+                window._devModeEnteredAt = null;
                 try {
                     localStorage.removeItem(DEV_MODE_STORAGE_KEY);
+                    localStorage.removeItem('trp_dev_mode_entered_at');
                 } catch (e) {
                     console.warn('Error clearing developer mode flag on logout:', e);
                 }
@@ -641,6 +643,7 @@
                 setReadOnlyMode(false, null);
                 isDeveloperMode = false;
                 window.isDeveloperMode = false;
+                stopBannerLockPolling();
                 const devBanner = document.getElementById('developer-mode-banner');
                 if (devBanner) devBanner.style.display = 'none';
                 if (adminEditLockInterval) { clearInterval(adminEditLockInterval); adminEditLockInterval = null; }
@@ -706,6 +709,210 @@
             });
         }
 
+        async function refreshReadOnlyData() {
+            if (!isReadOnlyMode) return;
+            const btn = document.querySelector('#read-only-banner button[onclick*="refreshReadOnlyData"]');
+            if (btn) { btn.disabled = true; btn.textContent = '↻ Fetching...'; }
+            try {
+                if (typeof loadApplicationData === 'function') {
+                    await loadApplicationData();
+                }
+                const textEl = document.getElementById('read-only-banner-text');
+                if (textEl) {
+                    const name = readOnlyLockInfo?.user_name || readOnlyLockInfo?.email || 'another admin';
+                    textEl.textContent = `Read-only mode: ${name} is editing. Data refreshed at ${new Date().toLocaleTimeString()}.`;
+                }
+            } catch (e) {
+                console.warn('Failed to refresh read-only data:', e);
+                alert('Failed to fetch latest data. Please try again.');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '↻ Fetch Latest Data'; }
+            }
+        }
+
+        let _bannerLockPollInterval = null;
+
+        async function reloadFreshDataInDevMode() {
+            if (!isDeveloperMode) return;
+            const btn = document.querySelector('#developer-mode-banner button[onclick*="reloadFreshDataInDevMode"]');
+            if (btn) { btn.disabled = true; btn.textContent = '↻ Reloading...'; }
+            try {
+                const origDev = isDeveloperMode;
+                isDeveloperMode = false;
+                window.isDeveloperMode = false;
+                if (typeof loadApplicationData === 'function') {
+                    await loadApplicationData();
+                }
+                isDeveloperMode = origDev;
+                window.isDeveloperMode = origDev;
+                try {
+                    const dataToSave = {
+                        riders: data.riders, coaches: data.coaches, rides: data.rides,
+                        routes: data.routes, races: data.races || [],
+                        currentRide: data.currentRide, seasonSettings: data.seasonSettings,
+                        autoAssignSettings: data.autoAssignSettings,
+                        coachRoles: data.coachRoles || [], riderRoles: data.riderRoles || []
+                    };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+                } catch (e) {
+                    console.warn('Developer mode: could not snapshot refreshed data to localStorage:', e);
+                }
+                if (typeof renderRiders === 'function') renderRiders();
+                if (typeof renderCoaches === 'function') renderCoaches();
+                if (typeof renderRides === 'function') renderRides();
+                if (typeof renderRoutes === 'function') renderRoutes();
+                alert('Fresh data loaded from Supabase and snapshotted to local storage.');
+            } catch (e) {
+                console.warn('Failed to reload data in dev mode:', e);
+                alert('Failed to fetch latest data. Please try again.');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '↻ Reload from Supabase'; }
+            }
+        }
+
+        function formatLockTime(isoString) {
+            if (!isoString) return '';
+            const d = new Date(isoString);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        function updateBannerUserStatus(lock) {
+            const devStatus = document.getElementById('dev-mode-user-status');
+            const roStatus = document.getElementById('read-only-user-status');
+            const devReqBtn = document.getElementById('dev-mode-request-access-btn');
+            const roReqBtn = document.getElementById('read-only-request-access-btn');
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+
+            const isFreshLock = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) < 3 * 60 * 1000;
+            const isOtherUser = lock && lock.user_id && currentUser && lock.user_id !== currentUser.id;
+
+            if (isFreshLock && isOtherUser) {
+                const name = lock.user_name || lock.email || 'Another admin';
+                const since = formatLockTime(lock.updated_at);
+                const statusText = `| ${name} logged in${since ? ' (active as of ' + since + ')' : ''}`;
+                if (devStatus) devStatus.textContent = statusText;
+                if (roStatus) roStatus.textContent = statusText;
+                if (devReqBtn) devReqBtn.style.display = '';
+                if (roReqBtn) roReqBtn.style.display = '';
+            } else {
+                if (devStatus) devStatus.textContent = '';
+                if (roStatus) roStatus.textContent = '';
+                if (devReqBtn) devReqBtn.style.display = 'none';
+                if (roReqBtn) roReqBtn.style.display = 'none';
+            }
+        }
+
+        async function pollBannerLockStatus() {
+            try {
+                if (typeof getAdminEditLock !== 'function') {
+                    updateBannerUserStatus(null);
+                    return;
+                }
+                const lock = await getAdminEditLock();
+                updateBannerUserStatus(lock);
+            } catch (e) {
+                console.warn('Banner lock status poll error:', e);
+                updateBannerUserStatus(null);
+            }
+        }
+
+        function startBannerLockPolling() {
+            stopBannerLockPolling();
+            updateBannerUserStatus(null);
+            pollBannerLockStatus();
+            _bannerLockPollInterval = setInterval(pollBannerLockStatus, 30000);
+        }
+
+        function stopBannerLockPolling() {
+            if (_bannerLockPollInterval) {
+                clearInterval(_bannerLockPollInterval);
+                _bannerLockPollInterval = null;
+            }
+            updateBannerUserStatus(null);
+        }
+
+        async function requestAccessFromBanner() {
+            if (typeof createTakeOverRequest !== 'function' || typeof getTakeOverRequest !== 'function') {
+                alert('Access request feature is not available.');
+                return;
+            }
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            if (!currentUser) {
+                alert('You must be logged in to request access.');
+                return;
+            }
+            const lock = typeof getAdminEditLock === 'function' ? await getAdminEditLock() : null;
+            if (!lock || !lock.user_id || lock.user_id === currentUser.id) {
+                alert('No other user currently holds the edit lock.');
+                return;
+            }
+            const name = lock.user_name || lock.email || 'the current editor';
+            if (!confirm(`Send an access request to ${name}? They will be prompted to allow or deny your request.`)) return;
+
+            try {
+                await createTakeOverRequest({
+                    requesting_user_id: currentUser.id,
+                    requesting_user_email: currentUser.email || null,
+                    requesting_user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
+                    target_user_id: lock.user_id
+                });
+            } catch (e) {
+                console.warn('Failed to create take-over request:', e);
+                alert('Failed to send access request. Please try again.');
+                return;
+            }
+
+            const overlay = document.getElementById('lock-conflict-overlay');
+            const dialog = document.getElementById('lock-conflict-dialog');
+            const waiting = document.getElementById('lock-conflict-waiting');
+            if (overlay && dialog && waiting) {
+                dialog.style.display = 'none';
+                const waitText = document.getElementById('lock-conflict-waiting-text');
+                if (waitText) waitText.textContent = 'Waiting for ' + name + ' to respond…';
+                waiting.style.display = 'block';
+                overlay.style.display = 'flex';
+
+                const cancelBtn = document.getElementById('lock-conflict-waiting-cancel');
+                if (cancelBtn) {
+                    cancelBtn.onclick = () => {
+                        if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
+                        lockConflictRequestPollTimer = null;
+                        overlay.style.display = 'none';
+                    };
+                }
+
+                if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
+                lockConflictRequestPollTimer = setInterval(async () => {
+                    try {
+                        const req = await getTakeOverRequest();
+                        if (!req) {
+                            clearInterval(lockConflictRequestPollTimer);
+                            lockConflictRequestPollTimer = null;
+                            overlay.style.display = 'none';
+                            alert('Access request was cleared or expired. Try again.');
+                            return;
+                        }
+                        if (req.status === 'approved') {
+                            clearInterval(lockConflictRequestPollTimer);
+                            lockConflictRequestPollTimer = null;
+                            overlay.style.display = 'none';
+                            alert('Access granted! Reloading with edit access...');
+                            window.location.reload();
+                        } else if (req.status === 'denied') {
+                            clearInterval(lockConflictRequestPollTimer);
+                            lockConflictRequestPollTimer = null;
+                            overlay.style.display = 'none';
+                            const reason = req.deny_reason ? ` Reason: ${req.deny_reason}` : '';
+                            alert(`Access denied by ${name}.${reason}`);
+                        }
+                    } catch (e) {
+                        console.warn('Request access poll error:', e);
+                    }
+                }, 1500);
+            }
+        }
+
         function setReadOnlyMode(enabled, lockInfo = null) {
             isReadOnlyMode = enabled === true;
             window.isReadOnlyMode = isReadOnlyMode;
@@ -718,8 +925,11 @@
                     const textEl = document.getElementById('read-only-banner-text');
                     if (textEl) textEl.textContent = `Read-only mode: ${name} is currently logged in with editing access.`;
                     banner.style.display = 'flex';
+                    updateBannerUserStatus(lockInfo);
+                    startBannerLockPolling();
                 } else {
                     banner.style.display = 'none';
+                    stopBannerLockPolling();
                 }
                 requestAnimationFrame(() => { if (typeof updateSidebarTop === 'function') updateSidebarTop(); });
             }
@@ -727,11 +937,27 @@
 
         function isReadOnlyInteractionAllowed(target) {
             if (!target) return false;
+            // Tab navigation
             if (target.closest('.tab')) return true;
             if (target.closest('.mobile-menu-item')) return true;
             if (target.closest('.mobile-menu-button')) return true;
+            // Practice planner navigation
             if (target.closest('#practice-reporting-prev, #practice-reporting-next')) return true;
             if (target.closest('#prior-practice-btn, #next-practice-btn')) return true;
+            if (target.closest('.practice-planner-back-btn')) return true;
+            if (target.closest('.practice-planner-home-btn')) return true;
+            if (target.closest('#practice-planner-home')) return true;
+            // Sidebar expand/collapse/filter/sort
+            if (target.closest('.sidebar-collapsed-strip')) return true;
+            if (target.closest('.sidebar-collapse-btn')) return true;
+            if (target.closest('.sidebar-filter-btn')) return true;
+            if (target.closest('.sidebar-sort')) return true;
+            // sidebar-menu-btn intentionally NOT allowed (contains write operations)
+            // Group toolbar: sort selector and skill visibility checkboxes
+            if (target.closest('.groups-toolbar')) return true;
+            // Calendar picker cells (for viewing past/future practices)
+            if (target.closest('.month-cell.selectable')) return true;
+            // Explicit allow attribute
             if (target.closest('[data-readonly-allow="true"]')) return true;
             return false;
         }
@@ -1053,8 +1279,10 @@
 
             isDeveloperMode = true;
             window.isDeveloperMode = true;
+            window._devModeEnteredAt = new Date().toISOString();
             try {
                 localStorage.setItem(DEV_MODE_STORAGE_KEY, 'true');
+                localStorage.setItem('trp_dev_mode_entered_at', window._devModeEnteredAt);
             } catch (e) {
                 console.warn('Could not persist developer mode flag:', e);
             }
@@ -1079,6 +1307,7 @@
             if (banner) banner.style.display = 'flex';
             const toggle = document.getElementById('developer-mode-toggle');
             if (toggle) toggle.checked = true;
+            startBannerLockPolling();
             requestAnimationFrame(() => { if (typeof updateSidebarTop === 'function') updateSidebarTop(); });
             alert('Developer mode is ON. All changes will be saved only in this browser. Other admins can use the site normally.');
         }
@@ -1099,8 +1328,11 @@
         function exitDeveloperMode() {
             isDeveloperMode = false;
             window.isDeveloperMode = false;
+            window._devModeEnteredAt = null;
+            stopBannerLockPolling();
             try {
                 localStorage.removeItem(DEV_MODE_STORAGE_KEY);
+                localStorage.removeItem('trp_dev_mode_entered_at');
             } catch (e) {
                 console.warn('Could not clear developer mode flag:', e);
             }
@@ -1111,6 +1343,49 @@
             requestAnimationFrame(() => { if (typeof updateSidebarTop === 'function') updateSidebarTop(); });
         }
 
+        async function getOtherUserLoginsDuringDevMode() {
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            const enteredAt = window._devModeEnteredAt;
+            if (!currentUser || !enteredAt) return [];
+            try {
+                const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+                if (!client) return [];
+                const { data, error } = await client
+                    .from('backups')
+                    .select('id, backup_name, backup_type, created_at, created_by')
+                    .eq('backup_type', 'auto_login')
+                    .neq('created_by', currentUser.id)
+                    .gte('created_at', enteredAt)
+                    .order('created_at', { ascending: false });
+                if (error) { console.warn('Error checking login activity:', error); return []; }
+                return data || [];
+            } catch (e) {
+                console.warn('Error checking login activity:', e);
+                return [];
+            }
+        }
+
+        function buildActivityWarning(logins, lockInfo, currentUser) {
+            const parts = [];
+            if (logins.length > 0) {
+                const uniqueUsers = [...new Set(logins.map(l => l.created_by))];
+                const sessionWord = logins.length === 1 ? 'login session' : 'login sessions';
+                const userWord = uniqueUsers.length === 1 ? 'user' : 'users';
+                parts.push(`${logins.length} ${sessionWord} by ${uniqueUsers.length} other ${userWord} occurred while you were in Developer Mode.`);
+            }
+            if (lockInfo) {
+                const now = new Date();
+                const lockUpdatedAt = lockInfo.updated_at ? new Date(lockInfo.updated_at) : null;
+                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < 2 * 60 * 1000;
+                const lockedByOther = lockFresh && lockInfo.user_id && lockInfo.user_id !== currentUser.id;
+                if (lockedByOther) {
+                    const name = lockInfo.user_name || lockInfo.email || 'another admin';
+                    parts.push(`${name} is currently editing the live database.`);
+                }
+            }
+            return parts.join(' ');
+        }
+
         async function handleExitDeveloperMode() {
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             if (!currentUser) {
@@ -1119,33 +1394,96 @@
                 return;
             }
 
-            try {
-                const lock = typeof getAdminEditLock === 'function' ? await getAdminEditLock() : null;
-                const now = new Date();
-                const lockUpdatedAt = lock?.updated_at ? new Date(lock.updated_at) : null;
-                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < 2 * 60 * 1000;
-                const lockedByOther = lockFresh && lock.user_id && lock.user_id !== currentUser.id;
-
-                if (lockedByOther) {
-                    exitDeveloperMode();
-                    showLockConflictDialog(lock);
-                } else {
-                    exitDeveloperMode();
-
-                    if (typeof saveAllDataToSupabase === 'function') {
-                        try {
-                            await saveAllDataToSupabase();
-                        } catch (e) {
-                            console.warn('Failed to save data on dev mode exit:', e);
-                        }
-                    }
-
-                    await initAdminEditLock();
-                }
-            } catch (e) {
-                console.warn('Error checking lock on dev mode exit:', e);
+            const modal = document.getElementById('dev-mode-exit-modal');
+            if (!modal) {
                 exitDeveloperMode();
                 location.reload();
+                return;
+            }
+
+            const activityEl = document.getElementById('dev-mode-exit-activity');
+            if (activityEl) { activityEl.style.display = 'none'; activityEl.textContent = ''; }
+
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+
+            try {
+                const [logins, lock] = await Promise.all([
+                    getOtherUserLoginsDuringDevMode(),
+                    typeof getAdminEditLock === 'function' ? getAdminEditLock() : Promise.resolve(null)
+                ]);
+                window._devModeExitContext = { logins, lock };
+                const warning = buildActivityWarning(logins, lock, currentUser);
+                if (warning && activityEl) {
+                    activityEl.textContent = warning;
+                    activityEl.style.display = 'block';
+                }
+            } catch (e) {
+                console.warn('Error fetching dev mode exit context:', e);
+                window._devModeExitContext = { logins: [], lock: null };
+            }
+        }
+
+        function closeDevModeExitModal() {
+            const modal = document.getElementById('dev-mode-exit-modal');
+            if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
+                modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        function closeDevModeSaveConfirmModal() {
+            const modal = document.getElementById('dev-mode-save-confirm-modal');
+            if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
+                modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true');
+            }
+            const exitModal = document.getElementById('dev-mode-exit-modal');
+            if (exitModal) { exitModal.style.display = 'flex'; exitModal.setAttribute('aria-hidden', 'false'); }
+        }
+
+        async function executeDevModeExit(action) {
+            if (action === 'discard') {
+                closeDevModeExitModal();
+                exitDeveloperMode();
+                try { await initAdminEditLock(); } catch (e) { console.warn('Error acquiring lock on dev mode exit:', e); }
+                location.reload();
+                return;
+            }
+
+            if (action === 'save') {
+                closeDevModeExitModal();
+                const confirmModal = document.getElementById('dev-mode-save-confirm-modal');
+                if (!confirmModal) { return; }
+
+                const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                const ctx = window._devModeExitContext || { logins: [], lock: null };
+                const activityEl = document.getElementById('dev-mode-save-confirm-activity');
+                if (activityEl) {
+                    const warning = currentUser ? buildActivityWarning(ctx.logins, ctx.lock, currentUser) : '';
+                    if (warning) {
+                        activityEl.textContent = warning;
+                        activityEl.style.display = 'block';
+                    } else {
+                        activityEl.style.display = 'none';
+                    }
+                }
+                confirmModal.style.display = 'flex';
+                confirmModal.setAttribute('aria-hidden', 'false');
+                return;
+            }
+
+            if (action === 'force-save') {
+                const confirmModal = document.getElementById('dev-mode-save-confirm-modal');
+                if (confirmModal) { confirmModal.style.display = 'none'; confirmModal.setAttribute('aria-hidden', 'true'); }
+
+                exitDeveloperMode();
+                if (typeof saveAllDataToSupabase === 'function') {
+                    try { await saveAllDataToSupabase(); } catch (e) { console.warn('Failed to save data on dev mode exit:', e); }
+                }
+                try { await initAdminEditLock(); } catch (e) { console.warn('Error acquiring lock on dev mode exit:', e); }
+                location.reload();
+                return;
             }
         }
 
@@ -1188,10 +1526,12 @@
                 if (dev === 'true') {
                     isDeveloperMode = true;
                     window.isDeveloperMode = true;
+                    window._devModeEnteredAt = localStorage.getItem('trp_dev_mode_entered_at') || new Date().toISOString();
                     const banner = document.getElementById('developer-mode-banner');
-                    if (banner) banner.style.display = 'block';
+                    if (banner) banner.style.display = 'flex';
                     const toggle = document.getElementById('developer-mode-toggle');
                     if (toggle) toggle.checked = true;
+                    startBannerLockPolling();
                     requestAnimationFrame(() => { if (typeof updateSidebarTop === 'function') updateSidebarTop(); });
                 }
             } catch (e) {
@@ -1350,6 +1690,7 @@
                 });
                 if (keysToClear.length > 0) {
                     console.log(`Auto-logout: cleared ${keysToClear.length} stale auth token entr${keysToClear.length === 1 ? 'y' : 'ies'} after close.`);
+                    try { localStorage.setItem('trp_auto_logout_at', Date.now().toString()); } catch (e) {}
                 }
             } catch (e) {
                 console.warn('checkAutoLogoutOnOpen error:', e);
@@ -1358,6 +1699,7 @@
             // Also clear developer mode flag
             try {
                 localStorage.removeItem(DEV_MODE_STORAGE_KEY);
+                localStorage.removeItem('trp_dev_mode_entered_at');
             } catch (e) {}
         }
         

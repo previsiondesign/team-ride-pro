@@ -495,6 +495,7 @@
         function closeRoutesManagerModal() {
             const modal = document.getElementById('routes-manager-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
         }
@@ -1193,6 +1194,7 @@
         function closeAddRouteModal() {
             const modal = document.getElementById('add-route-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             hideEmbedCodeTooltip();

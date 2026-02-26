@@ -53,6 +53,7 @@
                     if (banner) banner.style.display = 'flex';
                     const toggle = document.getElementById('developer-mode-toggle');
                     if (toggle) toggle.checked = true;
+                    if (typeof startBannerLockPolling === 'function') startBannerLockPolling();
                     requestAnimationFrame(() => { if (typeof updateSidebarTop === 'function') updateSidebarTop(); });
                 }
             } catch (e) {
@@ -193,13 +194,25 @@
             renderRiders();
             renderCoaches();
             renderRides();
-            renderRoutes();
+            if (typeof renderRoutes === 'function') renderRoutes();
             
             // Team name already applied from loadApplicationData() — no duplicate call needed
 
             // --- STARTUP ROUTING ---
+            let recentAutoLogout = false;
+            try {
+                const autoLogoutAt = localStorage.getItem('trp_auto_logout_at');
+                if (autoLogoutAt) {
+                    const elapsed = Date.now() - parseInt(autoLogoutAt, 10);
+                    if (elapsed < 2 * 60 * 60 * 1000) {
+                        recentAutoLogout = true;
+                    }
+                    localStorage.removeItem('trp_auto_logout_at');
+                }
+            } catch (e) {}
+
             let welcomeShowing = false;
-            if (isFreshLogin && !simplifiedLoginInfo && isWelcomeScreenEnabledForUser()) {
+            if (isFreshLogin && !recentAutoLogout && !simplifiedLoginInfo && isWelcomeScreenEnabledForUser()) {
                 welcomeShowing = showWelcomeScreen();
             }
             if (welcomeShowing) {
@@ -910,11 +923,15 @@
                     if (seasonSettings.lastOpenedRideId !== undefined && seasonSettings.lastOpenedRideId !== null) {
                         data.seasonSettings.lastOpenedRideId = seasonSettings.lastOpenedRideId;
                     }
-                    // Restore last-opened practice so it persists between sessions and across users
-                    const lastId = data.seasonSettings.lastOpenedRideId;
-                    if (lastId != null && data.rides && data.rides.length > 0) {
-                        const ride = data.rides.find(r => String(r.id) === String(lastId) && !r.deleted);
-                        if (ride) data.currentRide = ride.id;
+                    // Only restore lastOpenedRideId on initial load (when no ride is
+                    // selected yet). On background reloads (visibility change) the user
+                    // may be viewing a specific practice and we must not override it.
+                    if (!data.currentRide) {
+                        const lastId = data.seasonSettings.lastOpenedRideId;
+                        if (lastId != null && data.rides && data.rides.length > 0) {
+                            const ride = data.rides.find(r => String(r.id) === String(lastId) && !r.deleted);
+                            if (ride) data.currentRide = ride.id;
+                        }
                     }
                     
                     // Load coachRoles and riderRoles from season settings
@@ -1779,6 +1796,7 @@
                 }
             }
             if (typeof updateSidebarTop === 'function') updateSidebarTop();
+            if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap();
         });
 
         // Size the header spacer on initial load
@@ -2570,12 +2588,23 @@
             }
 
             const errors = [];
+            let aborted = false;
             let progress = 0;
-            const totalSteps = 9; // riders, coaches, rides, routes, races, season settings, auto-assign, color_names, rider_feedback/ride_notes/rider_availability
+            const totalSteps = 9;
 
             function logProgress(step) {
                 progress++;
                 console.log(`saveAllDataToSupabase [${progress}/${totalSteps}]: ${step}`);
+            }
+
+            function checkAuth() {
+                const user = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                if (!user) {
+                    aborted = true;
+                    console.warn('saveAllDataToSupabase: session expired mid-save — aborting remaining steps.');
+                    return false;
+                }
+                return true;
             }
 
             // --- 1. Riders ---
@@ -2596,9 +2625,10 @@
                     }
                 }
             } catch (e) { errors.push(`Riders batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after riders step'); }
 
             // --- 2. Coaches ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving coaches...');
                 if (Array.isArray(data.coaches) && data.coaches.length > 0 && typeof updateCoach === 'function' && typeof createCoach === 'function') {
                     for (const coach of data.coaches) {
@@ -2615,9 +2645,10 @@
                     }
                 }
             } catch (e) { errors.push(`Coaches batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after coaches step'); }
 
             // --- 3. Rides ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving rides...');
                 if (Array.isArray(data.rides) && data.rides.length > 0) {
                     for (const ride of data.rides) {
@@ -2629,9 +2660,10 @@
                     }
                 }
             } catch (e) { errors.push(`Rides batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after rides step'); }
 
             // --- 4. Routes ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving routes...');
                 if (Array.isArray(data.routes) && data.routes.length > 0 && typeof updateRoute === 'function' && typeof createRoute === 'function') {
                     for (const route of data.routes) {
@@ -2650,7 +2682,7 @@
             } catch (e) { errors.push(`Routes batch: ${e.message}`); }
 
             // --- 5. Races ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving races...');
                 if (Array.isArray(data.races) && data.races.length > 0 && typeof updateRace === 'function' && typeof createRace === 'function') {
                     for (const race of data.races) {
@@ -2669,7 +2701,7 @@
             } catch (e) { errors.push(`Races batch: ${e.message}`); }
 
             // --- 6. Season Settings ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving season settings...');
                 if (data.seasonSettings && typeof saveSeasonSettings === 'function') {
                     await saveSeasonSettings(data.seasonSettings);
@@ -2677,7 +2709,7 @@
             } catch (e) { errors.push(`Season settings: ${e.message}`); }
 
             // --- 7. Auto-Assign Settings ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving auto-assign settings...');
                 if (data.autoAssignSettings && typeof saveAutoAssignSettings === 'function') {
                     await saveAutoAssignSettings(data.autoAssignSettings);
@@ -2685,7 +2717,7 @@
             } catch (e) { errors.push(`Auto-assign settings: ${e.message}`); }
 
             // --- 8. Color Names ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving color names...');
                 if (Array.isArray(data.colorNames) && data.colorNames.length > 0) {
                     // Bulk upsert color names
@@ -2701,7 +2733,7 @@
             } catch (e) { errors.push(`Color names: ${e.message}`); }
 
             // --- 9. Rider Feedback, Ride Notes, Rider Availability ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving rider feedback, ride notes, rider availability...');
                 if (Array.isArray(data.riderFeedback) && data.riderFeedback.length > 0) {
                     const { error: fbError } = await client
@@ -2723,7 +2755,10 @@
                 }
             } catch (e) { errors.push(`Feedback/notes/availability: ${e.message}`); }
 
-            if (errors.length > 0) {
+            if (aborted) {
+                console.warn('saveAllDataToSupabase: aborted — session expired mid-save. Some data may not have been written.');
+                alert('Save aborted: your session expired during the save. Please log in again and retry.');
+            } else if (errors.length > 0) {
                 console.error('saveAllDataToSupabase completed with errors:', errors);
                 alert(`Restore saved to Supabase with ${errors.length} error(s). Check the console (F12) for details.\n\nFirst error: ${errors[0]}`);
             } else {
@@ -4659,6 +4694,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             
+            if (typeof clearGroupResizeMemory === 'function') clearGroupResizeMemory(ride.id);
             // Save state before change
             saveAssignmentState(ride);
             
@@ -5123,6 +5159,7 @@
             if (!ride) return;
             if (!confirm('Delete all groups? This will unassign all riders and coaches.')) return;
 
+            if (typeof clearGroupResizeMemory === 'function') clearGroupResizeMemory(ride.id);
             saveAssignmentState(ride);
             ride.groups = [];
             saveRideToDB(ride);

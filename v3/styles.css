@@ -70,6 +70,7 @@
             font-size: 13px;
             font-weight: 500;
             padding: 3px 12px;
+            flex-wrap: wrap;
         }
 
         .mode-banner-readonly {
@@ -84,6 +85,7 @@
 
         .container {
             max-width: 100%;
+            min-width: 800px;
             margin: 5px 10px 10px 10px;
             background: white;
             border-radius: 12px;
@@ -127,7 +129,7 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 11px 20px 6px 20px;
+            padding: 11px 20px 4px 20px;
         }
         .practice-banner-spacer {
             display: block;
@@ -849,7 +851,7 @@
         .roster-grid {
             display: grid;
             gap: 2px;
-            overflow-x: auto;
+            overflow-x: clip;
             padding-bottom: 4px;
         }
 
@@ -865,7 +867,10 @@
             font-size: 11px;
             font-weight: 600;
             color: #546e7a;
-            white-space: nowrap;
+            white-space: normal;
+            position: sticky;
+            top: calc(var(--sticky-top-height, 80px) + 52px);
+            z-index: 8;
         }
 
         .roster-header > div:first-child {
@@ -886,10 +891,18 @@
             padding: 2px 4px;
             border-radius: 3px;
             transition: background-color 0.2s;
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.25;
         }
 
         .roster-header-sortable:hover {
             background-color: #d0d9e0;
+        }
+
+        .skill-label {
+            text-align: center;
+            line-height: 1.2;
         }
 
         .roster-row {
@@ -1940,6 +1953,11 @@
             font-weight: normal;
         }
 
+        .month-cell.practice.planner-excluded.past .day-number {
+            border-color: #bbb;
+            color: #999;
+        }
+
         .month-cell.practice.next .day-number {
             background: #FF9800;
             color: #ffffff;
@@ -1949,6 +1967,27 @@
 
         .month-cell.empty {
             background: transparent;
+        }
+
+        .month-cell.race .day-number {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #4CAF50;
+            border: 2px solid #1976d2;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .month-cell.race.preride .day-number {
+            background: #A5D6A7;
+            border: none;
+            color: #ffffff;
+            font-weight: 600;
         }
 
         .season-calendar-empty {
@@ -3021,6 +3060,11 @@
             align-items: center;
             gap: 8px;
             margin-bottom: 6px;
+            position: sticky;
+            top: var(--sticky-top-height, 80px);
+            z-index: 9;
+            background: #fff;
+            padding: 6px 0;
         }
 
         .group-by-control {
@@ -4070,6 +4114,17 @@
             color: #444;
         }
 
+        .csv-review-bulk-toggle {
+            vertical-align: middle;
+        }
+        .csv-review-bulk-toggle:hover {
+            background: #e0e0e0 !important;
+        }
+
+        tr[data-merge-id] input[type="checkbox"] {
+            accent-color: #1976d2;
+        }
+
         .csv-review-new-record {
             display: flex;
             align-items: center;
@@ -4113,4 +4168,20 @@
         .csv-review-missing-record .record-name {
             flex: 1;
             font-weight: 500;
+        }
+
+        .field-order-item {
+            transition: background 0.15s;
+            user-select: none;
+        }
+        .field-order-item:hover {
+            background: #f0f7ff !important;
+        }
+        .field-order-item:last-child {
+            border-bottom: none !important;
+        }
+        .field-order-up:disabled,
+        .field-order-down:disabled {
+            opacity: 0.3;
+            cursor: default;
         }

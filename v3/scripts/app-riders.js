@@ -821,8 +821,9 @@
         function closePhotoCropDialog() {
             const modal = document.getElementById('photo-crop-modal');
             if (modal) {
-                modal.setAttribute('aria-hidden', 'true');
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
             }
             if (photoCropState.resolve) {
                 photoCropState.resolve(null);
@@ -1637,7 +1638,13 @@
         // --- Column pool: merge static defs with additional CSV fields ---
 
         function getRiderColumnPool() {
-            const pool = [...riderColumnDefs];
+            const pool = riderColumnDefs.map(c => {
+                if (c.key === 'pace' || c.key === 'climbing' || c.key === 'skills') {
+                    const lbl = typeof getSkillSortLabel === 'function' ? getSkillSortLabel(c.key) : c.label;
+                    return { ...c, label: lbl };
+                }
+                return { ...c };
+            });
             const additionalFields = data.seasonSettings?.csvFieldMappings?.riders?.additionalFields || {};
             const existingKeys = new Set(pool.map(c => c.key));
             Object.keys(additionalFields).forEach(fieldName => {
@@ -1655,7 +1662,13 @@
         }
 
         function getCoachColumnPool() {
-            const pool = [...coachColumnDefs];
+            const pool = coachColumnDefs.map(c => {
+                if (c.key === 'pace' || c.key === 'climbing' || c.key === 'skills') {
+                    const lbl = typeof getSkillSortLabel === 'function' ? getSkillSortLabel(c.key) : c.label;
+                    return { ...c, label: lbl };
+                }
+                return { ...c };
+            });
             const additionalFields = data.seasonSettings?.csvFieldMappings?.coaches?.additionalFields || {};
             const existingKeys = new Set(pool.map(c => c.key));
             Object.keys(additionalFields).forEach(fieldName => {
@@ -1713,23 +1726,54 @@
             const titleEl = document.getElementById('display-fields-modal-title');
             if (titleEl) titleEl.textContent = `Choose Display Fields \u2013 ${_displayFieldsType === 'riders' ? 'Riders' : 'Coaches'}`;
 
+            const records = _displayFieldsType === 'riders' ? (data.riders || []) : (data.coaches || []);
+            const alwaysShow = new Set(['name', 'actions']);
+            const populatedFields = new Set();
+            for (const rec of records) {
+                for (const col of pool) {
+                    if (alwaysShow.has(col.key) || populatedFields.has(col.key)) continue;
+                    const val = rec[col.key];
+                    if (val !== undefined && val !== null && val !== '' && val !== 0) {
+                        populatedFields.add(col.key);
+                    }
+                }
+            }
+            const filteredPool = pool.filter(col =>
+                alwaysShow.has(col.key) || populatedFields.has(col.key)
+            );
+
             const list = document.getElementById('display-fields-list');
             if (!list) return;
-            list.innerHTML = '';
 
-            pool.forEach(col => {
+            const table = document.createElement('table');
+            table.style.cssText = 'width: 100%; border-collapse: collapse;';
+            filteredPool.forEach(col => {
                 if (col.key === 'actions') return;
                 const isName = col.key === 'name';
                 const isChecked = isName || visible.has(col.key);
-                const row = document.createElement('label');
-                row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 6px 4px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f0f0f0;';
-                row.innerHTML = `<input type="checkbox" data-col-key="${col.key}" ${isChecked ? 'checked' : ''} ${isName ? 'disabled' : ''}> ${escapeHtml(col.label || col.key)}${col.isAdditional ? ' <span style="color:#999; font-size:11px;">(custom)</span>' : ''}`;
-                list.appendChild(row);
+                const tr = document.createElement('tr');
+                tr.style.cssText = 'border-bottom: 1px solid #f0f0f0; cursor: pointer;';
+                tr.onclick = function(e) {
+                    if (e.target.tagName === 'INPUT') return;
+                    const cb = tr.querySelector('input[type="checkbox"]');
+                    if (cb && !cb.disabled) cb.checked = !cb.checked;
+                };
+                const tdCheck = document.createElement('td');
+                tdCheck.style.cssText = 'padding: 7px 8px; width: 30px; text-align: center; vertical-align: middle;';
+                tdCheck.innerHTML = `<input type="checkbox" data-col-key="${col.key}" ${isChecked ? 'checked' : ''} ${isName ? 'disabled' : ''}>`;
+                const tdLabel = document.createElement('td');
+                tdLabel.style.cssText = 'padding: 7px 8px; text-align: left; font-size: 13px; vertical-align: middle;';
+                tdLabel.innerHTML = `${escapeHtml(col.label || col.key)}${col.isAdditional ? ' <span style="color:#999; font-size:11px;">(custom)</span>' : ''}`;
+                tr.appendChild(tdCheck);
+                tr.appendChild(tdLabel);
+                table.appendChild(tr);
             });
+            list.innerHTML = '';
+            list.appendChild(table);
 
             const modal = document.getElementById('display-fields-modal');
             if (modal) {
-                modal.style.display = '';
+                modal.style.display = 'flex';
                 modal.setAttribute('aria-hidden', 'false');
             }
         }
@@ -1737,6 +1781,7 @@
         function closeDisplayFieldsModal() {
             const modal = document.getElementById('display-fields-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -2162,12 +2207,43 @@
             closeEditCoachModal();
         }
 
+        function updateSkillLabelsInDOM() {
+            if (typeof getSkillSortLabel !== 'function') return;
+            const paceLabel = getSkillSortLabel('pace');
+            const climbLabel = getSkillSortLabel('climbing');
+            const descendLabel = getSkillSortLabel('skills');
+
+            const skillMap = { pace: paceLabel, climbing: climbLabel, skills: descendLabel };
+            Object.entries(skillMap).forEach(([val, label]) => {
+                document.querySelectorAll(`select option[value="${val}"]`).forEach(opt => {
+                    if (opt.closest('#sidebar-riders-sort') || opt.closest('#sidebar-coaches-sort')) return;
+                    opt.textContent = label;
+                });
+            });
+
+            const inputLabelMap = {
+                'edit-rider-fitness': paceLabel, 'edit-rider-climbing': climbLabel, 'edit-rider-skills': descendLabel,
+                'edit-coach-fitness': paceLabel, 'edit-coach-climbing': climbLabel, 'edit-coach-skills': descendLabel
+            };
+            Object.entries(inputLabelMap).forEach(([inputId, label]) => {
+                const input = document.getElementById(inputId);
+                if (input) {
+                    const td = input.closest('td');
+                    if (td && td.previousElementSibling && td.previousElementSibling.classList.contains('modal-edit-label')) {
+                        td.previousElementSibling.textContent = label;
+                    }
+                }
+            });
+        }
+
         function renderRiders() {
+            updateSkillLabelsInDOM();
             const list = document.getElementById('riders-list');
-            // Filter out archived unless toggle is on
-            const visibleRiders = showArchivedRiders ? data.riders : data.riders.filter(r => !r.archived);
-            if (visibleRiders.length === 0) {
-                const archivedCount = data.riders.filter(r => r.archived).length;
+            const activeRiders = data.riders.filter(r => !r.archived);
+            const archivedRidersList = data.riders.filter(r => r.archived);
+            const visibleRiders = showArchivedRiders ? activeRiders : activeRiders;
+            if (activeRiders.length === 0 && (!showArchivedRiders || archivedRidersList.length === 0)) {
+                const archivedCount = archivedRidersList.length;
                 const msg = archivedCount > 0
                     ? `No active riders. ${archivedCount} archived rider(s) hidden. <button class="btn-small secondary" style="margin-left:8px;" onclick="toggleShowArchivedRiders()">Show Archived</button>`
                     : 'No riders yet. Click "Add Team Rider" below to get started.';
@@ -2175,10 +2251,9 @@
                 return;
             }
             
-            // Sort riders
-            let sortedRiders = [...visibleRiders];
-            if (riderSortColumn) {
-                sortedRiders.sort((a, b) => {
+            const _sortRiderArray = (arr) => {
+                if (!riderSortColumn) return [...arr];
+                return [...arr].sort((a, b) => {
                     let aVal, bVal;
                     switch (riderSortColumn) {
                         case 'name':
@@ -2234,7 +2309,9 @@
                     
                     return riderSortDirection === 'asc' ? comparison : -comparison;
                 });
-            }
+            };
+            
+            let sortedRiders = _sortRiderArray(visibleRiders);
             
             const getSortIndicator = (column) => { return ''; };
             
@@ -2259,11 +2336,15 @@
                 // Add resize handle for resizable columns (not actions)
                 const resizeHandle = (key !== 'actions') ? `<div class="column-resize-handle" onmousedown="handleColumnResizeStart(event, 'rider', '${key}')"></div>` : '';
                 
+                const isSkillCol = (key === 'pace' || key === 'climbing' || key === 'skills');
+                const displayLabel = isSkillCol && typeof getSkillSortLabel === 'function'
+                    ? getSkillSortLabel(key === 'pace' ? 'pace' : key, true)
+                    : def.label;
                 if (def.sortable) {
                     const sortKey = key === 'name' ? 'name' : key === 'pace' ? 'pace' : key === 'skills' ? 'skills' : key;
-                    content = `<div class="roster-header-sortable" style="position: relative;" onclick="sortRiders('${sortKey}')" title="Click to sort by ${def.label}" ${draggableAttr} ${dragHandlers}>${def.label}${resizeHandle}</div>`;
+                    content = `<div class="roster-header-sortable" style="position: relative;" onclick="sortRiders('${sortKey}')" title="Click to sort by ${def.label}" ${draggableAttr} ${dragHandlers}>${displayLabel}${resizeHandle}</div>`;
                 } else {
-                    content = `<div style="position: relative;" ${draggableAttr} ${dragHandlers}>${def.label}${resizeHandle}</div>`;
+                    content = `<div style="position: relative;" ${draggableAttr} ${dragHandlers}>${displayLabel}${resizeHandle}</div>`;
                 }
                 return content;
             });
@@ -2368,6 +2449,33 @@
                                 return `<div class="roster-cell" data-label="Phone">
                                     ${formatPhoneForDisplay(rider.phone || '')}
                                 </div>`;
+                            case 'primaryParentPhone':
+                                return `<div class="roster-cell" data-label="Primary Parent Cell">${formatPhoneForDisplay(rider.primaryParentPhone || '')}</div>`;
+                            case 'secondParentPhone':
+                                return `<div class="roster-cell" data-label="Second Parent Cell">${formatPhoneForDisplay(rider.secondParentPhone || '')}</div>`;
+                            case 'alternateContactPhone':
+                                return `<div class="roster-cell" data-label="Alt. Contact Cell">${formatPhoneForDisplay(rider.alternateContactPhone || '')}</div>`;
+                            case 'primaryPhysicianPhone':
+                                return `<div class="roster-cell" data-label="Physician Phone">${formatPhoneForDisplay(rider.primaryPhysicianPhone || '')}</div>`;
+                            case 'email':
+                                const riderEmail = rider.email || '';
+                                return `<div class="roster-cell" data-label="Email">${riderEmail ? `<a href="mailto:${escapeHtml(riderEmail)}" style="color:#1976d2;text-decoration:none;">${escapeHtml(riderEmail)}</a>` : ''}</div>`;
+                            case 'primaryParentEmail':
+                                const ppEmail = rider.primaryParentEmail || '';
+                                return `<div class="roster-cell" data-label="Primary Parent Email">${ppEmail ? `<a href="mailto:${escapeHtml(ppEmail)}" style="color:#1976d2;text-decoration:none;">${escapeHtml(ppEmail)}</a>` : ''}</div>`;
+                            case 'secondParentEmail':
+                                const spEmail = rider.secondParentEmail || '';
+                                return `<div class="roster-cell" data-label="Second Parent Email">${spEmail ? `<a href="mailto:${escapeHtml(spEmail)}" style="color:#1976d2;text-decoration:none;">${escapeHtml(spEmail)}</a>` : ''}</div>`;
+                            case 'bike':
+                                const rBikeManual = rider.bikeManual !== false;
+                                const rBikeElectric = rider.bikeElectric || false;
+                                let rBikeLabel = 'Manual';
+                                if (rBikeManual && rBikeElectric) {
+                                    rBikeLabel = rider.bikePrimary === 'electric' ? 'Both (E)' : 'Both (M)';
+                                } else if (rBikeElectric) {
+                                    rBikeLabel = 'Electric';
+                                }
+                                return `<div class="roster-cell" data-label="Bike">${escapeHtml(rBikeLabel)}</div>`;
                             case 'gender':
                                 return `<div class="roster-cell" data-label="Gender">
                                     ${escapeHtml(genderValue)}
@@ -2420,8 +2528,56 @@
                 }
             });
 
-            // Add "Show Archived" button below the rider roster
-            const archivedCount = data.riders.filter(r => r.archived).length;
+            // Archived riders section: shown at the bottom, sorted by name, separated by a divider
+            const archivedCount = archivedRidersList.length;
+            if (showArchivedRiders && archivedCount > 0) {
+                const sortedArchived = [...archivedRidersList].sort((a, b) => {
+                    const aName = getSortableLastName(a.name || '');
+                    const bName = getSortableLastName(b.name || '');
+                    return aName.localeCompare(bName);
+                });
+                htmlContent += `<div class="roster-archived-divider" style="grid-column: 1 / -1; padding: 10px 16px 6px; margin-top: 12px; border-top: 2px solid #ccc; color: #888; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Archived Riders (${archivedCount})</div>`;
+                sortedArchived.forEach(rider => {
+                    const rowCells = columnOrder.filter(key => key !== 'photo').map(key => {
+                        switch(key) {
+                            case 'name':
+                                const riderRole = getRiderRole(rider.id);
+                                const riderNickname = (rider.nickname || '').trim();
+                                let riderNameWithNickname;
+                                if (riderNickname && rider.nicknameMode === 'firstName') {
+                                    riderNameWithNickname = `${riderNickname} ${rider.lastName || ''}`.trim();
+                                } else if (riderNickname) {
+                                    riderNameWithNickname = riderNickname;
+                                } else {
+                                    riderNameWithNickname = rider.name || '';
+                                }
+                                const riderNameDisplay = riderRole 
+                                    ? `${escapeHtml(riderNameWithNickname)} <span style="font-style: italic; color: #666; margin-left: 8px; font-weight: normal;">${escapeHtml(riderRole)}</span>`
+                                    : escapeHtml(riderNameWithNickname);
+                                const medicalIcon = getMedicalIconHtml(rider.allergiesOrMedicalNeeds || rider.medicalNotes || '');
+                                return `<div class="roster-cell roster-name" data-label="Name">
+                                    ${riderNameDisplay}
+                                    ${medicalIcon}
+                                    ${rider.phone ? `<a href="${formatPhoneForTel(rider.phone)}" class="roster-phone-icon" title="Call ${formatPhoneForDisplay(rider.phone)}" aria-label="Call ${formatPhoneForDisplay(rider.phone)}">📞</a>` : ''}
+                                </div>`;
+                            case 'actions':
+                                return `<div class="roster-actions">
+                                    <button class="btn-small" onclick="openEditRiderModal(${rider.id})">View/Edit Full Record</button>
+                                </div>`;
+                            default:
+                                const additionalVal = rider[key] || '';
+                                const colDef = columnPool.find(c => c.key === key);
+                                return `<div class="roster-cell" data-label="${escapeHtml(colDef ? colDef.label : key)}">${escapeHtml(String(additionalVal))}</div>`;
+                        }
+                    });
+                    htmlContent += `
+                        <div class="roster-row rider-grid-template roster-row-archived" data-rider-id="${rider.id}" style="grid-template-columns: ${gridTemplate};">
+                            ${rowCells.join('')}
+                        </div>
+                    `;
+                });
+            }
+
             if (archivedCount > 0) {
                 htmlContent += `<div style="text-align:center; padding:8px;">
                     <button class="btn-small secondary show-archived-btn" onclick="toggleShowArchivedRiders()">${showArchivedRiders ? 'Hide' : 'Show'} Archived Riders (${archivedCount})</button>
@@ -2429,6 +2585,8 @@
             }
 
             list.innerHTML = htmlContent;
+
+            requestAnimationFrame(() => { if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap(); });
 
             // Update CSV button label based on roster state
             const csvBtn = document.getElementById('btn-csv-riders');

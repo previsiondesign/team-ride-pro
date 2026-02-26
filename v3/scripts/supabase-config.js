@@ -8,11 +8,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_8-l_iq6y5mqzkGPZtMYNvg_oi7n00tY'; // S
 let supabaseClient = null;
 
 function initSupabase() {
-    // Check for environment variables (for deployment) or use direct values
+    if (supabaseClient) return supabaseClient;
+
     const url = window.SUPABASE_URL || SUPABASE_URL || '';
     const key = window.SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || '';
     
-    // Expose credentials on window for use by other scripts (e.g., database.js for Edge Functions)
     if (key && !window.SUPABASE_ANON_KEY) {
         window.SUPABASE_ANON_KEY = key;
     }

@@ -8,6 +8,7 @@
         function closeSeasonSetupModal() {
             const modal = document.getElementById('season-setup-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             seasonSettingsDraft = null;
@@ -27,6 +28,7 @@
         function closePracticesModal() {
             const modal = document.getElementById('practices-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             
@@ -81,6 +83,7 @@
         function closeTimeRangePickerModal() {
             const modal = document.getElementById('time-range-picker-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             currentPracticeIdForTimeRange = null;
@@ -156,6 +159,7 @@
         function closeSeasonDateRangePickerModal() {
             const modal = document.getElementById('season-date-range-picker-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             updateSeasonDateRangeButton();

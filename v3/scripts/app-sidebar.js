@@ -54,7 +54,8 @@
             document.documentElement.style.setProperty('--sidebar-top', sidebarTop + 'px');
         }
 
-        function showSidebars() {
+        function showSidebars(options) {
+            const skipAutoCollapse = options && options.persistent;
             // Only show sidebars when the Practice Planner tab is active
             const ridesTab = document.getElementById('rides-tab');
             if (!ridesTab || !ridesTab.classList.contains('active')) return;
@@ -100,11 +101,10 @@
             if (sidebarRiders) sidebarRiders.style.display = 'flex';
             if (sidebarCoaches) sidebarCoaches.style.display = 'flex';
 
-            // Sync sort dropdowns with current state (remembers user's last choice)
-            const ridersSortEl = document.getElementById('sidebar-riders-sort');
-            const coachesSortEl = document.getElementById('sidebar-coaches-sort');
-            if (ridersSortEl) ridersSortEl.value = sidebarRidersSort;
-            if (coachesSortEl) coachesSortEl.value = sidebarCoachesSort;
+            // Build initial sort options and sync dropdowns
+            refreshSidebarSortDropdown('riders');
+            refreshSidebarSortDropdown('coaches');
+            initSidebarSortLazyUpdate();
 
             applySidebarCollapsedState();
             renderSidebars();
@@ -112,8 +112,8 @@
             // Calculate top after a frame so the banner has rendered
             requestAnimationFrame(() => updateSidebarTop());
 
-            // In attendance mode, keep sidebars permanently expanded
-            if (attendanceMode) return;
+            // In attendance mode or persistent mode, keep sidebars permanently expanded
+            if (attendanceMode || skipAutoCollapse) return;
 
             // Auto-collapse after 5 seconds OR on first user interaction,
             // but keep open any sidebar that has unassigned people.
@@ -555,9 +555,90 @@
             renderSidebars();
         }
 
+        function buildSidebarSortOptions(type) {
+            const paceLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('pace') : 'Endurance Rating';
+            const climbLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('climbing') : 'Climbing Rating';
+            const descendLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('skills') : 'Descending Rating';
+
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            const visibleSkills = (ride && ride.visibleSkills) || ['pace'];
+            const currentSort = type === 'riders' ? sidebarRidersSort : sidebarCoachesSort;
+
+            if (attendanceMode) {
+                return [['firstName', 'First Name'], ['lastName', 'Last Name']];
+            }
+
+            if (type === 'riders') {
+                const opts = [['firstName', 'First Name'], ['lastName', 'Last Name'], ['grade', 'Grade'], ['gender', 'Gender']];
+                if (visibleSkills.includes('pace') || currentSort === 'pace') opts.push(['pace', paceLabel]);
+                if (visibleSkills.includes('climbing') || currentSort === 'climbing') opts.push(['climbing', climbLabel]);
+                if (visibleSkills.includes('skills') || currentSort === 'skills') opts.push(['skills', descendLabel]);
+                if (!opts.some(([v]) => v === 'pace' || v === 'climbing' || v === 'skills')) {
+                    opts.push(['pace', paceLabel], ['climbing', climbLabel], ['skills', descendLabel]);
+                }
+                return opts;
+            } else {
+                const opts = [['firstName', 'First Name'], ['lastName', 'Last Name'], ['level', 'Coach Level']];
+                if (visibleSkills.includes('pace') || currentSort === 'pace') opts.push(['pace', paceLabel]);
+                if (visibleSkills.includes('climbing') || currentSort === 'climbing') opts.push(['climbing', climbLabel]);
+                if (visibleSkills.includes('skills') || currentSort === 'skills') opts.push(['skills', descendLabel]);
+                if (!opts.some(([v]) => v === 'pace' || v === 'climbing' || v === 'skills')) {
+                    opts.push(['pace', paceLabel], ['climbing', climbLabel], ['skills', descendLabel]);
+                }
+                return opts;
+            }
+        }
+
+        function refreshSidebarSortDropdown(type) {
+            const selectEl = document.getElementById(`sidebar-${type}-sort`);
+            if (!selectEl) return;
+            const opts = buildSidebarSortOptions(type);
+            const currentSort = type === 'riders' ? sidebarRidersSort : sidebarCoachesSort;
+            selectEl.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+            selectEl.value = currentSort;
+        }
+
+        function initSidebarSortLazyUpdate() {
+            ['sidebar-riders-sort', 'sidebar-coaches-sort'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || el._lazyUpdateBound) return;
+                el._lazyUpdateBound = true;
+                const type = id.includes('riders') ? 'riders' : 'coaches';
+                el.addEventListener('mousedown', () => refreshSidebarSortDropdown(type));
+                el.addEventListener('focus', () => refreshSidebarSortDropdown(type));
+            });
+        }
+
+        function updateSidebarSortOptions() {
+            const ridersSortEl = document.getElementById('sidebar-riders-sort');
+            const coachesSortEl = document.getElementById('sidebar-coaches-sort');
+
+            if (attendanceMode) {
+                if (ridersSortEl) {
+                    const opts = buildSidebarSortOptions('riders');
+                    ridersSortEl.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+                    if (sidebarRidersSort !== 'firstName' && sidebarRidersSort !== 'lastName') sidebarRidersSort = 'firstName';
+                    ridersSortEl.value = sidebarRidersSort;
+                }
+                if (coachesSortEl) {
+                    const opts = buildSidebarSortOptions('coaches');
+                    coachesSortEl.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+                    if (sidebarCoachesSort !== 'firstName' && sidebarCoachesSort !== 'lastName') sidebarCoachesSort = 'firstName';
+                    coachesSortEl.value = sidebarCoachesSort;
+                }
+            } else {
+                if (ridersSortEl) ridersSortEl.value = sidebarRidersSort;
+                if (coachesSortEl) coachesSortEl.value = sidebarCoachesSort;
+            }
+
+            initSidebarSortLazyUpdate();
+        }
+
         function renderSidebars() {
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride || !sidebarsVisible) return;
+
+            updateSidebarSortOptions();
 
             // Ensure attendance defaults
             const isRefined = isRideRefined(ride);

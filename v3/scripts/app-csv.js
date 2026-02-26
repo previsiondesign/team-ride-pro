@@ -24,8 +24,36 @@
                     openCSVFieldMappingModal(entityType, parsed[0], false);
                 } else {
                     const validation = validateCSVHeadersAgainstSavedMapping(parsed[0], savedMapping);
-                    if (!validation.isMatch) {
-                        openCSVFieldMappingModal(entityType, parsed[0], false, validation);
+                    // Deeper mismatch: check for record fields with data not covered by saved mapping
+                    let deepMismatch = false;
+                    if (validation.isMatch) {
+                        const currentRoster = entityType === 'riders' ? (data.riders || []) : (data.coaches || []);
+                        const activeRoster = currentRoster.filter(r => !r.archived);
+                        const fieldDefs = entityType === 'riders' ? RIDER_FIELDS : COACH_FIELDS;
+                        const requiredKeys = new Set(fieldDefs.filter(f => f.section === 'required').map(f => f.key));
+                        requiredKeys.add('firstName'); requiredKeys.add('lastName'); requiredKeys.add('name');
+                        const systemKeys = new Set(['id', 'archived', 'photo', 'nicknameMode', 'bikeManual', 'bikeElectric', 'bikePrimary', 'created_at', 'updated_at', 'team_id']);
+                        const mappedKeys = new Set([
+                            ...Object.keys(savedMapping.enabledFields || {}),
+                            ...Object.keys(savedMapping.additionalFields || {}),
+                            ...(savedMapping.userCustomFields || [])
+                        ]);
+                        for (const rec of activeRoster) {
+                            for (const key of Object.keys(rec)) {
+                                if (systemKeys.has(key) || requiredKeys.has(key) || mappedKeys.has(key)) continue;
+                                const val = rec[key];
+                                if (val !== undefined && val !== null && val !== '') {
+                                    deepMismatch = true;
+                                    break;
+                                }
+                            }
+                            if (deepMismatch) break;
+                        }
+                    }
+
+                    if (!validation.isMatch || deepMismatch) {
+                        const warningInfo = !validation.isMatch ? validation : null;
+                        openCSVFieldMappingModal(entityType, parsed[0], false, warningInfo);
                     } else {
                         pendingCSVType = entityType;
                         const fieldMapping = {
@@ -35,7 +63,11 @@
                             customFieldNames: savedMapping.customFieldNames || {},
                             nameFormat: savedMapping.nameFormat,
                             unmappedFieldActions: savedMapping.unmappedFieldActions || {},
-                            userCustomFields: savedMapping.userCustomFields || []
+                            mergeColumns: savedMapping.mergeColumns || {},
+                            mergedSourceNames: savedMapping.mergedSourceNames || [],
+                            csvMerges: savedMapping.csvMerges || [],
+                            userCustomFields: savedMapping.userCustomFields || [],
+                            customFieldCsvMaps: savedMapping.customFieldCsvMaps || []
                         };
                         window._csvMappingContext = { type: entityType, csvHeaders: parsed[0], isImport: false };
                         if (entityType === 'riders') {
@@ -506,6 +538,7 @@
         function closeGoogleSheetsModal() {
             const modal = document.getElementById('google-sheets-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -1185,12 +1218,14 @@
         // Map CSV headers to rider field names
         function getRiderHeaderMap(headers) {
             const map = {};
+            // Track split name columns for auto-merge (e.g., "Parent 1 first name" + "Parent 1 last name")
+            const _mergeTracking = {};
             headers.forEach((header, index) => {
                 const normalized = normalizeHeaderName(header);
                 // Map common variations
-                if (normalized.includes('firstname') || normalized === 'firstname') {
+                if ((normalized.includes('firstname') || normalized === 'firstname') && !normalized.includes('parent')) {
                     map['firstName'] = index;
-                } else if (normalized.includes('lastname') || normalized === 'lastname') {
+                } else if ((normalized.includes('lastname') || normalized === 'lastname') && !normalized.includes('parent')) {
                     map['lastName'] = index;
                 } else if (normalized.includes('nickname') || normalized.includes('preferredname') || normalized.includes('goby')) {
                     map['nickname'] = index;
@@ -1216,40 +1251,71 @@
                     map['skills'] = index;
                 } else if (normalized.includes('medicalcondition') || normalized.includes('allerg') || normalized.includes('medicalneeds') || normalized.includes('healthcondition')) {
                     map['allergiesOrMedicalNeeds'] = index;
-                } else if (normalized.includes('primaryparent') && normalized.includes('cell')) {
+                } else if ((normalized.includes('primaryparent') || normalized.includes('parent1')) && (normalized.includes('cell') || normalized.includes('phone')) && !normalized.includes('home')) {
                     map['primaryParentPhone'] = index;
-                } else if (normalized.includes('primaryparent') && normalized.includes('email')) {
+                } else if ((normalized.includes('primaryparent') || normalized.includes('parent1')) && normalized.includes('email')) {
                     map['primaryParentEmail'] = index;
-                } else if (normalized.includes('primaryparent') && normalized.includes('address')) {
+                } else if ((normalized.includes('primaryparent') || normalized.includes('parent1')) && normalized.includes('address')) {
                     map['primaryParentAddress'] = index;
-                } else if (normalized.includes('primaryparentguardian') || (normalized.includes('primaryparent') && normalized.includes('name'))) {
-                    map['primaryParentName'] = index;
-                } else if (normalized.includes('secondparent') && normalized.includes('name')) {
-                    map['secondParentName'] = index;
-                } else if (normalized.includes('secondparent') && normalized.includes('cell')) {
+                } else if (normalized.includes('primaryparentguardian') || (normalized.includes('primaryparent') && normalized.includes('name')) || (normalized.includes('parent1') && (normalized.includes('first') || normalized.includes('last') || normalized.includes('name')))) {
+                    const isFirst = normalized.includes('first');
+                    const isLast = normalized.includes('last');
+                    if (isFirst || isLast) {
+                        if (!_mergeTracking['primaryParentName']) _mergeTracking['primaryParentName'] = {};
+                        if (isFirst) _mergeTracking['primaryParentName'].first = index;
+                        if (isLast) _mergeTracking['primaryParentName'].last = index;
+                    }
+                    if (!map['primaryParentName']) map['primaryParentName'] = index;
+                } else if ((normalized.includes('secondparent') || normalized.includes('parent2')) && (normalized.includes('first') || normalized.includes('last') || normalized.includes('name'))) {
+                    const isFirst = normalized.includes('first');
+                    const isLast = normalized.includes('last');
+                    if (isFirst || isLast) {
+                        if (!_mergeTracking['secondParentName']) _mergeTracking['secondParentName'] = {};
+                        if (isFirst) _mergeTracking['secondParentName'].first = index;
+                        if (isLast) _mergeTracking['secondParentName'].last = index;
+                    }
+                    if (!map['secondParentName']) map['secondParentName'] = index;
+                } else if ((normalized.includes('secondparent') || normalized.includes('parent2')) && (normalized.includes('cell') || normalized.includes('phone')) && !normalized.includes('home')) {
                     map['secondParentPhone'] = index;
-                } else if (normalized.includes('secondparent') && normalized.includes('email')) {
+                } else if ((normalized.includes('secondparent') || normalized.includes('parent2')) && normalized.includes('email')) {
                     map['secondParentEmail'] = index;
                 } else if (normalized.includes('alternate') && normalized.includes('contact') && normalized.includes('name')) {
                     map['alternateContactName'] = index;
                 } else if (normalized.includes('alternate') && normalized.includes('relationship')) {
                     map['alternateContactRelationship'] = index;
-                } else if (normalized.includes('alternate') && normalized.includes('cell')) {
+                } else if (normalized.includes('alternate') && (normalized.includes('cell') || normalized.includes('phone'))) {
                     map['alternateContactPhone'] = index;
                 } else if (normalized.includes('primaryphysician') && !normalized.includes('phone')) {
                     map['primaryPhysician'] = index;
                 } else if (normalized.includes('primaryphysician') && normalized.includes('phone')) {
                     map['primaryPhysicianPhone'] = index;
+                } else if (normalized.includes('physician') && normalized.includes('phone')) {
+                    map['primaryPhysicianPhone'] = index;
+                } else if (normalized.includes('physician') && !normalized.includes('phone')) {
+                    map['primaryPhysician'] = index;
                 } else if (normalized.includes('medicalinsurance') && normalized.includes('company')) {
                     map['medicalInsuranceCompany'] = index;
                 } else if (normalized.includes('medicalinsurance') && (normalized.includes('account') || normalized.includes('number'))) {
                     map['medicalInsuranceAccountNumber'] = index;
-                } else if (normalized.includes('ridegroup') || normalized.includes('racinggroup')) {
+                } else if (normalized.includes('insurance') && !normalized.includes('account') && !normalized.includes('number')) {
+                    if (!map['medicalInsuranceCompany']) map['medicalInsuranceCompany'] = index;
+                } else if (normalized.includes('ridegroup') || normalized.includes('racinggroup') || normalized.includes('racingcategory') || normalized.includes('ridecategory')) {
                     map['racingGroup'] = index;
+                } else if (normalized.includes('school')) {
+                    if (!map['grade']) {} // school is informational, don't auto-map
                 } else if (normalized.includes('note') && !normalized.includes('parent')) {
                     map['notes'] = index;
                 }
             });
+            // Build merge columns: only include entries where BOTH first and last were found
+            const mergeColumns = {};
+            Object.keys(_mergeTracking).forEach(fieldKey => {
+                const t = _mergeTracking[fieldKey];
+                if (t.first !== undefined && t.last !== undefined) {
+                    mergeColumns[fieldKey] = [t.first, t.last];
+                }
+            });
+            map._mergeColumns = mergeColumns;
             return map;
         }
 
@@ -1258,9 +1324,9 @@
             const map = {};
             headers.forEach((header, index) => {
                 const normalized = normalizeHeaderName(header);
-                if (normalized.includes('lastname') || normalized === 'lastname') {
+                if ((normalized.includes('lastname') || normalized === 'lastname') && !normalized.includes('parent')) {
                     map['lastName'] = index;
-                } else if (normalized.includes('firstname') || normalized === 'firstname') {
+                } else if ((normalized.includes('firstname') || normalized === 'firstname') && !normalized.includes('parent')) {
                     map['firstName'] = index;
                 } else if (normalized.includes('nickname') || normalized.includes('preferredname') || normalized.includes('goby')) {
                     map['nickname'] = index;
@@ -1331,6 +1397,7 @@
                     map['notes'] = index;
                 }
             });
+            map._mergeColumns = {};
             return map;
         }
 
@@ -1338,25 +1405,25 @@
         // Required fields always import (defaulted if no CSV header mapped)
         // Optional fields can be toggled on/off during mapping
         const RIDER_FIELDS = [
-            // --- Required fields ---
+            // --- Required fields (shown in the Required Fields section of mapping dialog) ---
             { key: 'name', label: 'Name (Full)', required: true, section: 'required' },
             { key: 'firstName', label: 'First Name', required: true, section: 'required' },
             { key: 'lastName', label: 'Last Name', required: true, section: 'required' },
             { key: 'nickname', label: 'Nickname', required: true, section: 'required', defaultValue: '' },
+            { key: 'email', label: 'Email', required: true, section: 'required', defaultValue: '' },
             { key: 'phone', label: 'Phone Number', required: true, section: 'required', defaultValue: '' },
+            { key: 'address', label: 'Address', required: true, section: 'required', defaultValue: '' },
             { key: 'photo', label: 'Headshot', required: true, section: 'required', defaultValue: '' },
+            { key: 'gender', label: 'Gender', required: true, section: 'required', defaultValue: '' },
+            { key: 'grade', label: 'Grade', required: true, section: 'required', defaultValue: '' },
+            { key: 'birthday', label: 'Birthday', required: true, section: 'required', defaultValue: '' },
+            { key: 'racingGroup', label: 'Racing Group', required: true, section: 'required', defaultValue: '' },
             { key: 'fitness', label: 'Skills: Endurance', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'climbing', label: 'Skills: Climbing', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'skills', label: 'Skills: Descending', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'allergiesOrMedicalNeeds', label: 'Medical Conditions', required: true, section: 'required', defaultValue: '' },
-            // --- Optional fields ---
-            { key: 'email', label: 'Email', required: false, section: 'optional' },
-            { key: 'address', label: 'Address', required: false, section: 'optional' },
-            { key: 'gender', label: 'Gender', required: false, section: 'optional' },
-            { key: 'grade', label: 'Grade', required: false, section: 'optional' },
-            { key: 'birthday', label: 'Birthday', required: false, section: 'optional' },
-            { key: 'racingGroup', label: 'Ride Group', required: false, section: 'optional' },
-            { key: 'notes', label: 'Notes', required: false, section: 'optional' },
+            { key: 'notes', label: 'Notes', required: true, section: 'required', defaultValue: '' },
+            // --- Optional fields (shown in Custom Fields section if data exists but no CSV column) ---
             { key: 'primaryParentName', label: 'Primary Parent Name', required: false, section: 'optional' },
             { key: 'primaryParentPhone', label: 'Primary Parent Phone', required: false, section: 'optional' },
             { key: 'primaryParentEmail', label: 'Primary Parent Email', required: false, section: 'optional' },
@@ -1380,22 +1447,22 @@
             { key: 'firstName', label: 'First Name', required: true, section: 'required' },
             { key: 'lastName', label: 'Last Name', required: true, section: 'required' },
             { key: 'nickname', label: 'Nickname', required: true, section: 'required', defaultValue: '' },
+            { key: 'email', label: 'Email', required: true, section: 'required', defaultValue: '' },
             { key: 'phone', label: 'Phone Number', required: true, section: 'required', defaultValue: '' },
+            { key: 'workPhone', label: 'Work Phone', required: true, section: 'required', defaultValue: '' },
+            { key: 'homePhone', label: 'Home Phone', required: true, section: 'required', defaultValue: '' },
             { key: 'photo', label: 'Headshot', required: true, section: 'required', defaultValue: '' },
+            { key: 'gender', label: 'Gender', required: true, section: 'required', defaultValue: '' },
             { key: 'fitness', label: 'Skills: Endurance', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'climbing', label: 'Skills: Climbing', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'skills', label: 'Skills: Descending', required: true, section: 'required', defaultValue: 'middle' },
             { key: 'allergiesOrMedicalNeeds', label: 'Medical Conditions', required: true, section: 'required', defaultValue: '' },
+            { key: 'notes', label: 'Notes', required: true, section: 'required', defaultValue: '' },
             { key: 'leaderLevel', label: 'Leader Level', required: true, section: 'required', defaultValue: '1' },
             { key: 'bikeManual', label: 'Bike: Manual MTB', required: true, section: 'required', defaultValue: true },
             { key: 'bikeElectric', label: 'Bike: Electric MTB', required: true, section: 'required', defaultValue: false },
             { key: 'bikePrimary', label: 'Bike: Primary Ride', required: true, section: 'required', defaultValue: 'manual' },
             // --- Optional fields ---
-            { key: 'email', label: 'Email', required: false, section: 'optional' },
-            { key: 'workPhone', label: 'Work Phone', required: false, section: 'optional' },
-            { key: 'homePhone', label: 'Home Phone', required: false, section: 'optional' },
-            { key: 'gender', label: 'Gender', required: false, section: 'optional' },
-            { key: 'notes', label: 'Notes', required: false, section: 'optional' },
             { key: 'coachingLicenseLevel', label: 'Coaching License Level', required: false, section: 'optional' },
             { key: 'registered', label: 'Registered', required: false, section: 'optional' },
             { key: 'paid', label: 'Paid', required: false, section: 'optional' },
@@ -1463,7 +1530,7 @@
         }
 
         // Open CSV field mapping modal
-        function openCSVFieldMappingModal(type, csvHeaders, isImport = false, warningInfo = null) {
+        function openCSVFieldMappingModal(type, csvHeaders, isImport = false, warningInfo = null, nameFormatOverride = null) {
             const modal = document.getElementById('csv-field-mapping-modal');
             const title = document.getElementById('csv-mapping-modal-title');
             const container = document.getElementById('csv-field-mapping-container');
@@ -1520,24 +1587,12 @@
             
             // Load saved mapping
             const savedMapping = loadCSVFieldMappingFromStorage(type) || data.seasonSettings?.csvFieldMappings?.[type];
-            const savedNameFormat = savedMapping?.nameFormat || 'split';
-            
-            // Set name format radio button
-            const nameFormatRadio = document.getElementById(savedNameFormat === 'single' ? 'name-format-single' : 'name-format-split');
-            const otherRadio = document.getElementById(savedNameFormat === 'single' ? 'name-format-split' : 'name-format-single');
-            if (savedMapping && nameFormatRadio) {
-                nameFormatRadio.checked = true;
-                if (otherRadio) otherRadio.checked = false;
-            }
+            const nameFormat = 'split';
             
             // Clear containers
             container.innerHTML = '';
             if (optContainer) optContainer.innerHTML = '';
             additionalFieldCounter = 0;
-            
-            // Handle name format
-            const checkedNameFormatRadio = document.querySelector('input[name="name-format"]:checked');
-            const nameFormat = checkedNameFormatRadio ? checkedNameFormatRadio.value : (savedNameFormat || 'split');
             
             // Separate required from optional fields
             const requiredFields = fields.filter(f => f.section === 'required');
@@ -1566,6 +1621,11 @@
             const reqTbody = document.createElement('tbody');
             const mappedColumnIndices = new Set();
             
+            // Detect merge columns (e.g., "Parent 1 first name" + "Parent 1 last name")
+            const autoMerge = autoMap._mergeColumns || {};
+            // Also check saved merge rules
+            const savedMergeColumns = savedMapping?.mergeColumns || {};
+
             requiredFields.forEach(field => {
                 if (nameFormat === 'single' && (field.key === 'firstName' || field.key === 'lastName')) return;
                 if (nameFormat === 'split' && field.key === 'name') return;
@@ -1580,6 +1640,15 @@
                     `<option value="${idx}">${escapeHtml(header || 'Column ' + (idx + 1))}</option>`
                 ).join('');
                 
+                // Add "Combine columns" option if merge columns were detected for this field
+                const mergeColIndices = savedMergeColumns[field.key] || autoMerge[field.key];
+                let mergeOption = '';
+                if (mergeColIndices && mergeColIndices.length === 2) {
+                    const firstHeader = csvHeaders[mergeColIndices[0]] || `Column ${mergeColIndices[0] + 1}`;
+                    const lastHeader = csvHeaders[mergeColIndices[1]] || `Column ${mergeColIndices[1] + 1}`;
+                    mergeOption = `<option value="merge_${mergeColIndices[0]}_${mergeColIndices[1]}">${escapeHtml(firstHeader)} + ${escapeHtml(lastHeader)} (combined)</option>`;
+                }
+
                 const noDataOptions = isImport
                     ? `<option value="keep">No CSV data \u2013 Leave Blank or use Default Values</option>`
                     : `<option value="keep">Not in CSV data \u2013 Keep Existing Data</option>
@@ -1592,6 +1661,7 @@
                         <input type="checkbox" id="${checkboxId}" checked disabled style="display:none;">
                         <select id="${selectId}" onchange="handleRequiredFieldSelectChange(this, '${escapeHtml(field.label)}')">
                             ${noDataOptions}
+                            ${mergeOption}
                             ${csvOptions}
                         </select>
                     </td>
@@ -1603,15 +1673,26 @@
                     if (select) {
                         if (savedUnmappedAction === 'clear') {
                             select.value = 'clear';
+                        } else if (savedMergeColumns[field.key]) {
+                            // Restore saved merge selection
+                            const mc = savedMergeColumns[field.key];
+                            select.value = `merge_${mc[0]}_${mc[1]}`;
                         } else if (savedColumnIdx !== undefined && savedColumnIdx !== null) {
                             select.value = String(savedColumnIdx);
                         } else if (savedUnmappedAction === 'keep') {
                             select.value = 'keep';
+                        } else if (mergeColIndices && mergeColIndices.length === 2) {
+                            // Auto-select the merge option when auto-map detected split columns
+                            select.value = `merge_${mergeColIndices[0]}_${mergeColIndices[1]}`;
                         } else if (autoMappedIdx !== undefined && autoMappedIdx !== null) {
                             select.value = String(autoMappedIdx);
                         }
                         const v = select.value;
-                        if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
+                        if (v && v.startsWith('merge_')) {
+                            const parts = v.replace('merge_', '').split('_');
+                            mappedColumnIndices.add(parseInt(parts[0], 10));
+                            mappedColumnIndices.add(parseInt(parts[1], 10));
+                        } else if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
                             mappedColumnIndices.add(parseInt(v, 10));
                         }
                     }
@@ -1622,154 +1703,637 @@
             reqWrapper.appendChild(reqTable);
             container.appendChild(reqWrapper);
 
-            // --- Optional Fields Section (CSV column checklist) ---
+            // --- Section 2: CSV Data Columns ---
+            // --- Section 3: Custom Fields (on record but not in CSV) ---
             if (optContainer) {
-                const optHeader = document.createElement('div');
-                optHeader.style.cssText = 'padding: 8px 12px; font-weight: bold; font-size: 13px; border-radius: 4px 4px 0 0; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-bottom: none;';
-                optHeader.textContent = 'Other CSV Fields (select which CSV columns to import)';
-                optContainer.appendChild(optHeader);
-
-                const optListWrapper = document.createElement('div');
-                optListWrapper.id = 'csv-optional-fields-list';
-                optListWrapper.style.cssText = 'border: 1px solid #ddd; border-top: none;';
-
-                // Column header row
-                const colHeaderRow = document.createElement('div');
-                colHeaderRow.className = 'csv-optional-field-row';
-                colHeaderRow.style.cssText = 'background: #f9f9f9; font-weight: 600; font-size: 12px; border-bottom: 2px solid #ddd;';
-                colHeaderRow.innerHTML = `
-                    <span style="width:20px;"></span>
-                    <span class="csv-col-name">CSV Column</span>
-                    <span style="width:180px; flex-shrink:0; text-align:center;">Rename Field (optional)</span>
-                `;
-                optListWrapper.appendChild(colHeaderRow);
-
-                // Load saved custom field names and additional fields
                 const savedCustomNames = savedMapping?.customFieldNames || {};
                 const savedAdditionalFields = savedMapping?.additionalFields || {};
                 const savedEnabledFields = savedMapping?.enabledFields || {};
                 const savedMappingMap = savedMapping?.mapping || {};
                 const savedCsvHeaders = savedMapping?.csvHeaders || [];
+                const prevHeadersLower = new Set(savedCsvHeaders.map(h => (h || '').trim().toLowerCase()));
 
-                // Build reverse map: columnIndex -> fieldName for additional fields
-                const savedAdditionalByIdx = {};
-                Object.keys(savedAdditionalFields).forEach(fn => {
-                    savedAdditionalByIdx[savedAdditionalFields[fn]] = fn;
-                });
-
-                // Build set of column indices previously enabled from saved mapping metadata
-                const savedEnabledOptCols = new Set();
-                Object.values(savedAdditionalFields).forEach(idx => {
-                    if (idx !== null && idx !== undefined) savedEnabledOptCols.add(idx);
-                });
-                const optFieldKeys = new Set(fields.filter(f => f.section === 'optional').map(f => f.key));
-                Object.keys(savedEnabledFields).forEach(key => {
-                    if (savedEnabledFields[key] && optFieldKeys.has(key) && savedMappingMap[key] !== undefined && savedMappingMap[key] !== null) {
-                        savedEnabledOptCols.add(savedMappingMap[key]);
-                    }
-                });
-
-                // Also inspect actual rider/coach data to find fields that have values,
-                // so checkboxes reflect reality even if saved mapping is outdated or absent.
                 const currentAutoMap = type === 'riders' ? getRiderHeaderMap(csvHeaders) : getCoachHeaderMap(csvHeaders);
+                const autoMapByIdx = {};
+                Object.keys(currentAutoMap).forEach(key => { autoMapByIdx[currentAutoMap[key]] = key; });
+
+                const optionalFields = fields.filter(f => f.section === 'optional');
+                const requiredKeySet = new Set(fields.filter(f => f.section === 'required').map(f => f.key));
+                requiredKeySet.add('firstName'); requiredKeySet.add('lastName'); requiredKeySet.add('name');
+                const optionalKeySet = new Set(optionalFields.map(f => f.key));
+                const allKnownKeys = new Set([...requiredKeySet, ...optionalKeySet]);
+                const optionalLabelMap = {};
+                optionalFields.forEach(f => { optionalLabelMap[f.key] = f.label; });
+
                 const currentRoster = type === 'riders' ? (data.riders || []) : (data.coaches || []);
                 const activeRoster = currentRoster.filter(r => !r.archived);
-                const fieldsWithData = new Set();
-                const optFieldList = fields.filter(f => f.section === 'optional');
-                optFieldList.forEach(f => {
-                    const hasData = activeRoster.some(rec => {
-                        const val = rec[f.key];
-                        return val !== undefined && val !== null && val !== '';
+
+                // Collect ALL field keys that exist on any record (excluding internal/system keys)
+                const systemKeys = new Set(['id', 'archived', 'photo', 'nicknameMode', 'bikeManual', 'bikeElectric', 'bikePrimary', 'created_at', 'updated_at', 'team_id']);
+                const recordFieldKeys = new Set();
+                activeRoster.forEach(rec => {
+                    Object.keys(rec).forEach(key => {
+                        if (systemKeys.has(key)) return;
+                        const val = rec[key];
+                        if (val !== undefined && val !== null && val !== '') {
+                            recordFieldKeys.add(key);
+                        }
                     });
-                    if (hasData) fieldsWithData.add(f.key);
                 });
-                // Map field keys with data back to CSV column indices via auto-map
-                const colsWithLiveData = new Set();
-                Object.keys(currentAutoMap).forEach(fieldKey => {
-                    if (fieldsWithData.has(fieldKey)) {
-                        colsWithLiveData.add(currentAutoMap[fieldKey]);
+                // Also add custom/additional fields from saved mapping
+                Object.keys(savedAdditionalFields).forEach(fn => recordFieldKeys.add(fn));
+                const savedUserCustomFields = savedMapping?.userCustomFields || [];
+                savedUserCustomFields.forEach(fn => recordFieldKeys.add(fn));
+
+                // Build reverse map: saved mapping field key -> column index
+                const savedFieldToColIdx = {};
+                Object.keys(savedMappingMap).forEach(key => {
+                    if (savedMappingMap[key] !== null && savedMappingMap[key] !== undefined) {
+                        savedFieldToColIdx[key] = savedMappingMap[key];
+                    }
+                });
+                Object.keys(savedAdditionalFields).forEach(fn => {
+                    if (savedAdditionalFields[fn] !== null && savedAdditionalFields[fn] !== undefined) {
+                        savedFieldToColIdx[fn] = savedAdditionalFields[fn];
                     }
                 });
 
-                // Determine which CSV columns are truly new (not in previously saved headers)
-                const prevHeadersLower = new Set(savedCsvHeaders.map(h => (h || '').trim().toLowerCase()));
+                // Build "Map to Field" dropdown options (optional fields + custom record fields)
+                const allMappableFields = [];
+                optionalFields.forEach(f => {
+                    allMappableFields.push({ key: f.key, label: f.label });
+                });
+                recordFieldKeys.forEach(key => {
+                    if (allKnownKeys.has(key)) return;
+                    const label = savedCustomNames[key] || key;
+                    allMappableFields.push({ key: key, label: label, isCustom: true });
+                });
+
                 const isNewColumn = (header) => {
                     if (!savedMapping || !savedCsvHeaders.length) return false;
                     return !prevHeadersLower.has((header || '').trim().toLowerCase());
                 };
 
+                // For each CSV column, determine its best field mapping
+                const csvColFieldMapping = [];
+                const claimedFieldKeys = new Set();
+                csvHeaders.forEach((header, idx) => {
+                    let bestFieldKey = null;
+                    // 1. Check saved mapping (reverse lookup by column index)
+                    Object.keys(savedFieldToColIdx).forEach(fk => {
+                        if (savedFieldToColIdx[fk] === idx && !requiredKeySet.has(fk)) {
+                            bestFieldKey = fk;
+                        }
+                    });
+                    // 2. Fall back to auto-map
+                    if (!bestFieldKey && autoMapByIdx[idx] && !requiredKeySet.has(autoMapByIdx[idx])) {
+                        bestFieldKey = autoMapByIdx[idx];
+                    }
+                    // 3. Check saved custom field names (CSV header name used as field key)
+                    if (!bestFieldKey) {
+                        const headerName = (header || '').trim();
+                        if (recordFieldKeys.has(headerName)) bestFieldKey = headerName;
+                        const renamed = savedCustomNames[headerName];
+                        if (!bestFieldKey && renamed && recordFieldKeys.has(renamed)) bestFieldKey = renamed;
+                    }
+                    if (bestFieldKey && !optionalKeySet.has(bestFieldKey)) claimedFieldKeys.add(bestFieldKey);
+                    csvColFieldMapping.push(bestFieldKey);
+                });
+
+                // Build uncoveredFields (custom fields on record but NOT in CSV) — needed for Section 2 dropdown
+                const uncoveredFields = [];
+                optionalFields.forEach(f => {
+                    if (claimedFieldKeys.has(f.key)) return;
+                    const hasData = activeRoster.some(rec => {
+                        const val = rec[f.key];
+                        return val !== undefined && val !== null && val !== '';
+                    });
+                    const wasEnabled = savedEnabledFields[f.key];
+                    if (hasData || wasEnabled) {
+                        const hadCsvBefore = savedFieldToColIdx[f.key] !== undefined;
+                        uncoveredFields.push({ key: f.key, label: f.label, hadCsvBefore });
+                    }
+                });
+                recordFieldKeys.forEach(key => {
+                    if (allKnownKeys.has(key) || claimedFieldKeys.has(key)) return;
+                    if (uncoveredFields.some(f => f.key === key)) return;
+                    const hadCsvBefore = savedFieldToColIdx[key] !== undefined;
+                    const label = savedCustomNames[key] || key;
+                    uncoveredFields.push({ key: key, label: label, isCustom: true, hadCsvBefore });
+                });
+
+                // --- Render Section 2: CSV Data Columns ---
+                const csvHeader = document.createElement('div');
+                csvHeader.style.cssText = 'padding: 8px 12px; font-weight: bold; font-size: 13px; border-radius: 4px 4px 0 0; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-bottom: none;';
+                csvHeader.textContent = 'CSV Data Columns';
+                optContainer.appendChild(csvHeader);
+
+                const csvTable = document.createElement('table');
+                csvTable.className = 'csv-mapping-required-table';
+                csvTable.id = 'csv-data-columns-table';
+                const csvThead = document.createElement('thead');
+                csvThead.innerHTML = `<tr>
+                    <th style="width:30px;"></th>
+                    <th style="width:200px;">CSV Column</th>
+                    <th>Import Action</th>
+                    <th style="width:180px;">Rename Field</th>
+                </tr>`;
+                csvTable.appendChild(csvThead);
+
+                window._csvMerges = [];
+                let _mergeIdCounter = 0;
+
+                const csvTbody = document.createElement('tbody');
                 csvHeaders.forEach((header, idx) => {
                     const headerName = header || `Column ${idx + 1}`;
-                    const fieldRow = document.createElement('div');
-                    fieldRow.className = 'csv-optional-field-row';
-                    fieldRow.setAttribute('data-col-idx', idx);
-
                     const csvColIsNew = isNewColumn(header);
-                    if (csvColIsNew || (warningInfo && warningInfo.newHeaders && warningInfo.newHeaders.includes(header))) {
-                        fieldRow.classList.add('highlighted');
+                    const hasMatchingRecordField = !!csvColFieldMapping[idx];
+                    const shouldBeChecked = hasMatchingRecordField && !csvColIsNew;
+
+                    const savedRename = savedCustomNames[headerName] || '';
+                    const row = document.createElement('tr');
+                    row.setAttribute('data-csv-col-idx', idx);
+                    if (csvColIsNew) row.style.cssText = 'background: #fff3e0;';
+
+                    const newBadge = csvColIsNew ? `<span style="color:#c62828; font-size:11px; font-weight:700; margin-left:4px;">[NEW]</span>` : '';
+
+                    const selectHtml = `<option value="__skip__"${!shouldBeChecked ? ' selected' : ''}>Do not Import Field</option>
+                        <option value="__keep__"${shouldBeChecked ? ' selected' : ''}>No Mapping / Keep as Field</option>
+                        <option value="__merge__">Merge with\u2026</option>`;
+
+                    row.innerHTML = `
+                        <td style="text-align:center; vertical-align:middle;">
+                            <input type="checkbox" class="csv-data-col-check" data-col-idx="${idx}" ${shouldBeChecked ? 'checked' : ''}>
+                        </td>
+                        <td style="font-size:13px; vertical-align:middle;">${escapeHtml(headerName)}${newBadge}</td>
+                        <td>
+                            <select class="csv-data-col-field" data-col-idx="${idx}" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                                ${selectHtml}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" class="csv-data-col-rename" data-col-idx="${idx}" placeholder="Rename (optional)" value="${escapeHtml(savedRename)}" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                        </td>
+                    `;
+                    csvTbody.appendChild(row);
+                });
+                csvTable.appendChild(csvTbody);
+
+                const csvTableWrapper = document.createElement('div');
+                csvTableWrapper.id = 'csv-optional-fields-list';
+                csvTableWrapper.style.cssText = 'border: 1px solid #ddd; border-top: none; overflow-x: auto;';
+                csvTableWrapper.appendChild(csvTable);
+                optContainer.appendChild(csvTableWrapper);
+
+                function _isColumnInMerge(colIdx) {
+                    return window._csvMerges.some(m => m.colA === colIdx || m.colB === colIdx);
+                }
+
+                function _getAvailableMergeTargets(sourceIdx) {
+                    const targets = [];
+                    csvHeaders.forEach((h, i) => {
+                        if (i === sourceIdx) return;
+                        if (_isColumnInMerge(i)) return;
+                        const row = csvTbody.querySelector(`tr[data-csv-col-idx="${i}"]`);
+                        if (!row) return;
+                        const sel = row.querySelector('.csv-data-col-field');
+                        if (sel && sel.value === '__required__') return;
+                        targets.push({ idx: i, name: h || `Column ${i + 1}` });
+                    });
+                    return targets;
+                }
+
+                function _getHeaderName(colIdx) {
+                    return csvHeaders[colIdx] || `Column ${colIdx + 1}`;
+                }
+
+                function _scoreMergeCandidate(source, target) {
+                    const sWords = source.toLowerCase().split(/\s+/);
+                    const tWords = target.toLowerCase().split(/\s+/);
+                    let score = sWords.filter(w => tWords.includes(w)).length * 2;
+                    const sJoined = sWords.join(' '), tJoined = tWords.join(' ');
+                    if ((sJoined.includes('first') && tJoined.includes('last')) ||
+                        (sJoined.includes('last') && tJoined.includes('first'))) score += 3;
+                    const sNum = sJoined.match(/\d+/), tNum = tJoined.match(/\d+/);
+                    if (sNum && tNum && sNum[0] === tNum[0]) score += 2;
+                    return score;
+                }
+
+                window._showMergePicker = function(sourceIdx) {
+                    document.querySelectorAll('.csv-merge-picker-row').forEach(r => r.remove());
+                    const sourceRow = csvTbody.querySelector(`tr[data-csv-col-idx="${sourceIdx}"]`);
+                    if (!sourceRow) return;
+                    const targets = _getAvailableMergeTargets(sourceIdx);
+                    if (targets.length === 0) {
+                        alert('No other columns available to merge with.');
+                        const sel = sourceRow.querySelector('.csv-data-col-field');
+                        if (sel) sel.value = '__keep__';
+                        return;
+                    }
+                    const sourceName = _getHeaderName(sourceIdx);
+                    targets.forEach(t => { t.score = _scoreMergeCandidate(sourceName, t.name); });
+                    targets.sort((a, b) => b.score - a.score);
+                    const firstTarget = targets[0];
+                    const pickerRow = document.createElement('tr');
+                    pickerRow.className = 'csv-merge-picker-row';
+                    pickerRow.setAttribute('data-merge-source', sourceIdx);
+                    let targetOpts = targets.map(t => `<option value="${t.idx}">${escapeHtml(t.name)}</option>`).join('');
+                    pickerRow.innerHTML = `
+                        <td colspan="4" style="padding: 8px 12px; background: #e3f2fd; border-top: 1px dashed #90caf9;">
+                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px;">
+                                <label style="font-weight:600; white-space:nowrap;">Merge with:</label>
+                                <select class="merge-target-select" style="padding:3px 6px; border:1px solid #90caf9; border-radius:4px; font-size:12px;">
+                                    ${targetOpts}
+                                </select>
+                                <span style="font-weight:600; margin-left:4px;">Order:</span>
+                                <label style="white-space:nowrap;"><input type="radio" name="merge-order-${sourceIdx}" value="ab" checked> ${escapeHtml(sourceName)} + <span class="merge-order-target-name">${escapeHtml(firstTarget.name)}</span></label>
+                                <label style="white-space:nowrap;"><input type="radio" name="merge-order-${sourceIdx}" value="ba"> <span class="merge-order-target-name">${escapeHtml(firstTarget.name)}</span> + ${escapeHtml(sourceName)}</label>
+                                <button type="button" class="btn-small" onclick="_confirmMerge(${sourceIdx})" style="font-size:11px; padding:3px 10px;">Confirm</button>
+                                <button type="button" class="btn-small secondary" onclick="_cancelMergePicker(${sourceIdx})" style="font-size:11px; padding:3px 10px;">Cancel</button>
+                            </div>
+                        </td>
+                    `;
+                    sourceRow.after(pickerRow);
+                    const targetSelect = pickerRow.querySelector('.merge-target-select');
+                    targetSelect.addEventListener('change', () => {
+                        const tName = escapeHtml(targets.find(t => t.idx === parseInt(targetSelect.value, 10))?.name || '');
+                        pickerRow.querySelectorAll('.merge-order-target-name').forEach(sp => { sp.textContent = tName; });
+                    });
+                };
+
+                window._cancelMergePicker = function(sourceIdx) {
+                    document.querySelectorAll(`.csv-merge-picker-row[data-merge-source="${sourceIdx}"]`).forEach(r => r.remove());
+                    const sourceRow = csvTbody.querySelector(`tr[data-csv-col-idx="${sourceIdx}"]`);
+                    if (sourceRow) {
+                        const sel = sourceRow.querySelector('.csv-data-col-field');
+                        if (sel) sel.value = '__keep__';
+                        const cb = sourceRow.querySelector('.csv-data-col-check');
+                        if (cb) cb.checked = true;
+                    }
+                };
+
+                window._confirmMerge = function(sourceIdx) {
+                    const pickerRow = document.querySelector(`.csv-merge-picker-row[data-merge-source="${sourceIdx}"]`);
+                    if (!pickerRow) return;
+                    const targetSelect = pickerRow.querySelector('.merge-target-select');
+                    const targetIdx = parseInt(targetSelect.value, 10);
+                    const orderRadio = pickerRow.querySelector(`input[name="merge-order-${sourceIdx}"]:checked`);
+                    const order = orderRadio ? orderRadio.value : 'ab';
+                    pickerRow.remove();
+
+                    const colA = order === 'ab' ? sourceIdx : targetIdx;
+                    const colB = order === 'ab' ? targetIdx : sourceIdx;
+                    const nameA = _getHeaderName(colA);
+                    const nameB = _getHeaderName(colB);
+                    const mergeId = 'merge_' + (_mergeIdCounter++);
+                    const defaultName = nameA + ' + ' + nameB;
+                    const merge = { id: mergeId, colA, colB, order, defaultName, name: defaultName };
+                    window._csvMerges.push(merge);
+
+                    const sourceRow = csvTbody.querySelector(`tr[data-csv-col-idx="${sourceIdx}"]`);
+                    const targetRow = csvTbody.querySelector(`tr[data-csv-col-idx="${targetIdx}"]`);
+                    [sourceRow, targetRow].forEach(r => {
+                        if (!r) return;
+                        r.style.opacity = '0.4';
+                        r.style.pointerEvents = 'none';
+                        const cb = r.querySelector('.csv-data-col-check');
+                        if (cb) { cb.checked = true; cb.disabled = true; }
+                        const sel = r.querySelector('.csv-data-col-field');
+                        if (sel) { sel.disabled = true; sel.innerHTML = `<option value="__merged__" selected>Merged</option>`; }
+                        const renameInput = r.querySelector('.csv-data-col-rename');
+                        if (renameInput) renameInput.disabled = true;
+                    });
+
+                    const laterRow = (sourceRow && targetRow)
+                        ? (sourceIdx > targetIdx ? sourceRow : targetRow)
+                        : (sourceRow || targetRow);
+                    const mergedRow = document.createElement('tr');
+                    mergedRow.setAttribute('data-merge-id', mergeId);
+                    mergedRow.style.cssText = 'background: #e8f5e9;';
+                    mergedRow.innerHTML = `
+                        <td style="text-align:center; vertical-align:middle;">
+                            <input type="checkbox" class="csv-merge-col-check" data-merge-id="${mergeId}" checked style="accent-color:#1976d2;">
+                        </td>
+                        <td style="font-size:13px; vertical-align:middle;">
+                            <span style="font-weight:600; color:#2e7d32;">\u2295</span> ${escapeHtml(defaultName)}
+                        </td>
+                        <td style="vertical-align:middle;">
+                            <span style="font-size:12px; color:#388e3c; font-weight:500;">Merged Column</span>
+                            <button type="button" class="btn-small secondary" onclick="_unmerge('${mergeId}')" style="margin-left:8px; font-size:11px; padding:2px 8px;">Unmerge</button>
+                        </td>
+                        <td>
+                            <input type="text" class="csv-merge-rename" data-merge-id="${mergeId}" placeholder="Rename (optional)" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                        </td>
+                    `;
+                    if (laterRow && laterRow.nextSibling) {
+                        csvTbody.insertBefore(mergedRow, laterRow.nextSibling);
+                    } else {
+                        csvTbody.appendChild(mergedRow);
                     }
 
-                    const isMissing = warningInfo && warningInfo.missingHeaders && warningInfo.missingHeaders.includes(header);
-                    if (isMissing) fieldRow.classList.add('missing-field');
+                    if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims();
+                };
 
-                    // A column is "in use" if the saved mapping says so OR if actual data exists for the corresponding field
-                    const wasPrevChecked = savedEnabledOptCols.has(idx) || colsWithLiveData.has(idx);
-                    const shouldBeChecked = csvColIsNew ? false : wasPrevChecked;
-                    const savedRename = savedCustomNames[headerName] || savedAdditionalByIdx[idx] || '';
-                    const newLabel = csvColIsNew ? `<span style="color:#e65100; font-size:11px; font-weight:600; margin-right:4px;">[NEW]</span>` : '';
+                function _buildSelectHtml(selectedValue) {
+                    return `<option value="__skip__"${selectedValue === '__skip__' ? ' selected' : ''}>Do not Import Field</option>
+                        <option value="__keep__"${selectedValue === '__keep__' ? ' selected' : ''}>No Mapping / Keep as Field</option>
+                        <option value="__merge__">Merge with\u2026</option>`;
+                }
 
-                    fieldRow.innerHTML = `
-                        <input type="checkbox" class="csv-opt-col-check" data-col-idx="${idx}" data-was-prev="${wasPrevChecked ? '1' : '0'}" ${shouldBeChecked ? 'checked' : ''}>
-                        <span class="csv-col-name">${newLabel}${escapeHtml(headerName)}</span>
-                        <input type="text" class="csv-rename-input" data-col-idx="${idx}" placeholder="Rename Field (optional)" value="${escapeHtml(savedRename)}">
+                window._unmerge = function(mergeId) {
+                    const idx = window._csvMerges.findIndex(m => m.id === mergeId);
+                    if (idx === -1) return;
+                    const merge = window._csvMerges.splice(idx, 1)[0];
+                    const mergedRow = csvTbody.querySelector(`tr[data-merge-id="${mergeId}"]`);
+                    if (mergedRow) mergedRow.remove();
+                    [merge.colA, merge.colB].forEach(ci => {
+                        const r = csvTbody.querySelector(`tr[data-csv-col-idx="${ci}"]`);
+                        if (!r) return;
+                        r.style.opacity = '';
+                        r.style.pointerEvents = '';
+                        const cb = r.querySelector('.csv-data-col-check');
+                        if (cb) { cb.disabled = false; cb.checked = true; }
+                        const sel = r.querySelector('.csv-data-col-field');
+                        if (sel) {
+                            sel.disabled = false;
+                            sel.innerHTML = _buildSelectHtml('__keep__');
+                        }
+                        const renameInput = r.querySelector('.csv-data-col-rename');
+                        if (renameInput) renameInput.disabled = false;
+                    });
+                    if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims();
+                };
+
+                // Restore saved merges from previous session
+                const _savedCsvMerges = savedMapping?.csvMerges || [];
+                _savedCsvMerges.forEach(sm => {
+                    const colARow = csvTbody.querySelector(`tr[data-csv-col-idx="${sm.colA}"]`);
+                    const colBRow = csvTbody.querySelector(`tr[data-csv-col-idx="${sm.colB}"]`);
+                    if (!colARow || !colBRow) return;
+
+                    const mergeId = 'merge_' + (_mergeIdCounter++);
+                    const nameA = _getHeaderName(sm.colA);
+                    const nameB = _getHeaderName(sm.colB);
+                    const defaultName = sm.defaultName || (nameA + ' + ' + nameB);
+                    const merge = { id: mergeId, colA: sm.colA, colB: sm.colB, order: sm.order, defaultName, name: sm.name || defaultName };
+                    window._csvMerges.push(merge);
+
+                    [colARow, colBRow].forEach(r => {
+                        r.style.opacity = '0.4';
+                        r.style.pointerEvents = 'none';
+                        const cb = r.querySelector('.csv-data-col-check');
+                        if (cb) { cb.checked = true; cb.disabled = true; }
+                        const sel = r.querySelector('.csv-data-col-field');
+                        if (sel) { sel.disabled = true; sel.innerHTML = `<option value="__merged__" selected>Merged</option>`; }
+                        const ri = r.querySelector('.csv-data-col-rename');
+                        if (ri) ri.disabled = true;
+                    });
+
+                    const laterRow = (sm.colA > sm.colB ? colARow : colBRow);
+                    const mergedRow = document.createElement('tr');
+                    mergedRow.setAttribute('data-merge-id', mergeId);
+                    mergedRow.style.cssText = 'background: #e8f5e9;';
+                    mergedRow.innerHTML = `
+                        <td style="text-align:center; vertical-align:middle;">
+                            <input type="checkbox" class="csv-merge-col-check" data-merge-id="${mergeId}" checked style="accent-color:#1976d2;">
+                        </td>
+                        <td style="font-size:13px; vertical-align:middle;">
+                            <span style="font-weight:600; color:#2e7d32;">\u2295</span> ${escapeHtml(defaultName)}
+                        </td>
+                        <td style="vertical-align:middle;">
+                            <span style="font-size:12px; color:#388e3c; font-weight:500;">Merged Column</span>
+                            <button type="button" class="btn-small secondary" onclick="_unmerge('${mergeId}')" style="margin-left:8px; font-size:11px; padding:2px 8px;">Unmerge</button>
+                        </td>
+                        <td>
+                            <input type="text" class="csv-merge-rename" data-merge-id="${mergeId}" placeholder="Rename (optional)" value="${escapeHtml(sm.renameTo || '')}" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                        </td>
                     `;
-                    optListWrapper.appendChild(fieldRow);
+                    if (laterRow && laterRow.nextSibling) {
+                        csvTbody.insertBefore(mergedRow, laterRow.nextSibling);
+                    } else {
+                        csvTbody.appendChild(mergedRow);
+                    }
                 });
 
-                optContainer.appendChild(optListWrapper);
+                // Checkbox <-> dropdown sync for CSV Data Columns
+                csvTableWrapper.addEventListener('change', (e) => {
+                    const target = e.target;
+                    const row = target.closest('tr[data-csv-col-idx]');
+                    if (!row) return;
+                    const cb = row.querySelector('.csv-data-col-check');
+                    const sel = row.querySelector('.csv-data-col-field');
+                    if (!cb || !sel) return;
 
-                // --- Custom User Fields Section ---
+                    if (target === sel) {
+                        if (sel.value === '__merge__') {
+                            cb.checked = true;
+                            const colIdx = parseInt(row.getAttribute('data-csv-col-idx'), 10);
+                            _showMergePicker(colIdx);
+                            return;
+                        }
+                        if (sel.value === '__skip__') {
+                            cb.checked = false;
+                        } else {
+                            cb.checked = true;
+                        }
+                    } else if (target === cb) {
+                        if (!cb.checked) {
+                            sel.value = '__skip__';
+                        } else if (sel.value === '__skip__') {
+                            sel.value = '__keep__';
+                        }
+                    }
+                    if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims();
+                });
+
+                // --- Render Section 3: Custom Fields (on record but NOT in CSV) ---
+                // Build CSV column options for the "Map to CSV Column" feature
+                function _buildCsvMapOptions(selectedCsvIdx) {
+                    let opts = `<option value="keep"${selectedCsvIdx == null ? ' selected' : ''}>Keep Current Field and Data</option>`;
+                    opts += `<option disabled style="font-weight:600; color:#555; background:#f0f0f0;">\u2500\u2500 Map to CSV column: \u2500\u2500</option>`;
+                    csvHeaders.forEach((h, idx) => {
+                        const sel = (selectedCsvIdx != null && parseInt(selectedCsvIdx, 10) === idx) ? ' selected' : '';
+                        opts += `<option value="__csvmap_${idx}__"${sel}>\u2192 ${escapeHtml(h || 'Column ' + (idx + 1))}</option>`;
+                    });
+                    opts += `<option value="clear">Delete Current Field and Data</option>`;
+                    return opts;
+                }
+
+                // When a custom field maps to a CSV column, grey out that column in Section 2
+                window._refreshCustomFieldClaims = function() {
+                    const claimedCsvIndices = new Set();
+                    document.querySelectorAll('#csv-custom-fields-table .csv-custom-field-action').forEach(sel => {
+                        const v = sel.value;
+                        if (v && v.startsWith('__csvmap_')) {
+                            claimedCsvIndices.add(parseInt(v.replace('__csvmap_', '').replace('__', ''), 10));
+                        }
+                    });
+                    document.querySelectorAll('#csv-data-columns-table tbody tr[data-csv-col-idx]').forEach(row => {
+                        const ci = parseInt(row.getAttribute('data-csv-col-idx'), 10);
+                        const isClaimed = claimedCsvIndices.has(ci);
+                        if (row.getAttribute('data-merge-id')) return;
+                        if (row.style.opacity === '0.4' && !isClaimed) {
+                            const sel = row.querySelector('.csv-data-col-field');
+                            if (sel && sel.disabled && sel.value === '__merged__') return;
+                        }
+                        row.style.opacity = isClaimed ? '0.4' : '';
+                        row.style.pointerEvents = isClaimed ? 'none' : '';
+                        const cb = row.querySelector('.csv-data-col-check');
+                        if (isClaimed && cb) { cb.checked = false; cb.disabled = true; }
+                        else if (!isClaimed && cb) { cb.disabled = false; }
+                        const sel = row.querySelector('.csv-data-col-field');
+                        if (isClaimed && sel) { sel.disabled = true; }
+                        else if (!isClaimed && sel && sel.value !== '__merged__') { sel.disabled = false; }
+                    });
+                    // Disable already-claimed CSV columns in other custom field dropdowns
+                    document.querySelectorAll('#csv-custom-fields-table .csv-custom-field-action').forEach(sel => {
+                        const currentVal = sel.value;
+                        sel.querySelectorAll('option[value^="__csvmap_"]').forEach(opt => {
+                            const optIdx = parseInt(opt.value.replace('__csvmap_', '').replace('__', ''), 10);
+                            opt.disabled = (claimedCsvIndices.has(optIdx) && currentVal !== opt.value);
+                        });
+                    });
+                };
+
                 const customHeader = document.createElement('div');
                 customHeader.style.cssText = 'padding: 8px 12px; font-weight: bold; font-size: 13px; border-radius: 4px 4px 0 0; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-bottom: none; margin-top: 20px;';
-                customHeader.textContent = 'Custom Fields (add your own fields not in CSV or TeamRide Pro)';
+                customHeader.textContent = 'Custom Fields (on record but not in CSV)';
                 optContainer.appendChild(customHeader);
 
-                const customListWrapper = document.createElement('div');
-                customListWrapper.id = 'csv-custom-fields-list';
-                customListWrapper.style.cssText = 'border: 1px solid #ddd; border-top: none; padding: 8px 12px;';
+                const customTable = document.createElement('table');
+                customTable.className = 'csv-mapping-required-table';
+                customTable.id = 'csv-custom-fields-table';
+                const customThead = document.createElement('thead');
+                customThead.innerHTML = `<tr>
+                    <th style="width:40px; text-align:center;">Import</th>
+                    <th style="width:200px;">Field Name</th>
+                    <th style="width:160px;">Rename</th>
+                    <th>Action</th>
+                </tr>`;
+                customTable.appendChild(customThead);
 
-                const savedUserCustomFields = savedMapping?.userCustomFields || [];
-                savedUserCustomFields.forEach(fieldName => {
-                    customListWrapper.appendChild(_createCustomFieldRow(fieldName));
+                const customTbody = document.createElement('tbody');
+                uncoveredFields.forEach(f => {
+                    const row = document.createElement('tr');
+                    row.setAttribute('data-custom-field-key', f.key);
+                    const statusNote = f.hadCsvBefore ? `<span style="color:#c62828; font-size:11px; font-weight:600; margin-left:6px;">(CSV column removed)</span>` : '';
+                    const labelStyle = f.hadCsvBefore ? 'color:#c62828; font-weight:600;' : '';
+                    const customBadge = f.isCustom ? ` <span style="color:#999; font-size:11px;">(custom)</span>` : '';
+                    row.innerHTML = `
+                        <td style="text-align:center; vertical-align:middle;">
+                            <input type="checkbox" class="csv-custom-field-check" data-field-key="${escapeHtml(f.key)}" checked>
+                        </td>
+                        <td style="font-size:13px; ${labelStyle}">${escapeHtml(f.label)}${customBadge}${statusNote}</td>
+                        <td>
+                            <input type="text" class="csv-custom-field-rename" data-field-key="${escapeHtml(f.key)}" placeholder="Rename (optional)" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                        </td>
+                        <td>
+                            <select class="csv-custom-field-action" data-field-key="${escapeHtml(f.key)}" style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                                ${_buildCsvMapOptions(null)}
+                            </select>
+                        </td>
+                    `;
+                    customTbody.appendChild(row);
+                });
+                customTable.appendChild(customTbody);
+
+                const customTableWrapper = document.createElement('div');
+                customTableWrapper.id = 'csv-custom-fields-list';
+                customTableWrapper.style.cssText = 'border: 1px solid #ddd; border-top: none; overflow-x: auto;';
+                customTableWrapper.appendChild(customTable);
+
+                if (uncoveredFields.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.style.cssText = 'padding: 12px; color: #999; font-size: 13px; font-style: italic; border: 1px solid #ddd; border-top: none;';
+                    emptyMsg.textContent = 'No custom fields found on existing records.';
+                    customTableWrapper.innerHTML = '';
+                    customTableWrapper.appendChild(emptyMsg);
+                }
+
+                optContainer.appendChild(customTableWrapper);
+
+                // Sync checkbox ↔ action dropdown for custom fields, and refresh claims
+                customTableWrapper.addEventListener('change', (e) => {
+                    const target = e.target;
+                    const row = target.closest('tr[data-custom-field-key]');
+                    if (!row) return;
+                    const cb = row.querySelector('.csv-custom-field-check');
+                    const sel = row.querySelector('.csv-custom-field-action');
+                    if (!cb || !sel) return;
+                    if (target === sel) {
+                        cb.checked = (sel.value !== 'clear');
+                    } else if (target === cb) {
+                        if (!cb.checked) sel.value = 'clear';
+                        else if (sel.value === 'clear') sel.value = 'keep';
+                    }
+                    if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims();
                 });
 
+                // Restore saved custom field CSV mappings and unchecked states
+                const _savedCsvMaps = savedMapping?.customFieldCsvMaps || [];
+                const _savedUnmappedActions = savedMapping?.unmappedFieldActions || {};
+                _savedCsvMaps.forEach(sm => {
+                    const row = customTbody.querySelector(`tr[data-custom-field-key="${sm.fromField}"]`);
+                    if (!row) return;
+                    const sel = row.querySelector('.csv-custom-field-action');
+                    if (sel) sel.value = `__csvmap_${sm.csvColIdx}__`;
+                });
+                Object.keys(_savedUnmappedActions).forEach(fk => {
+                    if (_savedUnmappedActions[fk] === 'clear') {
+                        const row = customTbody.querySelector(`tr[data-custom-field-key="${fk}"]`);
+                        if (!row) return;
+                        const cb = row.querySelector('.csv-custom-field-check');
+                        const sel = row.querySelector('.csv-custom-field-action');
+                        if (cb) cb.checked = false;
+                        if (sel) sel.value = 'clear';
+                    }
+                });
+
+                // Refresh custom field claims after initial render
+                setTimeout(() => { if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims(); }, 50);
+
+                // "+ Add Custom Field" button
                 const addBtn = document.createElement('button');
                 addBtn.type = 'button';
                 addBtn.className = 'btn-small secondary';
                 addBtn.style.cssText = 'margin-top: 8px; font-size: 12px;';
                 addBtn.textContent = '+ Add Custom Field';
                 addBtn.onclick = () => {
-                    const list = document.getElementById('csv-custom-fields-list');
-                    if (list) list.insertBefore(_createCustomFieldRow(''), addBtn);
+                    let tbl = document.querySelector('#csv-custom-fields-table tbody');
+                    if (!tbl) {
+                        const wrapper = document.getElementById('csv-custom-fields-list');
+                        if (!wrapper) return;
+                        wrapper.innerHTML = '';
+                        const newTbl = document.createElement('table');
+                        newTbl.className = 'csv-mapping-required-table';
+                        newTbl.id = 'csv-custom-fields-table';
+                        const thead = document.createElement('thead');
+                        thead.innerHTML = `<tr><th style="width:40px; text-align:center;">Import</th><th style="width:200px;">Field Name</th><th style="width:160px;">Rename</th><th>Action</th></tr>`;
+                        newTbl.appendChild(thead);
+                        tbl = document.createElement('tbody');
+                        newTbl.appendChild(tbl);
+                        wrapper.appendChild(newTbl);
+                    }
+                    const newKey = '__new_' + Date.now();
+                    const newRow = document.createElement('tr');
+                    newRow.setAttribute('data-custom-field-key', newKey);
+                    newRow.innerHTML = `
+                        <td style="text-align:center; vertical-align:middle;">
+                            <input type="checkbox" class="csv-custom-field-check" data-field-key="${newKey}" checked>
+                        </td>
+                        <td><input type="text" class="csv-custom-field-name-input" placeholder="Enter field name..." style="width:100%; padding:3px 6px; border:1px solid #ccc; border-radius:4px; font-size:13px;"></td>
+                        <td></td>
+                        <td style="text-align:center;">
+                            <button type="button" class="btn-small secondary" onclick="this.closest('tr').remove()" style="font-size:11px; padding:3px 8px;">Remove</button>
+                        </td>
+                    `;
+                    tbl.appendChild(newRow);
                 };
-                customListWrapper.appendChild(addBtn);
-                optContainer.appendChild(customListWrapper);
+                optContainer.appendChild(addBtn);
             }
 
-            // Grey out mapped columns after a tick
+            // Grey out mapped columns after a tick (required fields only)
             setTimeout(() => { updateRequiredFieldMappedColumns(); }, 30);
-            
-            // Name format change handler
-            const nameFormatRadios = document.querySelectorAll('input[name="name-format"]');
-            nameFormatRadios.forEach(radio => {
-                const newRadio = radio.cloneNode(true);
-                radio.parentNode.replaceChild(newRadio, radio);
-                newRadio.addEventListener('change', () => {
-                    setTimeout(() => {
-                        openCSVFieldMappingModal(type, csvHeaders, isImport, warningInfo);
-                    }, 50);
-                });
-            });
             
             // Show modal
             modal.style.display = 'flex';
@@ -1791,30 +2355,167 @@
         }
 
         function updateRequiredFieldMappedColumns() {
-            const mapped = new Set();
+            // Build map: column index -> label (handles required field single/merge selections)
+            const mappedToLabel = {};
             document.querySelectorAll('#csv-field-mapping-container select').forEach(sel => {
                 const v = sel.value;
-                if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
-                    mapped.add(parseInt(v, 10));
+                if (v && v.startsWith('merge_')) {
+                    const parts = v.replace('merge_', '').split('_');
+                    const row = sel.closest('tr');
+                    const labelCell = row ? row.querySelector('td:first-child') : null;
+                    const label = labelCell ? labelCell.textContent.trim() : 'Required Field';
+                    parts.forEach(p => { mappedToLabel[parseInt(p, 10)] = label + ' (combined)'; });
+                } else if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
+                    const colIdx = parseInt(v, 10);
+                    const row = sel.closest('tr');
+                    const labelCell = row ? row.querySelector('td:first-child') : null;
+                    const label = labelCell ? labelCell.textContent.trim() : `Required Field`;
+                    mappedToLabel[colIdx] = label;
                 }
             });
-            document.querySelectorAll('#csv-optional-fields-list .csv-optional-field-row[data-col-idx]').forEach(row => {
-                const idx = parseInt(row.getAttribute('data-col-idx'), 10);
+
+            const mapped = new Set(Object.keys(mappedToLabel).map(Number));
+
+            document.querySelectorAll('#csv-data-columns-table tbody tr[data-csv-col-idx]').forEach(row => {
+                const idx = parseInt(row.getAttribute('data-csv-col-idx'), 10);
+                const cb = row.querySelector('.csv-data-col-check');
+                const sel = row.querySelector('.csv-data-col-field');
+                const renameInput = row.querySelector('.csv-data-col-rename');
                 if (mapped.has(idx)) {
-                    row.classList.add('greyed-out');
-                    const cb = row.querySelector('.csv-opt-col-check');
-                    if (cb) { cb.checked = false; cb.disabled = true; }
+                    row.style.opacity = '0.5';
+                    if (cb) { cb.checked = true; cb.disabled = true; }
+                    if (sel) {
+                        sel.disabled = true;
+                        const label = mappedToLabel[idx] || 'Required Field';
+                        sel.innerHTML = `<option value="__required__" selected>Mapped to: ${escapeHtml(label)}</option>`;
+                    }
+                    if (renameInput) renameInput.disabled = true;
                 } else {
-                    row.classList.remove('greyed-out');
-                    const cb = row.querySelector('.csv-opt-col-check');
+                    row.style.opacity = '';
                     if (cb) cb.disabled = false;
+                    if (sel) sel.disabled = false;
+                    if (renameInput) renameInput.disabled = false;
+                    if (sel && sel.querySelector('option[value="__required__"]')) {
+                        const hasKeep = sel.querySelector('option[value="__keep__"]');
+                        if (!hasKeep) {
+                            sel.innerHTML = `<option value="__skip__">Do not Import Field</option><option value="__keep__" selected>No Mapping / Keep as Field</option>`;
+                        }
+                    }
                 }
+            });
+            if (typeof _refreshCustomFieldClaims === 'function') _refreshCustomFieldClaims();
+        }
+
+        // --- Field Order Screen ---
+        let _fieldOrderCallback = null;
+
+        function openFieldOrderModal(fieldNames, type, callback) {
+            _fieldOrderCallback = callback;
+            const storageKey = `teamridepro_fieldOrder_${type}`;
+            const savedOrder = (() => {
+                try { return JSON.parse(localStorage.getItem(storageKey)) || []; } catch (e) { return []; }
+            })();
+
+            // Sort fields: use saved order where available, then append new fields
+            const ordered = [];
+            const remaining = new Set(fieldNames);
+            savedOrder.forEach(f => {
+                if (remaining.has(f)) {
+                    ordered.push(f);
+                    remaining.delete(f);
+                }
+            });
+            remaining.forEach(f => ordered.push(f));
+
+            const list = document.getElementById('csv-field-order-list');
+            list.innerHTML = '';
+            ordered.forEach((fname, idx) => {
+                const item = document.createElement('div');
+                item.className = 'field-order-item';
+                item.setAttribute('data-field-name', fname);
+                item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #eee; background:#fff; font-size:13px;';
+                item.innerHTML = `
+                    <span style="flex:1;">${escapeHtml(fname)}</span>
+                    <button type="button" class="btn-small secondary field-order-up" style="padding:2px 8px; font-size:14px; line-height:1;" ${idx === 0 ? 'disabled' : ''}>\u25B2</button>
+                    <button type="button" class="btn-small secondary field-order-down" style="padding:2px 8px; font-size:14px; line-height:1;" ${idx === ordered.length - 1 ? 'disabled' : ''}>\u25BC</button>
+                `;
+                list.appendChild(item);
+            });
+
+            list.addEventListener('click', (e) => {
+                const btn = e.target.closest('.field-order-up, .field-order-down');
+                if (!btn) return;
+                const item = btn.closest('.field-order-item');
+                if (!item) return;
+                const isUp = btn.classList.contains('field-order-up');
+                const sibling = isUp ? item.previousElementSibling : item.nextElementSibling;
+                if (!sibling) return;
+                if (isUp) list.insertBefore(item, sibling);
+                else list.insertBefore(sibling, item);
+                _refreshFieldOrderButtons(list);
+            });
+
+            const modal = document.getElementById('csv-field-order-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
+            }
+        }
+
+        function _refreshFieldOrderButtons(list) {
+            const items = list.querySelectorAll('.field-order-item');
+            items.forEach((item, idx) => {
+                const up = item.querySelector('.field-order-up');
+                const down = item.querySelector('.field-order-down');
+                if (up) up.disabled = (idx === 0);
+                if (down) down.disabled = (idx === items.length - 1);
             });
         }
+
+        window.applyFieldOrder = function() {
+            const list = document.getElementById('csv-field-order-list');
+            const items = list ? list.querySelectorAll('.field-order-item') : [];
+            const order = [];
+            items.forEach(item => {
+                const fname = item.getAttribute('data-field-name');
+                if (fname) order.push(fname);
+            });
+
+            const type = window._csvMappingContext?.type || 'riders';
+            const storageKey = `teamridepro_fieldOrder_${type}`;
+            localStorage.setItem(storageKey, JSON.stringify(order));
+
+            if (!data.seasonSettings) data.seasonSettings = {};
+            if (!data.seasonSettings.fieldOrder) data.seasonSettings.fieldOrder = {};
+            data.seasonSettings.fieldOrder[type] = order;
+            saveData();
+
+            const modal = document.getElementById('csv-field-order-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            }
+
+            if (_fieldOrderCallback) {
+                _fieldOrderCallback(order);
+                _fieldOrderCallback = null;
+            }
+        };
+
+        window.cancelFieldOrderModal = function() {
+            const modal = document.getElementById('csv-field-order-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            }
+            _fieldOrderCallback = null;
+        };
 
         function closeCSVFieldMappingModal() {
             const modal = document.getElementById('csv-field-mapping-modal');
             if (modal) {
+                const focused = modal.contains(document.activeElement) ? document.activeElement : null;
+                if (focused) focused.blur();
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -1823,6 +2524,12 @@
             pendingCSVType = null;
             pendingCSVHeaders = null;
             csvFieldMapping = null;
+            window._csvMerges = null;
+            window._showMergePicker = null;
+            window._confirmMerge = null;
+            window._cancelMergePicker = null;
+            window._unmerge = null;
+            window._refreshCustomFieldClaims = null;
         }
 
         function _createCustomFieldRow(initialName) {
@@ -1931,6 +2638,7 @@
             const customFieldNames = {};
             
             const unmappedFieldActions = {};
+            const mergeColumns = {};
 
             // Process required fields from the new 2-column table
             requiredFields.forEach(field => {
@@ -1944,6 +2652,12 @@
                         enabledFields[field.key] = true;
                         mapping[field.key] = null;
                         unmappedFieldActions[field.key] = val;
+                    } else if (val && val.startsWith('merge_')) {
+                        // Combined columns: "merge_3_4" means concat column 3 + column 4
+                        const parts = val.replace('merge_', '').split('_').map(Number);
+                        enabledFields[field.key] = true;
+                        mapping[field.key] = parts[0]; // primary column stored for backward compat
+                        mergeColumns[field.key] = parts;
                     } else {
                         const columnIdx = val !== '' ? parseInt(val, 10) : null;
                         enabledFields[field.key] = true;
@@ -1952,49 +2666,102 @@
                 }
             });
             
-            // Build auto-map lookup: normalized header -> TeamRide Pro field key
             const optionalFields = fields.filter(f => f.section === 'optional');
-            const autoMap = type === 'riders' ? getRiderHeaderMap(pendingCSVHeaders) : getCoachHeaderMap(pendingCSVHeaders);
-            const autoMapByIdx = {};
-            Object.keys(autoMap).forEach(key => { autoMapByIdx[autoMap[key]] = key; });
+            const optionalKeySet = new Set(optionalFields.map(f => f.key));
 
-            // Process optional CSV columns from the checklist
-            const optRows = document.querySelectorAll('#csv-optional-fields-list .csv-optional-field-row[data-col-idx]');
-            optRows.forEach(row => {
-                const cb = row.querySelector('.csv-opt-col-check');
-                const renameInput = row.querySelector('.csv-rename-input');
+            // Process Section 2: CSV Data Columns
+            const csvDataRows = document.querySelectorAll('#csv-data-columns-table tbody tr[data-csv-col-idx]');
+            csvDataRows.forEach(row => {
+                const cb = row.querySelector('.csv-data-col-check');
                 if (!cb || !cb.checked) return;
-                
-                const colIdx = parseInt(row.getAttribute('data-col-idx'), 10);
-                const headerName = (pendingCSVHeaders[colIdx] || `Column ${colIdx + 1}`).trim();
+
+                const colIdx = parseInt(row.getAttribute('data-csv-col-idx'), 10);
+                const fieldSelect = row.querySelector('.csv-data-col-field');
+                const renameInput = row.querySelector('.csv-data-col-rename');
+                const fieldKey = fieldSelect ? fieldSelect.value : '';
                 const renameTo = renameInput ? renameInput.value.trim() : '';
+                const headerName = (pendingCSVHeaders[colIdx] || `Column ${colIdx + 1}`).trim();
 
-                // Check if this CSV column auto-maps to a known optional TeamRide Pro field
-                const knownFieldKey = autoMapByIdx[colIdx];
-                const knownOptField = knownFieldKey ? optionalFields.find(f => f.key === knownFieldKey) : null;
+                // Skip rows claimed by required/optional fields, merged, or explicitly skipped
+                if (fieldKey === '__required__' || fieldKey === '__skip__' || fieldKey === '__merged__') return;
 
-                if (knownOptField && !renameTo) {
-                    enabledFields[knownOptField.key] = true;
-                    mapping[knownOptField.key] = colIdx;
-                } else {
-                    const fieldName = renameTo || headerName;
-                    additionalFields[fieldName] = colIdx;
-                    if (renameTo) {
-                        customFieldNames[headerName] = renameTo;
-                    }
+                // "No Mapping / Keep as Field" — import as additional field under CSV header name or rename
+                const fieldName = renameTo || headerName;
+                additionalFields[fieldName] = colIdx;
+                if (renameTo) {
+                    customFieldNames[headerName] = renameTo;
                 }
             });
-            
-            // Process user-created custom fields
+
+            // Process merged columns from Section 2 (only if checked)
+            (window._csvMerges || []).forEach(m => {
+                const mergeCheck = document.querySelector(`.csv-merge-col-check[data-merge-id="${m.id}"]`);
+                if (mergeCheck && !mergeCheck.checked) return;
+                const renameInput = document.querySelector(`.csv-merge-rename[data-merge-id="${m.id}"]`);
+                const displayName = (renameInput && renameInput.value.trim()) || m.defaultName;
+                additionalFields[displayName] = m.colA;
+                mergeColumns[displayName] = [m.colA, m.colB];
+            });
+
+            // Process Section 3: Custom Fields (keep/clear/map-to-csv actions)
+            const _customFieldCsvMaps = [];
+            const _customFieldRenames = [];
+            const customActionRows = document.querySelectorAll('#csv-custom-fields-table tbody tr[data-custom-field-key]');
+            customActionRows.forEach(row => {
+                const fieldKey = row.getAttribute('data-custom-field-key');
+                if (!fieldKey || fieldKey.startsWith('__new_')) return;
+                const actionSelect = row.querySelector('.csv-custom-field-action');
+                const action = actionSelect ? actionSelect.value : 'keep';
+                const importCheck = row.querySelector('.csv-custom-field-check');
+                const isImported = importCheck ? importCheck.checked : true;
+                const renameInput = row.querySelector('.csv-custom-field-rename');
+                const renameTo = renameInput ? renameInput.value.trim() : '';
+                const effectiveKey = (renameTo && renameTo !== fieldKey) ? renameTo : fieldKey;
+
+                if (renameTo && renameTo !== fieldKey) {
+                    _customFieldRenames.push({ from: fieldKey, to: renameTo });
+                    customFieldNames[fieldKey] = renameTo;
+                }
+
+                if (!isImported || action === 'clear') {
+                    unmappedFieldActions[fieldKey] = 'clear';
+                } else if (action.startsWith('__csvmap_')) {
+                    const csvColIdx = parseInt(action.replace('__csvmap_', '').replace('__', ''), 10);
+                    _customFieldCsvMaps.push({ fromField: fieldKey, effectiveKey, csvColIdx });
+                    additionalFields[effectiveKey] = csvColIdx;
+                    unmappedFieldActions[fieldKey] = 'csvmap';
+                } else if (optionalKeySet.has(fieldKey)) {
+                    enabledFields[fieldKey] = true;
+                    mapping[fieldKey] = null;
+                    unmappedFieldActions[fieldKey] = action;
+                } else {
+                    unmappedFieldActions[effectiveKey] = action;
+                    additionalFields[effectiveKey] = null;
+                }
+            });
+
+            // Process newly added custom fields from "+ Add Custom Field"
             const userCustomFields = [];
-            document.querySelectorAll('#csv-custom-fields-list .csv-custom-field-row').forEach(row => {
-                const input = row.querySelector('.csv-custom-field-name');
-                const name = input ? input.value.trim() : '';
+            document.querySelectorAll('#csv-custom-fields-table tbody tr[data-custom-field-key]').forEach(row => {
+                const fieldKey = row.getAttribute('data-custom-field-key');
+                if (!fieldKey || !fieldKey.startsWith('__new_')) return;
+                const nameInput = row.querySelector('.csv-custom-field-name-input');
+                const name = nameInput ? nameInput.value.trim() : '';
                 if (name) {
                     userCustomFields.push(name);
                     if (additionalFields[name] === undefined) {
                         additionalFields[name] = null;
                     }
+                }
+            });
+            // Also preserve existing custom field keys that have keep/clear actions (use effective name)
+            customActionRows.forEach(row => {
+                const fieldKey = row.getAttribute('data-custom-field-key');
+                if (fieldKey && !fieldKey.startsWith('__new_') && !optionalKeySet.has(fieldKey)) {
+                    const renameInput = row.querySelector('.csv-custom-field-rename');
+                    const renameTo = renameInput ? renameInput.value.trim() : '';
+                    const effectiveKey = (renameTo && renameTo !== fieldKey) ? renameTo : fieldKey;
+                    if (!userCustomFields.includes(effectiveKey)) userCustomFields.push(effectiveKey);
                 }
             });
 
@@ -2030,56 +2797,87 @@
                 }
             }
             
-            // Collect column indices already mapped to required fields
+            // Collect column indices already mapped to required fields (including merge cols)
             const requiredMappedColIndices = new Set();
             requiredFields.forEach(field => {
                 const select = document.getElementById(`field-${field.key}-column`);
                 if (select) {
                     const v = select.value;
-                    if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
+                    if (v && v.startsWith('merge_')) {
+                        v.replace('merge_', '').split('_').forEach(p => requiredMappedColIndices.add(parseInt(p, 10)));
+                    } else if (v !== '' && v !== 'keep' && v !== 'clear' && !isNaN(parseInt(v, 10))) {
                         requiredMappedColIndices.add(parseInt(v, 10));
                     }
                 }
             });
 
-            // Check for previously-imported fields that are now unchecked and NOT reassigned to a required field
-            const purgeList = [];
+            // Build set of merged source header names → merged display name
+            const mergedSourceToDisplay = new Map();
+            const mergedSourceNames = new Set();
+            (window._csvMerges || []).forEach(m => {
+                const mRenameInput = document.querySelector(`.csv-merge-rename[data-merge-id="${m.id}"]`);
+                const displayName = (mRenameInput && mRenameInput.value.trim()) || m.defaultName;
+                const nameA = (pendingCSVHeaders[m.colA] || '').trim();
+                const nameB = (pendingCSVHeaders[m.colB] || '').trim();
+                if (nameA) { mergedSourceToDisplay.set(nameA, displayName); mergedSourceNames.add(nameA); }
+                if (nameB) { mergedSourceToDisplay.set(nameB, displayName); mergedSourceNames.add(nameB); }
+            });
+
+            // Check for previously-imported fields that are now unchecked
             const purgeFieldKeys = [];
             const purgeAdditionalNames = [];
-            const optRows2 = document.querySelectorAll('#csv-optional-fields-list .csv-optional-field-row[data-col-idx]');
-            optRows2.forEach(row => {
-                const cb = row.querySelector('.csv-opt-col-check');
-                if (cb && !cb.checked && cb.dataset.wasPrev === '1') {
-                    const colIdx = parseInt(row.getAttribute('data-col-idx'), 10);
-                    if (!requiredMappedColIndices.has(colIdx)) {
-                        const headerName = pendingCSVHeaders[colIdx] || `Column ${colIdx + 1}`;
-                        purgeList.push(headerName);
-                        // Determine the field key for this column
-                        const knownKey = autoMapByIdx[colIdx];
-                        if (knownKey) {
-                            purgeFieldKeys.push(knownKey);
-                        }
-                        // Check if it was an additional/custom field
-                        const savedMapping = loadCSVFieldMappingFromStorage(type) || data.seasonSettings?.csvFieldMappings?.[type];
-                        if (savedMapping?.additionalFields) {
-                            Object.keys(savedMapping.additionalFields).forEach(fn => {
-                                if (savedMapping.additionalFields[fn] === colIdx) {
-                                    purgeAdditionalNames.push(fn);
-                                }
-                            });
-                        }
+            const prevSavedMapping = loadCSVFieldMappingFromStorage(type) || data.seasonSettings?.csvFieldMappings?.[type];
+            const prevMappedFieldKeys = new Set();
+            if (prevSavedMapping) {
+                Object.keys(prevSavedMapping.enabledFields || {}).forEach(k => {
+                    if (prevSavedMapping.enabledFields[k]) prevMappedFieldKeys.add(k);
+                });
+                Object.keys(prevSavedMapping.additionalFields || {}).forEach(k => prevMappedFieldKeys.add(k));
+            }
+            const currentMappedFieldKeys = new Set(Object.keys(enabledFields).filter(k => enabledFields[k]));
+            Object.keys(additionalFields).forEach(k => currentMappedFieldKeys.add(k));
+
+            const removedItems = [];
+            const mergedItems = [];
+            prevMappedFieldKeys.forEach(key => {
+                if (!currentMappedFieldKeys.has(key) && !unmappedFieldActions[key]) {
+                    if (mergedSourceToDisplay.has(key)) {
+                        mergedItems.push(key);
+                    } else {
+                        removedItems.push(key);
+                    }
+                    if (optionalKeySet.has(key)) {
+                        purgeFieldKeys.push(key);
+                    } else {
+                        purgeAdditionalNames.push(key);
                     }
                 }
             });
-            if (purgeList.length > 0) {
-                const list = purgeList.map(n => `  • ${n}`).join('\n');
-                const ok = confirm(
-                    `The following previously imported fields are now unchecked and will be removed from all rider/coach cards. Their data will be purged from the database:\n\n${list}\n\n` +
-                    `You can restore this data later by re-importing from CSV.\n\nContinue?`
-                );
-                if (!ok) return;
 
-                // Purge the field data from all existing records
+            // Also purge merged source column names from records even without a previous mapping
+            mergedSourceNames.forEach(name => {
+                if (!purgeAdditionalNames.includes(name) && !purgeFieldKeys.includes(name)) {
+                    purgeAdditionalNames.push(name);
+                }
+            });
+
+            if (removedItems.length > 0 || mergedItems.length > 0) {
+                let dialogMsg = '';
+                if (removedItems.length > 0) {
+                    const removedList = removedItems.map(n => `  \u2022 ${n}`).join('\n');
+                    dialogMsg += `The following previously imported fields are now unchecked and will be removed from all rider/coach cards. Their data will be purged from the database:\n\n${removedList}\n\n`;
+                }
+                if (mergedItems.length > 0) {
+                    const mergedList = mergedItems.map(n => `  \u2022 ${n}  \u2192  merged into "${mergedSourceToDisplay.get(n)}"`).join('\n');
+                    dialogMsg += `The following fields have been merged into combined columns and their separate entries will be replaced:\n\n${mergedList}\n\n`;
+                }
+                dialogMsg += 'Continue?';
+                const ok = confirm(dialogMsg);
+                if (!ok) return;
+            }
+
+            // Purge field data from all existing records (removed + merged source columns)
+            if (purgeFieldKeys.length > 0 || purgeAdditionalNames.length > 0) {
                 const records = type === 'riders' ? data.riders : data.coaches;
                 if (Array.isArray(records)) {
                     records.forEach(record => {
@@ -2099,6 +2897,67 @@
                 }
             }
 
+            // Rename custom fields on existing records
+            if (_customFieldRenames.length > 0) {
+                const records = type === 'riders' ? data.riders : data.coaches;
+                if (Array.isArray(records)) {
+                    _customFieldRenames.forEach(({ from, to }) => {
+                        records.forEach(record => {
+                            if (record.hasOwnProperty(from)) {
+                                record[to] = record[from];
+                                delete record[from];
+                            }
+                        });
+                    });
+                    saveData();
+                }
+            }
+
+            // Process "csvmap" actions: rename custom field to the effective key (keeps existing data
+            // so the review screen can compare it to incoming CSV data for that column)
+            if (_customFieldCsvMaps.length > 0) {
+                const records = type === 'riders' ? data.riders : data.coaches;
+                if (Array.isArray(records)) {
+                    _customFieldCsvMaps.forEach(({ fromField, effectiveKey }) => {
+                        if (effectiveKey !== fromField) {
+                            records.forEach(record => {
+                                if (record.hasOwnProperty(fromField)) {
+                                    record[effectiveKey] = record[fromField];
+                                    delete record[fromField];
+                                }
+                            });
+                        }
+                    });
+                    saveData();
+                }
+            }
+
+            // Process "clear" actions: delete field data from all records
+            Object.keys(unmappedFieldActions).forEach(fieldKey => {
+                if (unmappedFieldActions[fieldKey] !== 'clear') return;
+                const records = type === 'riders' ? data.riders : data.coaches;
+                if (Array.isArray(records)) {
+                    records.forEach(record => {
+                        if (record.hasOwnProperty(fieldKey)) {
+                            if (optionalKeySet.has(fieldKey)) {
+                                record[fieldKey] = '';
+                            } else {
+                                delete record[fieldKey];
+                            }
+                        }
+                    });
+                }
+            });
+
+            const savedCsvMerges = (window._csvMerges || []).map(m => ({
+                colA: m.colA, colB: m.colB, order: m.order,
+                defaultName: m.defaultName, name: m.name,
+                renameTo: (() => {
+                    const ri = document.querySelector(`.csv-merge-rename[data-merge-id="${m.id}"]`);
+                    return ri ? ri.value.trim() : '';
+                })()
+            }));
+
             const fieldMapping = {
                 mapping,
                 enabledFields,
@@ -2106,7 +2965,11 @@
                 customFieldNames,
                 nameFormat,
                 unmappedFieldActions,
-                userCustomFields
+                mergeColumns,
+                mergedSourceNames: [...mergedSourceNames],
+                csvMerges: savedCsvMerges,
+                userCustomFields,
+                customFieldCsvMaps: _customFieldCsvMaps
             };
             
             // Save mapping
@@ -2119,7 +2982,11 @@
                 customFieldNames,
                 nameFormat,
                 unmappedFieldActions,
+                mergeColumns,
+                mergedSourceNames: [...mergedSourceNames],
+                csvMerges: savedCsvMerges,
                 userCustomFields,
+                customFieldCsvMaps: _customFieldCsvMaps,
                 csvHeaders: [...pendingCSVHeaders],
                 lastUsed: new Date().toISOString()
             };
@@ -2133,30 +3000,54 @@
             const csvData = pendingCSVData;
             
             closeCSVFieldMappingModal();
-            
-            if (isImport) {
-                if (csvType === 'riders') {
-                    await processRidersCSVImportWithMapping(csvData, fieldMapping);
-                } else {
-                    await processCoachesCSVImportWithMapping(csvData, fieldMapping);
+
+            // Collect non-name field names for the field order screen
+            const nameKeys = new Set(['first_name', 'last_name', 'name', 'rider_name', 'coach_name']);
+            const orderableFields = [];
+            const allFields = csvType === 'riders' ? RIDER_FIELDS : COACH_FIELDS;
+            allFields.forEach(f => {
+                if (!nameKeys.has(f.key) && enabledFields[f.key]) {
+                    orderableFields.push(customFieldNames[f.key] || f.label);
                 }
-            } else {
-                if (csvType === 'riders') {
-                    await updateRidersFromCSVWithMapping(csvData, fieldMapping);
-                } else {
-                    await updateCoachesFromCSVWithMapping(csvData, fieldMapping);
+            });
+            Object.keys(additionalFields).forEach(name => {
+                if (!nameKeys.has(name.toLowerCase().replace(/\s+/g, '_'))) {
+                    if (!orderableFields.includes(name)) orderableFields.push(name);
                 }
-            }
+            });
+            userCustomFields.forEach(name => {
+                if (!orderableFields.includes(name)) orderableFields.push(name);
+            });
+
+            openFieldOrderModal(orderableFields, csvType, async (fieldOrder) => {
+                fieldMapping.fieldOrder = fieldOrder;
+                if (isImport) {
+                    if (csvType === 'riders') {
+                        await processRidersCSVImportWithMapping(csvData, fieldMapping);
+                    } else {
+                        await processCoachesCSVImportWithMapping(csvData, fieldMapping);
+                    }
+                } else {
+                    if (csvType === 'riders') {
+                        await updateRidersFromCSVWithMapping(csvData, fieldMapping);
+                    } else {
+                        await updateCoachesFromCSVWithMapping(csvData, fieldMapping);
+                    }
+                }
+            });
         }
 
         // Helper function to get value from CSV row using custom mapping
-        function getValueFromMapping(row, fieldName, mapping) {
+        function getValueFromMapping(row, fieldName, mapping, mergeColumnsMap) {
+            // Check for merge columns first (e.g., first name + last name combined)
+            if (mergeColumnsMap && mergeColumnsMap[fieldName]) {
+                const colIndices = mergeColumnsMap[fieldName];
+                const parts = colIndices.map(ci => (row[ci] || '').trim()).filter(Boolean);
+                return parts.join(' ');
+            }
             const idx = mapping[fieldName];
-            // If mapping is null, it means "None" was selected - return empty string
             if (idx === null) return '';
-            // If mapping is undefined, field wasn't mapped - return empty string
             if (idx === undefined) return '';
-            // Otherwise, get value from CSV column
             return (row[idx] || '').trim();
         }
 
@@ -2172,6 +3063,8 @@
                 const additionalFields = fieldMapping.additionalFields || {};
                 const mapping = fieldMapping.mapping;
                 const enabledFields = fieldMapping.enabledFields;
+                const _merge = fieldMapping.mergeColumns || {};
+                const _mergedSourceNames = new Set(fieldMapping.mergedSourceNames || []);
                 
                 // Parse CSV
                 const riders = parseCSV(ridersText);
@@ -2192,9 +3085,8 @@
                     let lastName = '';
                     
                     if (nameFormat === 'single') {
-                        name = getValueFromMapping(row, 'name', mapping);
+                        name = getValueFromMapping(row, 'name', mapping, _merge);
                         if (!name) continue;
-                        // Try to split name into first/last for compatibility
                         const nameParts = name.trim().split(/\s+/);
                         if (nameParts.length > 1) {
                             lastName = nameParts.pop() || '';
@@ -2203,14 +3095,14 @@
                             firstName = name;
                         }
                     } else {
-                        firstName = getValueFromMapping(row, 'firstName', mapping);
-                        lastName = getValueFromMapping(row, 'lastName', mapping);
+                        firstName = getValueFromMapping(row, 'firstName', mapping, _merge);
+                        lastName = getValueFromMapping(row, 'lastName', mapping, _merge);
                         if (!firstName && !lastName) continue;
                         name = `${firstName} ${lastName}`.trim();
                     }
 
                     // Get gender and determine default photo
-                    const gender = normalizeGenderValue(getValueFromMapping(row, 'gender', mapping));
+                    const gender = normalizeGenderValue(getValueFromMapping(row, 'gender', mapping, _merge));
 
                     let defaultPhoto = '';
                     if (!gender) {
@@ -2223,13 +3115,13 @@
                         defaultPhoto = 'assets/nonbinary_default.png';
                     }
 
-                    // Build rider object using mapping
-                    // Helper to get field value - use mapping if field is enabled OR if it has a mapping (for backwards compatibility)
+                    // Helper to get field value (merge-aware)
                     const getFieldValue = (fieldKey, defaultValue = '', transform = null) => {
                         const hasMapping = mapping[fieldKey] !== undefined && mapping[fieldKey] !== null;
+                        const hasMerge = _merge[fieldKey] !== undefined;
                         const isEnabled = enabledFields[fieldKey];
-                        if (isEnabled || hasMapping) {
-                            const value = getValueFromMapping(row, fieldKey, mapping);
+                        if (isEnabled || hasMapping || hasMerge) {
+                            const value = getValueFromMapping(row, fieldKey, mapping, _merge);
                             return transform ? transform(value) : (value || defaultValue);
                         }
                         return defaultValue;
@@ -2268,15 +3160,21 @@
                         notes: getFieldValue('notes', '')
                     };
                     
-                    // Add additional fields
+                    // Add additional fields (merge-aware)
                     Object.keys(additionalFields).forEach(fieldName => {
-                        const columnIdx = additionalFields[fieldName];
-                        if (columnIdx !== null && columnIdx !== undefined) {
-                            riderData[fieldName] = (row[columnIdx] || '').trim();
+                        if (_merge[fieldName]) {
+                            const parts = _merge[fieldName].map(ci => (row[ci] || '').trim()).filter(Boolean);
+                            riderData[fieldName] = parts.join(' ');
                         } else {
-                            riderData[fieldName] = '';
+                            const columnIdx = additionalFields[fieldName];
+                            if (columnIdx !== null && columnIdx !== undefined) {
+                                riderData[fieldName] = (row[columnIdx] || '').trim();
+                            } else {
+                                riderData[fieldName] = '';
+                            }
                         }
                     });
+                    _mergedSourceNames.forEach(n => delete riderData[n]);
                     
                     importedRiders.push(riderData);
                 }
@@ -2316,6 +3214,8 @@
                 const additionalFields = fieldMapping.additionalFields || {};
                 const mapping = fieldMapping.mapping;
                 const enabledFields = fieldMapping.enabledFields;
+                const _merge = fieldMapping.mergeColumns || {};
+                const _mergedSourceNames = new Set(fieldMapping.mergedSourceNames || []);
                 
                 // Parse CSV
                 const coaches = parseCSV(coachesText);
@@ -2336,9 +3236,8 @@
                     let lastName = '';
                     
                     if (nameFormat === 'single') {
-                        name = getValueFromMapping(row, 'name', mapping);
+                        name = getValueFromMapping(row, 'name', mapping, _merge);
                         if (!name) continue;
-                        // Try to split name into first/last for compatibility
                         const nameParts = name.trim().split(/\s+/);
                         if (nameParts.length > 1) {
                             lastName = nameParts.pop() || '';
@@ -2347,14 +3246,14 @@
                             firstName = name;
                         }
                     } else {
-                        firstName = getValueFromMapping(row, 'firstName', mapping);
-                        lastName = getValueFromMapping(row, 'lastName', mapping);
+                        firstName = getValueFromMapping(row, 'firstName', mapping, _merge);
+                        lastName = getValueFromMapping(row, 'lastName', mapping, _merge);
                         if (!firstName && !lastName) continue;
                         name = `${firstName} ${lastName}`.trim();
                     }
 
                     // Get gender and determine default photo (same as riders)
-                    const gender = enabledFields.gender ? normalizeGenderValue(getValueFromMapping(row, 'gender', mapping)) : '';
+                    const gender = enabledFields.gender ? normalizeGenderValue(getValueFromMapping(row, 'gender', mapping, _merge)) : '';
 
                     let defaultPhoto = '';
                     if (!gender) {
@@ -2367,52 +3266,59 @@
                         defaultPhoto = 'assets/nonbinary_default.png';
                     }
 
-                    // Build coach object using mapping
+                    // Build coach object using mapping (merge-aware)
+                    const gv = (fk) => getValueFromMapping(row, fk, mapping, _merge);
                     const coachData = {
                         id: Date.now() + Math.floor(Math.random() * 1000) + importedCoaches.length * 1000,
                         name: name,
                         firstName: firstName,
                         lastName: lastName,
-                        photo: enabledFields.photo ? (getValueFromMapping(row, 'photo', mapping) || defaultPhoto) : defaultPhoto,
-                        email: enabledFields.email ? getValueFromMapping(row, 'email', mapping) : '',
-                        phone: enabledFields.phone ? normalizePhoneNumber(getValueFromMapping(row, 'phone', mapping)) : '',
-                        workPhone: enabledFields.workPhone ? normalizePhoneNumber(getValueFromMapping(row, 'workPhone', mapping)) : '',
-                        homePhone: enabledFields.homePhone ? normalizePhoneNumber(getValueFromMapping(row, 'homePhone', mapping)) : '',
+                        photo: enabledFields.photo ? (gv('photo') || defaultPhoto) : defaultPhoto,
+                        email: enabledFields.email ? gv('email') : '',
+                        phone: enabledFields.phone ? normalizePhoneNumber(gv('phone')) : '',
+                        workPhone: enabledFields.workPhone ? normalizePhoneNumber(gv('workPhone')) : '',
+                        homePhone: enabledFields.homePhone ? normalizePhoneNumber(gv('homePhone')) : '',
                         gender: gender,
-                        coachingLicenseLevel: enabledFields.coachingLicenseLevel ? (getValueFromMapping(row, 'coachingLicenseLevel', mapping) || '1') : '1',
-                        registered: enabledFields.registered ? getValueFromMapping(row, 'registered', mapping) : '',
-                        paid: enabledFields.paid ? getValueFromMapping(row, 'paid', mapping) : '',
-                        backgroundCheck: enabledFields.backgroundCheck ? getValueFromMapping(row, 'backgroundCheck', mapping) : '',
-                        level3ExamCompleted: enabledFields.level3ExamCompleted ? getValueFromMapping(row, 'level3ExamCompleted', mapping) : '',
-                        pduCeuUnits: enabledFields.pduCeuUnits ? getValueFromMapping(row, 'pduCeuUnits', mapping) : '',
-                        fieldWorkHours: enabledFields.fieldWorkHours ? getValueFromMapping(row, 'fieldWorkHours', mapping) : '',
-                        firstAidTypeExpires: enabledFields.firstAidTypeExpires ? getValueFromMapping(row, 'firstAidTypeExpires', mapping) : '',
-                        cprExpires: enabledFields.cprExpires ? getValueFromMapping(row, 'cprExpires', mapping) : '',
-                        concussionTrainingCompleted: enabledFields.concussionTrainingCompleted ? getValueFromMapping(row, 'concussionTrainingCompleted', mapping) : '',
-                        nicaPhilosophyCompleted: enabledFields.nicaPhilosophyCompleted ? getValueFromMapping(row, 'nicaPhilosophyCompleted', mapping) : '',
-                        athleteAbuseAwarenessCompleted: enabledFields.athleteAbuseAwarenessCompleted ? getValueFromMapping(row, 'athleteAbuseAwarenessCompleted', mapping) : '',
-                        licenseLevel1Completed: enabledFields.licenseLevel1Completed ? getValueFromMapping(row, 'licenseLevel1Completed', mapping) : '',
-                        licenseLevel2Completed: enabledFields.licenseLevel2Completed ? getValueFromMapping(row, 'licenseLevel2Completed', mapping) : '',
-                        licenseLevel3Completed: enabledFields.licenseLevel3Completed ? getValueFromMapping(row, 'licenseLevel3Completed', mapping) : '',
-                        otbSkills101ClassroomCompleted: enabledFields.otbSkills101ClassroomCompleted ? getValueFromMapping(row, 'otbSkills101ClassroomCompleted', mapping) : '',
-                        otbSkills101OutdoorCompleted: enabledFields.otbSkills101OutdoorCompleted ? getValueFromMapping(row, 'otbSkills101OutdoorCompleted', mapping) : '',
-                        nicaLeaderSummitCompleted: enabledFields.nicaLeaderSummitCompleted ? getValueFromMapping(row, 'nicaLeaderSummitCompleted', mapping) : '',
-                        fitness: enabledFields.fitness ? (getValueFromMapping(row, 'fitness', mapping) || String(Math.ceil(getFitnessScale() / 2))) : String(Math.ceil(getFitnessScale() / 2)),
-                        climbing: enabledFields.climbing ? (getValueFromMapping(row, 'climbing', mapping) || String(Math.ceil(getClimbingScale() / 2))) : String(Math.ceil(getClimbingScale() / 2)),
-                        skills: enabledFields.skills ? (getValueFromMapping(row, 'skills', mapping) || String(Math.ceil(getSkillsScale() / 2))) : String(Math.ceil(getSkillsScale() / 2)),
-                        notes: enabledFields.notes ? getValueFromMapping(row, 'notes', mapping) : ''
+                        coachingLicenseLevel: enabledFields.coachingLicenseLevel ? (gv('coachingLicenseLevel') || '1') : '1',
+                        registered: enabledFields.registered ? gv('registered') : '',
+                        paid: enabledFields.paid ? gv('paid') : '',
+                        backgroundCheck: enabledFields.backgroundCheck ? gv('backgroundCheck') : '',
+                        level3ExamCompleted: enabledFields.level3ExamCompleted ? gv('level3ExamCompleted') : '',
+                        pduCeuUnits: enabledFields.pduCeuUnits ? gv('pduCeuUnits') : '',
+                        fieldWorkHours: enabledFields.fieldWorkHours ? gv('fieldWorkHours') : '',
+                        firstAidTypeExpires: enabledFields.firstAidTypeExpires ? gv('firstAidTypeExpires') : '',
+                        cprExpires: enabledFields.cprExpires ? gv('cprExpires') : '',
+                        concussionTrainingCompleted: enabledFields.concussionTrainingCompleted ? gv('concussionTrainingCompleted') : '',
+                        nicaPhilosophyCompleted: enabledFields.nicaPhilosophyCompleted ? gv('nicaPhilosophyCompleted') : '',
+                        athleteAbuseAwarenessCompleted: enabledFields.athleteAbuseAwarenessCompleted ? gv('athleteAbuseAwarenessCompleted') : '',
+                        licenseLevel1Completed: enabledFields.licenseLevel1Completed ? gv('licenseLevel1Completed') : '',
+                        licenseLevel2Completed: enabledFields.licenseLevel2Completed ? gv('licenseLevel2Completed') : '',
+                        licenseLevel3Completed: enabledFields.licenseLevel3Completed ? gv('licenseLevel3Completed') : '',
+                        otbSkills101ClassroomCompleted: enabledFields.otbSkills101ClassroomCompleted ? gv('otbSkills101ClassroomCompleted') : '',
+                        otbSkills101OutdoorCompleted: enabledFields.otbSkills101OutdoorCompleted ? gv('otbSkills101OutdoorCompleted') : '',
+                        nicaLeaderSummitCompleted: enabledFields.nicaLeaderSummitCompleted ? gv('nicaLeaderSummitCompleted') : '',
+                        fitness: enabledFields.fitness ? (gv('fitness') || String(Math.ceil(getFitnessScale() / 2))) : String(Math.ceil(getFitnessScale() / 2)),
+                        climbing: enabledFields.climbing ? (gv('climbing') || String(Math.ceil(getClimbingScale() / 2))) : String(Math.ceil(getClimbingScale() / 2)),
+                        skills: enabledFields.skills ? (gv('skills') || String(Math.ceil(getSkillsScale() / 2))) : String(Math.ceil(getSkillsScale() / 2)),
+                        notes: enabledFields.notes ? gv('notes') : ''
                     };
                     
-                    // Add additional fields
+                    // Add additional fields (merge-aware)
                     Object.keys(additionalFields).forEach(fieldName => {
-                        const columnIdx = additionalFields[fieldName];
-                        if (columnIdx !== null && columnIdx !== undefined) {
-                            coachData[fieldName] = (row[columnIdx] || '').trim();
+                        if (_merge[fieldName]) {
+                            const parts = _merge[fieldName].map(ci => (row[ci] || '').trim()).filter(Boolean);
+                            coachData[fieldName] = parts.join(' ');
                         } else {
-                            coachData[fieldName] = '';
+                            const columnIdx = additionalFields[fieldName];
+                            if (columnIdx !== null && columnIdx !== undefined) {
+                                coachData[fieldName] = (row[columnIdx] || '').trim();
+                            } else {
+                                coachData[fieldName] = '';
+                            }
                         }
                     });
-                    
+                    _mergedSourceNames.forEach(n => delete coachData[n]);
+
                     importedCoaches.push(coachData);
                 }
 
@@ -2592,7 +3498,9 @@
                 const mapping = fieldMapping.mapping;
                 const enabledFields = fieldMapping.enabledFields;
                 const unmappedActions = fieldMapping.unmappedFieldActions || {};
-                
+                const _merge = fieldMapping.mergeColumns || {};
+                const _mergedSourceNames = new Set(fieldMapping.mergedSourceNames || []);
+
                 // Parse CSV
                 const riders = parseCSV(ridersText);
                 if (riders.length < 2) {
@@ -2600,10 +3508,10 @@
                     return;
                 }
 
-                // Helper function to get value from CSV row using custom mapping
+                // Helper function to get value from CSV row using custom mapping (merge-aware)
                 const getValue = (row, fieldName) => {
-                    if (!enabledFields[fieldName]) return '';
-                    const value = getValueFromMapping(row, fieldName, mapping);
+                    if (!enabledFields[fieldName] && !_merge[fieldName]) return '';
+                    const value = getValueFromMapping(row, fieldName, mapping, _merge);
                     if (fieldName === 'gender') {
                         return normalizeGenderValue(value);
                     }
@@ -2730,15 +3638,21 @@
                         }
                     });
                     
-                    // Additional fields
+                    // Additional fields (merge-aware)
                     Object.keys(additionalFields).forEach(fieldName => {
-                        const columnIdx = additionalFields[fieldName];
-                        if (columnIdx !== null && columnIdx !== undefined) {
-                            updatedRider[fieldName] = (csvRow[columnIdx] || '').trim();
-                        } else if (!updatedRider.hasOwnProperty(fieldName)) {
-                            updatedRider[fieldName] = '';
+                        if (_merge[fieldName]) {
+                            const parts = _merge[fieldName].map(ci => (csvRow[ci] || '').trim()).filter(Boolean);
+                            updatedRider[fieldName] = parts.join(' ');
+                        } else {
+                            const columnIdx = additionalFields[fieldName];
+                            if (columnIdx !== null && columnIdx !== undefined) {
+                                updatedRider[fieldName] = (csvRow[columnIdx] || '').trim();
+                            } else if (!updatedRider.hasOwnProperty(fieldName)) {
+                                updatedRider[fieldName] = '';
+                            }
                         }
                     });
+                    _mergedSourceNames.forEach(n => delete updatedRider[n]);
                     
                     updatedRiders.push(updatedRider);
                 }
@@ -2814,15 +3728,21 @@
                             notes: enabledFields.notes ? getValue(csvRow, 'notes') : ''
                         };
                         
-                        // Additional fields
+                        // Additional fields (merge-aware)
                         Object.keys(additionalFields).forEach(fieldName => {
-                            const columnIdx = additionalFields[fieldName];
-                            if (columnIdx !== null && columnIdx !== undefined) {
-                                newRider[fieldName] = (csvRow[columnIdx] || '').trim();
+                            if (_merge[fieldName]) {
+                                const parts = _merge[fieldName].map(ci => (csvRow[ci] || '').trim()).filter(Boolean);
+                                newRider[fieldName] = parts.join(' ');
                             } else {
-                                newRider[fieldName] = '';
+                                const columnIdx = additionalFields[fieldName];
+                                if (columnIdx !== null && columnIdx !== undefined) {
+                                    newRider[fieldName] = (csvRow[columnIdx] || '').trim();
+                                } else {
+                                    newRider[fieldName] = '';
+                                }
                             }
                         });
+                        _mergedSourceNames.forEach(n => delete newRider[n]);
                         
                         updatedRiders.push(newRider);
                         addedRiders.push(newRider);
@@ -2872,6 +3792,8 @@
                 const mapping = fieldMapping.mapping;
                 const enabledFields = fieldMapping.enabledFields;
                 const unmappedActions = fieldMapping.unmappedFieldActions || {};
+                const _merge = fieldMapping.mergeColumns || {};
+                const _mergedSourceNames = new Set(fieldMapping.mergedSourceNames || []);
                 
                 // Parse CSV
                 const coaches = parseCSV(coachesText);
@@ -2880,10 +3802,10 @@
                     return;
                 }
 
-                // Helper function to get value from CSV row using custom mapping
+                // Helper function to get value from CSV row using custom mapping (merge-aware)
                 const getValue = (row, fieldName) => {
-                    if (!enabledFields[fieldName]) return '';
-                    return getValueFromMapping(row, fieldName, mapping);
+                    if (!enabledFields[fieldName] && !_merge[fieldName]) return '';
+                    return getValueFromMapping(row, fieldName, mapping, _merge);
                 };
 
                 const getPhoneValue = (row, fieldName) => {
@@ -2995,14 +3917,20 @@
                     });
                     
                     Object.keys(additionalFields).forEach(fieldName => {
-                        const columnIdx = additionalFields[fieldName];
-                        if (columnIdx !== null && columnIdx !== undefined) {
-                            updatedCoach[fieldName] = (csvRow[columnIdx] || '').trim();
-                        } else if (!updatedCoach.hasOwnProperty(fieldName)) {
-                            updatedCoach[fieldName] = '';
+                        if (_merge[fieldName]) {
+                            const parts = _merge[fieldName].map(ci => (csvRow[ci] || '').trim()).filter(Boolean);
+                            updatedCoach[fieldName] = parts.join(' ');
+                        } else {
+                            const columnIdx = additionalFields[fieldName];
+                            if (columnIdx !== null && columnIdx !== undefined) {
+                                updatedCoach[fieldName] = (csvRow[columnIdx] || '').trim();
+                            } else if (!updatedCoach.hasOwnProperty(fieldName)) {
+                                updatedCoach[fieldName] = '';
+                            }
                         }
                     });
-                    
+                    _mergedSourceNames.forEach(n => delete updatedCoach[n]);
+
                     updatedCoaches.push(updatedCoach);
                 }
 
@@ -3080,14 +4008,20 @@
                         };
                         
                         Object.keys(additionalFields).forEach(fieldName => {
-                            const columnIdx = additionalFields[fieldName];
-                            if (columnIdx !== null && columnIdx !== undefined) {
-                                newCoach[fieldName] = (csvRow[columnIdx] || '').trim();
+                            if (_merge[fieldName]) {
+                                const parts = _merge[fieldName].map(ci => (csvRow[ci] || '').trim()).filter(Boolean);
+                                newCoach[fieldName] = parts.join(' ');
                             } else {
-                                newCoach[fieldName] = '';
+                                const columnIdx = additionalFields[fieldName];
+                                if (columnIdx !== null && columnIdx !== undefined) {
+                                    newCoach[fieldName] = (csvRow[columnIdx] || '').trim();
+                                } else {
+                                    newCoach[fieldName] = '';
+                                }
                             }
                         });
-                        
+                        _mergedSourceNames.forEach(n => delete newCoach[n]);
+
                         updatedCoaches.push(newCoach);
                         addedCoaches.push(newCoach);
                     }
@@ -4386,14 +5320,17 @@
                         const label = (field === 'firstName' || field === 'lastName' || field === 'name')
                             ? 'Name Update' : _getFieldLabel(field);
                         const radioName = `field-${rec.id}-${field}`;
+                        const safeField = escapeHtml(field);
+                        const safeLabel = escapeHtml(label);
 
                         html += `<tr>`;
-                        html += `<td class="col-field">${escapeHtml(label)}</td>`;
+                        html += `<td class="col-field">${safeLabel}</td>`;
                         html += `<td class="col-existing">${escapeHtml(oldVal || '(empty)')}</td>`;
                         html += `<td class="col-csv">${escapeHtml(newVal || '(empty)')}</td>`;
                         html += `<td class="col-action">`;
                         html += `<label><input type="radio" name="${radioName}" value="csv" data-id="${rec.id}" data-field="${field}" checked> Use CSV data</label>`;
                         html += `<label><input type="radio" name="${radioName}" value="keep" data-id="${rec.id}" data-field="${field}"> Keep existing data</label>`;
+                        html += `<button type="button" class="csv-review-bulk-toggle" data-field="${safeField}" data-field-label="${safeLabel}" data-bulk-state="csv" onclick="_toggleAllForField(this)" style="margin-left:8px; font-size:11px; padding:2px 8px; border:1px solid #aaa; border-radius:3px; background:#f5f5f5; cursor:pointer; white-space:nowrap;">Use all existing for: ${safeLabel}</button>`;
                         html += `</td>`;
                         html += `</tr>`;
                     });
@@ -4451,6 +5388,26 @@
             }
 
             content.innerHTML = html;
+
+            window._toggleAllForField = function(btn) {
+                const field = btn.dataset.field;
+                const currentState = btn.dataset.bulkState;
+                const newState = currentState === 'csv' ? 'keep' : 'csv';
+                const label = btn.dataset.fieldLabel;
+
+                document.querySelectorAll(`.csv-review-changes-table input[type="radio"][data-field="${field}"]`).forEach(radio => {
+                    radio.checked = (radio.value === newState);
+                });
+
+                document.querySelectorAll(`.csv-review-bulk-toggle[data-field="${field}"]`).forEach(b => {
+                    b.dataset.bulkState = newState;
+                    b.textContent = newState === 'csv'
+                        ? `Use all existing for: ${label}`
+                        : `Use all CSV for: ${label}`;
+                    b.style.background = newState === 'csv' ? '#f5f5f5' : '#e3f2fd';
+                });
+            };
+
             modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
         }
@@ -4458,10 +5415,12 @@
         function closeCSVReviewModal() {
             const modal = document.getElementById('csv-review-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
             window._pendingCSVUpdate = null;
+            window._toggleAllForField = null;
         }
 
         async function applyCSVReviewChanges() {

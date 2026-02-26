@@ -1,5 +1,38 @@
 // app-rides.js - Ride CRUD, practice planner, calendar, practice location/roster filtering
 
+        function getRideStartTime(ride) {
+            let startTime = ride.startTime || ride.time || '';
+            if (!startTime && ride.date) {
+                const settings = data.seasonSettings || {};
+                const practices = Array.isArray(settings.practices) ? settings.practices : [];
+                const rideDateObj = parseISODate(ride.date);
+                if (rideDateObj) {
+                    const weekday = rideDateObj.getDay();
+                    const matchedPractice = practices.find(p => p.dayOfWeek === weekday);
+                    if (matchedPractice) startTime = matchedPractice.time || matchedPractice.startTime || '';
+                }
+            }
+            return startTime;
+        }
+
+        function isRidePastByStartTime(ride) {
+            const rideDate = parseISODate(ride.date);
+            if (!rideDate) return false;
+            const now = new Date();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            rideDate.setHours(0, 0, 0, 0);
+            if (rideDate > today) return false;
+            if (rideDate < today) return true;
+            const startTime = getRideStartTime(ride);
+            if (!startTime) return false;
+            const [h, m] = startTime.split(':').map(Number);
+            if (isNaN(h)) return false;
+            const startDateTime = new Date(rideDate);
+            startDateTime.setHours(h, m || 0, 0, 0);
+            return now >= startDateTime;
+        }
+
         function getValidPracticeDates() {
             // Returns a Set of valid practice date strings (ISO format) that match the calendar
             const settings = data.seasonSettings || buildDefaultSeasonSettings();
@@ -425,19 +458,16 @@
             today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
             
             // Filter rides: exclude deleted, include cancelled (but not for auto-selection), include rescheduled on new date
-            // First, get all valid rides (not deleted, today or future)
+            // First, get all valid rides (not deleted, not yet started based on start time)
             const allValidRides = (data.rides || [])
                 .filter(ride => {
                     if (!ride.date) return false;
-                    // Exclude deleted practices
                     if (ride.deleted) return false;
                     const rideDate = parseISODate(ride.date);
                     if (!rideDate) return false;
                     rideDate.setHours(0, 0, 0, 0);
-                    
-                    // Must be today or future
                     if (rideDate < today) return false;
-                    
+                    if (isRidePastByStartTime(ride)) return false;
                     return true;
                 });
             
@@ -477,21 +507,20 @@
             if (!USE_PRACTICE_PLANNER_LANDING && upcomingRides.length > 0) {
                 const nextRide = upcomingRides[0];
                 const currentRide = data.currentRide ? data.rides.find(r => r.id === data.currentRide) : null;
+                // Always override when there's no valid currentRide (null/deleted/missing)
                 let shouldSetNext = !data.currentRide || !currentRide;
-                if (!shouldSetNext && currentRide && !currentRide.deleted) {
-                    if (isRideDateExcludedFromPlanner(currentRide.date)) {
-                        shouldSetNext = true;
-                    } else {
-                        const currentRideDate = parseISODate(currentRide.date);
-                        if (currentRideDate) {
-                            currentRideDate.setHours(0, 0, 0, 0);
-                            if (currentRideDate < today) shouldSetNext = true;
-                            else if (validDates.size > 0 && !validDates.has(formatDateToISO(currentRideDate))) shouldSetNext = true;
-                        } else shouldSetNext = true;
-                    }
+                // On the very first render of a session, default to the next upcoming
+                // practice regardless of what lastOpenedRideId was stored. This handles
+                // stale persisted rides (past, far-future, excluded, etc.). After this
+                // first render, respect whatever practice the user navigates to — past
+                // practices, future practices, etc. are all valid explicit choices.
+                if (!shouldSetNext && !_initialRideSelectionDone && currentRide.id !== nextRide.id) {
+                    shouldSetNext = true;
                 }
+                _initialRideSelectionDone = true;
                 if (shouldSetNext) {
                     data.currentRide = nextRide.id;
+                    persistLastOpenedRide();
                     saveData();
                 }
                 if (practicePlannerView === 'home' || practicePlannerView === 'groupMethod' || practicePlannerView === 'picker') {
@@ -546,6 +575,25 @@
                 if (pickerEl) pickerEl.style.display = '';
             } else if (practicePlannerView === 'plannerSetup') {
                 if (setupEl) setupEl.style.display = '';
+                const setupHeading = document.getElementById('planner-setup-heading');
+                if (setupHeading && data.currentRide) {
+                    const setupRide = data.rides.find(r => r.id === data.currentRide);
+                    if (setupRide) {
+                        const setupDate = parseISODate(setupRide.date);
+                        const formattedDate = setupDate
+                            ? setupDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+                            : setupRide.date;
+                        const isNextLabel = (() => {
+                            if (!setupDate) return false;
+                            const upcomingCheck = (data.rides || [])
+                                .filter(r => !r.deleted && !r.cancelled && r.date && !isRidePastByStartTime(r) && !isRideDateExcludedFromPlanner(r.date))
+                                .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
+                            return upcomingCheck.length > 0 && upcomingCheck[0].id === setupRide.id;
+                        })();
+                        const suffix = isNextLabel ? ' (next)' : '';
+                        setupHeading.textContent = `How would you like to start planning the ${formattedDate}${suffix} practice?`;
+                    }
+                }
             } else if (practicePlannerView === 'attendance') {
                 if (attendEl) attendEl.style.display = '';
                 if (data.currentRide) {
@@ -618,6 +666,7 @@
                     if (!rideDate) return false;
                     rideDate.setHours(0, 0, 0, 0);
                     if (rideDate < today) return false;
+                    if (isRidePastByStartTime(ride)) return false;
                     const dateKey = formatDateToISO(rideDate);
                     if (ride.rescheduledFrom) return true;
                     if (validDates.size > 0 && !validDates.has(dateKey)) return false;
@@ -658,6 +707,33 @@
 
         function openCopyGroupsFromPrior() {
             practicePlannerView = 'planner';
+            renderRides();
+        }
+
+        function switchToWizardFromPlanner() {
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            if (!ride) return;
+
+            const hasAssignedRiders = ride.groups && ride.groups.some(g => g.riders && g.riders.length > 0);
+            const hasAssignedCoaches = ride.groups && ride.groups.some(g => {
+                if (!g.coaches) return false;
+                return g.coaches.leader || g.coaches.sweep || g.coaches.roam ||
+                    (Array.isArray(g.coaches.extraRoam) && g.coaches.extraRoam.some(id => id));
+            });
+
+            if (hasAssignedRiders || hasAssignedCoaches) {
+                if (!confirm('Current groups and assignments will be lost. Continue to the Practice Planner Wizard?')) return;
+            }
+
+            ride.groups = [];
+            ride.assignments = {};
+            ride.publishedGroups = false;
+            ride.planningStarted = false;
+            saveRideToDB(ride);
+
+            attendanceMode = false;
+            hideSidebars();
+            practicePlannerView = 'plannerSetup';
             renderRides();
         }
 
@@ -751,12 +827,17 @@
             if (ride) {
                 ride.planningStarted = true;
                 ensureRideAttendanceDefaults(ride);
+                if (!Array.isArray(ride.availableCoaches) || ride.availableCoaches.length === 0) {
+                    ride.availableCoaches = [];
+                }
                 saveRideToDB(ride);
             }
             attendanceMode = false;
-            hideSidebars();
+            sidebarRidersFilter = 'attending';
+            sidebarCoachesFilter = 'absent';
             practicePlannerView = 'planner';
             renderRides();
+            setTimeout(() => showSidebars({ persistent: true }), 50);
         }
 
         let _copyPriorSource = null;
@@ -877,30 +958,35 @@
             const includeCoachAtt = document.getElementById('copy-prior-include-coach-attendance')?.checked;
             const includeRoutes = document.getElementById('copy-prior-include-routes')?.checked;
 
-            if (includeRiderAtt) {
-                ride.availableRiders = sourceRide.availableRiders ? [...sourceRide.availableRiders] : [];
-            } else {
-                ensureRideAttendanceDefaults(ride);
-            }
-            if (includeCoachAtt) {
-                ride.availableCoaches = sourceRide.availableCoaches ? [...sourceRide.availableCoaches] : [];
-            } else if (!Array.isArray(ride.availableCoaches) || ride.availableCoaches.length === 0) {
-                ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => c.id);
-            }
-
             const rideDate = ride.date || '';
             const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
             const isCoachAbsent = (id) => rideDate && isScheduledAbsent('coach', id, rideDate).absent;
 
+            if (includeRiderAtt) {
+                ride.availableRiders = (sourceRide.availableRiders ? [...sourceRide.availableRiders] : [])
+                    .filter(id => !isRiderAbsent(id));
+            } else {
+                ensureRideAttendanceDefaults(ride);
+            }
+            if (includeCoachAtt) {
+                ride.availableCoaches = (sourceRide.availableCoaches ? [...sourceRide.availableCoaches] : [])
+                    .filter(id => !isCoachAbsent(id));
+            } else if (!Array.isArray(ride.availableCoaches) || ride.availableCoaches.length === 0) {
+                ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => c.id);
+            }
+
+            const currentAvailableRiders = new Set(ride.availableRiders || []);
+            const currentAvailableCoaches = new Set(ride.availableCoaches || []);
+
             ride.groups = sourceRide.groups.map(srcGroup => {
                 const newGroup = createGroup(srcGroup.label);
-                newGroup.riders = srcGroup.riders ? srcGroup.riders.filter(id => !isRiderAbsent(id)) : [];
+                newGroup.riders = srcGroup.riders ? srcGroup.riders.filter(id => currentAvailableRiders.has(id) && !isRiderAbsent(id)) : [];
                 if (srcGroup.coaches) {
-                    newGroup.coaches.leader = (srcGroup.coaches.leader && !isCoachAbsent(srcGroup.coaches.leader)) ? srcGroup.coaches.leader : null;
-                    newGroup.coaches.sweep = (srcGroup.coaches.sweep && !isCoachAbsent(srcGroup.coaches.sweep)) ? srcGroup.coaches.sweep : null;
-                    newGroup.coaches.roam = (srcGroup.coaches.roam && !isCoachAbsent(srcGroup.coaches.roam)) ? srcGroup.coaches.roam : null;
+                    newGroup.coaches.leader = (srcGroup.coaches.leader && currentAvailableCoaches.has(srcGroup.coaches.leader) && !isCoachAbsent(srcGroup.coaches.leader)) ? srcGroup.coaches.leader : null;
+                    newGroup.coaches.sweep = (srcGroup.coaches.sweep && currentAvailableCoaches.has(srcGroup.coaches.sweep) && !isCoachAbsent(srcGroup.coaches.sweep)) ? srcGroup.coaches.sweep : null;
+                    newGroup.coaches.roam = (srcGroup.coaches.roam && currentAvailableCoaches.has(srcGroup.coaches.roam) && !isCoachAbsent(srcGroup.coaches.roam)) ? srcGroup.coaches.roam : null;
                     newGroup.coaches.extraRoam = Array.isArray(srcGroup.coaches.extraRoam)
-                        ? srcGroup.coaches.extraRoam.filter(id => !isCoachAbsent(id))
+                        ? srcGroup.coaches.extraRoam.filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id))
                         : [];
                 }
                 newGroup.routeId = includeRoutes ? (srcGroup.routeId || null) : null;
@@ -911,7 +997,7 @@
             ride.planningStarted = true;
             saveRideToDB(ride);
 
-            // Warn about unassigned attending riders/coaches
+            // Warn about unassigned attending riders/coaches (exclude scheduled-absent)
             const assignedRiderIds = new Set();
             const assignedCoachIds = new Set();
             ride.groups.forEach(g => {
@@ -921,8 +1007,16 @@
                 if (g.coaches?.roam) assignedCoachIds.add(g.coaches.roam);
                 (g.coaches?.extraRoam || []).forEach(id => { if (id) assignedCoachIds.add(id); });
             });
-            const unassignedRiders = (ride.availableRiders || []).filter(id => !assignedRiderIds.has(id));
-            const unassignedCoaches = (ride.availableCoaches || []).filter(id => !assignedCoachIds.has(id));
+            const unassignedRiders = (ride.availableRiders || []).filter(id => {
+                if (assignedRiderIds.has(id)) return false;
+                if (rideDate && isScheduledAbsent('rider', id, rideDate).absent) return false;
+                return true;
+            });
+            const unassignedCoaches = (ride.availableCoaches || []).filter(id => {
+                if (assignedCoachIds.has(id)) return false;
+                if (rideDate && isScheduledAbsent('coach', id, rideDate).absent) return false;
+                return true;
+            });
             if (unassignedRiders.length > 0 || unassignedCoaches.length > 0) {
                 const parts = [];
                 if (unassignedRiders.length > 0) parts.push(`${unassignedRiders.length} rider${unassignedRiders.length !== 1 ? 's' : ''}`);
@@ -1794,12 +1888,23 @@
             }
 
             const errors = [];
+            let aborted = false;
             let progress = 0;
-            const totalSteps = 9; // riders, coaches, rides, routes, races, season settings, auto-assign, color_names, rider_feedback/ride_notes/rider_availability
+            const totalSteps = 9;
 
             function logProgress(step) {
                 progress++;
                 console.log(`saveAllDataToSupabase [${progress}/${totalSteps}]: ${step}`);
+            }
+
+            function checkAuth() {
+                const user = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+                if (!user) {
+                    aborted = true;
+                    console.warn('saveAllDataToSupabase: session expired mid-save — aborting remaining steps.');
+                    return false;
+                }
+                return true;
             }
 
             // --- 1. Riders ---
@@ -1820,9 +1925,10 @@
                     }
                 }
             } catch (e) { errors.push(`Riders batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after riders step'); }
 
             // --- 2. Coaches ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving coaches...');
                 if (Array.isArray(data.coaches) && data.coaches.length > 0 && typeof updateCoach === 'function' && typeof createCoach === 'function') {
                     for (const coach of data.coaches) {
@@ -1839,9 +1945,10 @@
                     }
                 }
             } catch (e) { errors.push(`Coaches batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after coaches step'); }
 
             // --- 3. Rides ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving rides...');
                 if (Array.isArray(data.rides) && data.rides.length > 0) {
                     for (const ride of data.rides) {
@@ -1853,9 +1960,10 @@
                     }
                 }
             } catch (e) { errors.push(`Rides batch: ${e.message}`); }
+            if (!checkAuth()) { errors.push('Session expired after rides step'); }
 
             // --- 4. Routes ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving routes...');
                 if (Array.isArray(data.routes) && data.routes.length > 0 && typeof updateRoute === 'function' && typeof createRoute === 'function') {
                     for (const route of data.routes) {
@@ -1874,7 +1982,7 @@
             } catch (e) { errors.push(`Routes batch: ${e.message}`); }
 
             // --- 5. Races ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving races...');
                 if (Array.isArray(data.races) && data.races.length > 0 && typeof updateRace === 'function' && typeof createRace === 'function') {
                     for (const race of data.races) {
@@ -1893,7 +2001,7 @@
             } catch (e) { errors.push(`Races batch: ${e.message}`); }
 
             // --- 6. Season Settings ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving season settings...');
                 if (data.seasonSettings && typeof saveSeasonSettings === 'function') {
                     await saveSeasonSettings(data.seasonSettings);
@@ -1901,7 +2009,7 @@
             } catch (e) { errors.push(`Season settings: ${e.message}`); }
 
             // --- 7. Auto-Assign Settings ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving auto-assign settings...');
                 if (data.autoAssignSettings && typeof saveAutoAssignSettings === 'function') {
                     await saveAutoAssignSettings(data.autoAssignSettings);
@@ -1909,10 +2017,9 @@
             } catch (e) { errors.push(`Auto-assign settings: ${e.message}`); }
 
             // --- 8. Color Names ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving color names...');
                 if (Array.isArray(data.colorNames) && data.colorNames.length > 0) {
-                    // Bulk upsert color names
                     const { error: colorError } = await client
                         .from('color_names')
                         .upsert(data.colorNames.map(cn => ({
@@ -1925,7 +2032,7 @@
             } catch (e) { errors.push(`Color names: ${e.message}`); }
 
             // --- 9. Rider Feedback, Ride Notes, Rider Availability ---
-            try {
+            if (!aborted) try {
                 logProgress('Saving rider feedback, ride notes, rider availability...');
                 if (Array.isArray(data.riderFeedback) && data.riderFeedback.length > 0) {
                     const { error: fbError } = await client
@@ -1947,7 +2054,10 @@
                 }
             } catch (e) { errors.push(`Feedback/notes/availability: ${e.message}`); }
 
-            if (errors.length > 0) {
+            if (aborted) {
+                console.warn('saveAllDataToSupabase: aborted — session expired mid-save. Some data may not have been written.');
+                alert('Save aborted: your session expired during the save. Please log in again and retry.');
+            } else if (errors.length > 0) {
                 console.error('saveAllDataToSupabase completed with errors:', errors);
                 alert(`Restore saved to Supabase with ${errors.length} error(s). Check the console (F12) for details.\n\nFirst error: ${errors[0]}`);
             } else {
@@ -2579,6 +2689,7 @@
                 mapMarker = null;
             }
 
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             currentPracticeIdForLocation = null;
@@ -2799,6 +2910,7 @@
         function closeViewExceptionsDialog() {
             const modal = document.getElementById('view-exceptions-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.classList.remove('visible');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -3117,6 +3229,7 @@
         function closeRosterRefinement() {
             const modal = document.getElementById('roster-refinement-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.classList.remove('visible');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -3171,6 +3284,7 @@
         function closeAddPracticeModal() {
             const modal = document.getElementById('add-practice-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
         }
@@ -3776,16 +3890,12 @@
                         let cellStyle = '';
                         
                         if (isRace) {
-                            // Different green shades for races vs prerides
                             if (raceInfo.isPreRide) {
-                                // Lighter green for preride dates
                                 cellClass += ' race preride';
-                                cellStyle = 'background: #81C784; color: white;';
                             } else {
-                                // Regular green for race dates
                                 cellClass += ' race';
-                                cellStyle = 'background: #4CAF50; color: white;';
                             }
+                            cellStyle = '';
                         } else if (isCancelled) {
                             // Light blue with red slash for cancelled
                             cellClass += ' cancelled';
@@ -3804,10 +3914,9 @@
                             cellStyle = '';
                         }
 
-                        // Check if this practice is excluded from the planner (blue outline)
                         if (!isRace && !isCancelled && !isDeleted && isRideDateExcludedFromPlanner(dateKey)) {
-                            cellClass += ' planner-excluded';
-                            cellStyle = ''; // Clear any inline style, use CSS class
+                            cellClass += isPast ? ' planner-excluded past' : ' planner-excluded';
+                            cellStyle = '';
                         }
                         
                         const slashStyle = isCancelled ? '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;"><div style="width: 100%; height: 2px; background: #f44336; transform: rotate(-45deg);"></div></div>' : '';
@@ -3885,6 +3994,13 @@
             if (restoreBtn) {
                 restoreBtn.style.display = (cancelledRide || rescheduledRide) ? 'block' : 'none';
                 restoreBtn.textContent = rescheduledRide ? 'Move back to original date' : 'Restore Practice';
+            }
+
+            const goToPlannerBtn = document.getElementById('go-to-planner-btn');
+            if (goToPlannerBtn) {
+                const isExcluded = isRideDateExcludedFromPlanner(dateString);
+                const existingRide = (data.rides || []).find(r => r.date === dateString && !r.deleted);
+                goToPlannerBtn.style.display = (!isExcluded && existingRide && !existingRide.cancelled) ? 'block' : 'none';
             }
             
             // Position menu to the right of the clicked calendar cell
@@ -3997,6 +4113,36 @@
             }, 10);
         }
 
+        function goToPracticePlannerFromContext() {
+            const dateString = contextMenuDate;
+            const contextMenu = document.getElementById('practice-context-menu');
+            if (contextMenu) contextMenu.style.display = 'none';
+            if (contextMenuTimeout) { clearTimeout(contextMenuTimeout); contextMenuTimeout = null; }
+            if (contextMenuCloseHandler) { document.removeEventListener('click', contextMenuCloseHandler); contextMenuCloseHandler = null; }
+            contextMenuDate = null;
+            if (!dateString) return;
+
+            const ride = (data.rides || []).find(r => r.date === dateString && !r.deleted);
+            if (!ride) return;
+
+            data.currentRide = ride.id;
+            saveData();
+
+            if (ride.planningStarted || (ride.groups && ride.groups.length > 0)) {
+                practicePlannerView = 'planner';
+            } else {
+                practicePlannerView = 'plannerSetup';
+            }
+
+            if (typeof switchTab === 'function') {
+                switchTab('rides');
+            } else {
+                const ridesTab = document.querySelector('[onclick*="switchTab(\'rides\')"]');
+                if (ridesTab) ridesTab.click();
+            }
+            renderRides();
+        }
+
         async function deletePracticeFromContext() {
             if (!contextMenuDate) return;
             
@@ -4099,6 +4245,7 @@
         function closeCancelPracticeModal() {
             const modal = document.getElementById('cancel-practice-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.classList.remove('visible');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -4169,6 +4316,7 @@
         function closeClonePracticeModal() {
             const modal = document.getElementById('clone-practice-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.classList.remove('visible');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -4346,6 +4494,7 @@
         function closeReschedulePracticeModal() {
             const modal = document.getElementById('reschedule-practice-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.classList.remove('visible');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -4956,6 +5105,15 @@
         }
         
         // Auto-assignment algorithm - SEQUENTIAL REQUIREMENT-BASED VERSION
+        function autoGenerateFromPlanner() {
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            if (!ride) return;
+            if (ride.groups && ride.groups.length > 0) {
+                if (!confirm('Auto-generating groups will replace all current groups and their rider/coach assignments. Continue?')) return;
+            }
+            autoAssign();
+        }
+
         async function autoAssign(targetNumGroups = null) {
             try {
                 const ride = data.rides.find(r => r.id === data.currentRide);
@@ -4967,6 +5125,8 @@
                     alert('Cannot assign riders and coaches to a cancelled practice.');
                     return;
                 }
+
+                clearGroupResizeMemory(ride.id);
 
                 // Save state before autofill (allows undo of autofill)
                 saveAssignmentState(ride);
@@ -6088,6 +6248,7 @@
         function closeCopyGroupsFromPriorPracticeDialog() {
             const modal = document.getElementById('copy-groups-prior-practice-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.setAttribute('aria-hidden', 'true');
                 modal.style.display = 'none';
             }
@@ -6252,126 +6413,209 @@
             if (fewerGroupsBtn) fewerGroupsBtn.style.display = '';
         }
 
-        function tryMoreGroups() {
-            const ride = data.rides.find(r => r.id === data.currentRide);
-            if (!ride) {
-                alert('No practice selected.');
-                return;
-            }
+        // ---- Group Resize Memory ----
+        // Stores snapshots of group configurations at different group counts so the user
+        // can cycle between More/Fewer Groups and return to a previously visited layout.
+        let _groupResizeMemory = {};
 
-            // Get current number of groups
-            const currentNumGroups = ride.groups ? ride.groups.length : 0;
-            if (currentNumGroups === 0) {
-                alert('Please run Autofill Group Assignments first to establish a baseline.');
-                return;
-            }
+        function saveGroupsToResizeMemory(ride) {
+            const key = ride.id + '_' + ride.groups.length;
+            _groupResizeMemory[key] = JSON.parse(JSON.stringify(ride.groups));
+        }
 
-            // Get settings to calculate valid group counts
-            const availableCoaches = ride.availableCoaches
-                .map(id => getCoachById(id))
-                .filter(Boolean)
-                .filter(coach => {
-                    const levelRaw = coach.coachingLicenseLevel || coach.level || 'N/A';
-                    const level = levelRaw.toString().toUpperCase();
-                    return level !== 'N/A' && level !== 'NA' && level !== '' && level !== 'NULL' && level !== 'UNDEFINED';
+        function getGroupsFromResizeMemory(rideId, numGroups) {
+            const key = rideId + '_' + numGroups;
+            const saved = _groupResizeMemory[key];
+            return saved ? JSON.parse(JSON.stringify(saved)) : null;
+        }
+
+        function clearGroupResizeMemory(rideId) {
+            if (rideId) {
+                const prefix = rideId + '_';
+                Object.keys(_groupResizeMemory).forEach(key => {
+                    if (key.startsWith(prefix)) delete _groupResizeMemory[key];
                 });
-
-            const availableRiders = ride.availableRiders
-                .map(id => getRiderById(id))
-                .filter(Boolean);
-
-            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
-            const preferredGroupSizeMin = getAutoAssignSettingMin('preferredGroupSize', 4);
-            const preferredGroupSizeMax = getAutoAssignSettingMax('preferredGroupSize', 8);
-
-            const eligibleLeaders = availableCoaches.filter(coach => {
-                const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
-                const level = parseInt(levelRaw, 10);
-                return Number.isFinite(level) && level >= minLeaderLevel;
-            });
-
-            // Calculate max groups based on rider count and preferred size
-            // Groups can be created without leaders, so don't limit by eligibleLeaders.length
-            const maxGroupsByRiders = Math.floor(availableRiders.length / preferredGroupSizeMin);
-            const maxGroups = Math.min(maxGroupsByRiders, availableRiders.length);
-
-            // Find next larger valid group count
-            let nextNumGroups = currentNumGroups + 1;
-            while (nextNumGroups <= maxGroups) {
-                const avgRidersPerGroup = availableRiders.length / nextNumGroups;
-                if (avgRidersPerGroup >= preferredGroupSizeMin && avgRidersPerGroup <= preferredGroupSizeMax) {
-                    // Found a valid larger group count
-                    autoAssign(nextNumGroups);
-                    return;
-                }
-                nextNumGroups++;
-            }
-
-            // No valid larger group count found - check why
-            const nextGroupRidersPerGroup = availableRiders.length / (currentNumGroups + 1);
-            if (nextGroupRidersPerGroup >= preferredGroupSizeMin && nextGroupRidersPerGroup <= preferredGroupSizeMax) {
-                // The next group count IS within range - allow it (shouldn't have been rejected by loop)
-                autoAssign(currentNumGroups + 1);
-            } else if (nextGroupRidersPerGroup < preferredGroupSizeMin) {
-                alert(`Cannot create more groups: The next larger group count (${currentNumGroups + 1}) would result in ${nextGroupRidersPerGroup.toFixed(1)} riders per group, which is below the minimum of ${preferredGroupSizeMin}.`);
             } else {
-                // nextGroupRidersPerGroup > preferredGroupSizeMax
-                alert(`Cannot create more groups: The next larger group count (${currentNumGroups + 1}) would result in ${nextGroupRidersPerGroup.toFixed(1)} riders per group, which exceeds the maximum of ${preferredGroupSizeMax}.`);
+                _groupResizeMemory = {};
             }
         }
 
-        function tryFewerGroups() {
-            const ride = data.rides.find(r => r.id === data.currentRide);
-            if (!ride) {
-                alert('No practice selected.');
-                return;
+        function placeCoachInNextSlot(group, coachId) {
+            if (!group.coaches.leader) {
+                group.coaches.leader = coachId;
+            } else if (!group.coaches.sweep) {
+                group.coaches.sweep = coachId;
+            } else if (!group.coaches.roam) {
+                group.coaches.roam = coachId;
+            } else {
+                if (!Array.isArray(group.coaches.extraRoam)) group.coaches.extraRoam = [];
+                group.coaches.extraRoam.push(coachId);
             }
+        }
 
-            // Get current number of groups
-            const currentNumGroups = ride.groups ? ride.groups.length : 0;
-            if (currentNumGroups === 0) {
-                alert('Please run Autofill Group Assignments first to establish a baseline.');
-                return;
-            }
-
-            // Get settings to calculate valid group counts
-            const availableCoaches = ride.availableCoaches
-                .map(id => getCoachById(id))
-                .filter(Boolean)
-                .filter(coach => {
-                    const levelRaw = coach.coachingLicenseLevel || coach.level || 'N/A';
-                    const level = levelRaw.toString().toUpperCase();
-                    return level !== 'N/A' && level !== 'NA' && level !== '' && level !== 'NULL' && level !== 'UNDEFINED';
-                });
-
-            const availableRiders = ride.availableRiders
-                .map(id => getRiderById(id))
-                .filter(Boolean);
-
-            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
-            const preferredGroupSizeMin = getAutoAssignSettingMin('preferredGroupSize', 4);
-            const preferredGroupSizeMax = getAutoAssignSettingMax('preferredGroupSize', 8);
-
-            const eligibleLeaders = availableCoaches.filter(coach => {
-                const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
-                const level = parseInt(levelRaw, 10);
-                return Number.isFinite(level) && level >= minLeaderLevel;
+        function redistributeCoachesAfterResize(ride, extraCoachIds) {
+            const allCoachIds = extraCoachIds ? [...extraCoachIds] : [];
+            ride.groups.forEach(group => {
+                if (group.coaches.leader) allCoachIds.push(group.coaches.leader);
+                if (group.coaches.sweep) allCoachIds.push(group.coaches.sweep);
+                if (group.coaches.roam) allCoachIds.push(group.coaches.roam);
+                if (Array.isArray(group.coaches.extraRoam)) {
+                    group.coaches.extraRoam.forEach(id => { if (id) allCoachIds.push(id); });
+                }
             });
 
-            // Find next smaller valid group count
-            let nextNumGroups = currentNumGroups - 1;
-            while (nextNumGroups >= 1) {
-                const avgRidersPerGroup = availableRiders.length / nextNumGroups;
-                if (avgRidersPerGroup >= preferredGroupSizeMin && avgRidersPerGroup <= preferredGroupSizeMax) {
-                    // Found a valid smaller group count
-                    autoAssign(nextNumGroups);
-                    return;
+            ride.groups.forEach(group => {
+                group.coaches = { leader: null, sweep: null, roam: null, extraRoam: [] };
+            });
+
+            const coachObjs = allCoachIds.map(id => getCoachById(id)).filter(Boolean);
+            if (coachObjs.length === 0) return;
+
+            const minLeaderLevel = getAutoAssignSetting('minLeaderLevel', 2);
+            const leaders = coachObjs.filter(c => {
+                const level = parseInt(c.coachingLicenseLevel || c.level || '1', 10);
+                return Number.isFinite(level) && level >= minLeaderLevel;
+            }).sort((a, b) => getCoachFitnessValue(b) - getCoachFitnessValue(a));
+
+            const nonLeaders = coachObjs.filter(c => {
+                const level = parseInt(c.coachingLicenseLevel || c.level || '1', 10);
+                return !(Number.isFinite(level) && level >= minLeaderLevel);
+            }).sort((a, b) => getCoachFitnessValue(b) - getCoachFitnessValue(a));
+
+            leaders.forEach((coach, i) => {
+                if (i < ride.groups.length) {
+                    ride.groups[i].coaches.leader = coach.id;
+                } else {
+                    const target = ride.groups.reduce((best, g) =>
+                        countGroupCoaches(g) < countGroupCoaches(best) ? g : best, ride.groups[0]);
+                    placeCoachInNextSlot(target, coach.id);
                 }
-                nextNumGroups--;
+            });
+
+            nonLeaders.forEach(coach => {
+                const target = ride.groups.reduce((best, g) =>
+                    countGroupCoaches(g) < countGroupCoaches(best) ? g : best, ride.groups[0]);
+                placeCoachInNextSlot(target, coach.id);
+            });
+        }
+
+        // ---- More / Fewer Groups ----
+
+        function tryMoreGroups() {
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            if (!ride || !ride.groups || ride.groups.length === 0) return;
+
+            const currentNumGroups = ride.groups.length;
+            const totalRiders = ride.groups.reduce((sum, g) => sum + g.riders.length, 0);
+            const targetCount = currentNumGroups + 1;
+
+            if (totalRiders < targetCount) {
+                alert(`Cannot add more groups: only ${totalRiders} rider(s) across ${currentNumGroups} groups.`);
+                return;
             }
 
-            // No valid smaller group count found
-            alert(`Cannot create fewer groups: The next smaller group count (${currentNumGroups - 1}) would result in ${(availableRiders.length / (currentNumGroups - 1)).toFixed(1)} riders per group, which is outside the preferred range of ${preferredGroupSizeMin}-${preferredGroupSizeMax}.`);
+            saveAssignmentState(ride);
+            saveGroupsToResizeMemory(ride);
+
+            const saved = getGroupsFromResizeMemory(ride.id, targetCount);
+            if (saved) {
+                ride.groups = saved;
+                saveRideToDB(ride);
+                renderAssignments(ride);
+                return;
+            }
+
+            // Target sizes for N+1 groups
+            const targetPerGroup = Math.floor(totalRiders / targetCount);
+            const extra = totalRiders % targetCount;
+            const targetSizes = [];
+            for (let i = 0; i < targetCount; i++) {
+                targetSizes.push(i < extra ? targetPerGroup + 1 : targetPerGroup);
+            }
+
+            // Append an empty group at the end
+            ride.groups.push(createGroup(`Group ${targetCount}`));
+
+            // Cascade downward through adjacent groups:
+            // Each group sheds its slowest (bottom) riders to the next group.
+            // Received riders are faster than the next group's existing riders,
+            // so they go to the TOP (unshift). The cascade naturally grows as it
+            // flows down, and the new last group receives its riders from the
+            // group just above it.
+            for (let i = 0; i < currentNumGroups; i++) {
+                const group = ride.groups[i];
+                const excess = group.riders.length - targetSizes[i];
+                if (excess > 0) {
+                    const taken = group.riders.splice(group.riders.length - excess, excess);
+                    ride.groups[i + 1].riders.unshift(...taken);
+                }
+            }
+
+            redistributeCoachesAfterResize(ride);
+            ride.groups.forEach((g, i) => g.label = `Group ${i + 1}`);
+
+            saveRideToDB(ride);
+            renderAssignments(ride);
+        }
+
+        function tryFewerGroups() {
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            if (!ride || !ride.groups || ride.groups.length <= 1) return;
+
+            const currentNumGroups = ride.groups.length;
+            const targetCount = currentNumGroups - 1;
+
+            saveAssignmentState(ride);
+            saveGroupsToResizeMemory(ride);
+
+            const saved = getGroupsFromResizeMemory(ride.id, targetCount);
+            if (saved) {
+                ride.groups = saved;
+                saveRideToDB(ride);
+                renderAssignments(ride);
+                return;
+            }
+
+            // Dissolve last group, collect its coaches
+            const lastGroup = ride.groups.pop();
+            const dissolvedCoachIds = [];
+            if (lastGroup.coaches.leader) dissolvedCoachIds.push(lastGroup.coaches.leader);
+            if (lastGroup.coaches.sweep) dissolvedCoachIds.push(lastGroup.coaches.sweep);
+            if (lastGroup.coaches.roam) dissolvedCoachIds.push(lastGroup.coaches.roam);
+            if (Array.isArray(lastGroup.coaches.extraRoam)) {
+                lastGroup.coaches.extraRoam.forEach(id => { if (id) dissolvedCoachIds.push(id); });
+            }
+
+            // Append dissolved group's riders to the adjacent group above (they're slower)
+            ride.groups[targetCount - 1].riders.push(...lastGroup.riders);
+
+            // Target sizes for N-1 groups
+            const totalRiders = ride.groups.reduce((sum, g) => sum + g.riders.length, 0);
+            const targetPerGroup = Math.floor(totalRiders / targetCount);
+            const extra = totalRiders % targetCount;
+            const targetSizes = [];
+            for (let i = 0; i < targetCount; i++) {
+                targetSizes.push(i < extra ? targetPerGroup + 1 : targetPerGroup);
+            }
+
+            // Cascade upward through adjacent groups:
+            // Each oversized group sheds its fastest (top) riders to the group above.
+            // Those riders are slower than the receiving group's existing riders,
+            // so they go to the BOTTOM (push). The cascade flows upward until balanced.
+            for (let i = targetCount - 1; i >= 1; i--) {
+                const group = ride.groups[i];
+                const excess = group.riders.length - targetSizes[i];
+                if (excess > 0) {
+                    const taken = group.riders.splice(0, excess);
+                    ride.groups[i - 1].riders.push(...taken);
+                }
+            }
+
+            redistributeCoachesAfterResize(ride, dissolvedCoachIds);
+            ride.groups.forEach((g, i) => g.label = `Group ${i + 1}`);
+
+            saveRideToDB(ride);
+            renderAssignments(ride);
         }
 
         function toggleGroupSection(section) {
@@ -6514,6 +6758,8 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             
+            clearGroupResizeMemory(ride.id);
+            
             // Clear undo/redo history when clearing assignments
             clearAssignmentHistory();
             
@@ -6542,6 +6788,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
 
+            clearGroupResizeMemory(ride.id);
             clearAssignmentHistory();
 
             ride.groups = [];
@@ -6659,6 +6906,7 @@
         function closeGroupValidationErrorModal() {
             const modal = document.getElementById('group-validation-error-modal');
             if (modal) {
+                if (modal.contains(document.activeElement)) document.activeElement.blur();
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -8573,25 +8821,40 @@
             // Build global toolbar for sort + skill visibility + action buttons — render into the fixed practice banner
             const globalSort = ride.globalGroupSort || 'pace';
             const visibleSkills = ride.visibleSkills || ['pace'];
+            const _paceLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('pace') : 'Endurance Rating';
+            const _climbLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('climbing') : 'Climbing Rating';
+            const _descendLabel = typeof getSkillSortLabel === 'function' ? getSkillSortLabel('skills') : 'Descending Rating';
+            const _numGroups = ride.groups.length;
+            const _groupSizes = ride.groups.map(g => (g.riders || []).length);
+            const _minSize = _groupSizes.length > 0 ? Math.min(..._groupSizes) : 0;
+            const _maxSize = _groupSizes.length > 0 ? Math.max(..._groupSizes) : 0;
+            const _sizeRange = _minSize === _maxSize ? `${_minSize}` : `${_minSize}–${_maxSize}`;
+            const _fewerDisabled = _numGroups <= 1;
+            const _hasAssignments = ride.groups.some(g => {
+                if ((g.riders || []).length > 0) return true;
+                if (g.coaches && (g.coaches.leader || g.coaches.sweep || g.coaches.roam || (Array.isArray(g.coaches.extraRoam) && g.coaches.extraRoam.some(id => id)))) return true;
+                return false;
+            });
+            const _hasRidersInGroups = _groupSizes.some(s => s > 0);
+
             const bannerToolbar = document.getElementById('practice-banner-toolbar');
             if (bannerToolbar) {
-                // Always show toolbar (with action buttons) when practice is open
                 bannerToolbar.style.display = '';
-                bannerToolbar.innerHTML = ride.groups.length > 0 ? `
+                bannerToolbar.innerHTML = `
                     <div class="groups-toolbar" style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px;">
                         <div class="groups-toolbar-section" style="gap: 4px;">
                             <label style="font-weight: 600; font-size: 13px; color: #333; margin-right: 2px;">Show Skills:</label>
-                            <label class="skill-checkbox-label" title="Endurance">
+                            <label class="skill-checkbox-label" title="${escapeHtml(_paceLabel)}">
                                 <input type="checkbox" ${visibleSkills.includes('pace') ? 'checked' : ''} onchange="toggleSkillVisibility('pace')">
-                                <span class="skill-icon skill-icon-pace">❤</span> <span class="skill-label-text">Endurance</span>
+                                <span class="skill-icon skill-icon-pace">❤</span> <span class="skill-label-text">${escapeHtml(_paceLabel)}</span>
                             </label>
-                            <label class="skill-checkbox-label" title="Climbing">
+                            <label class="skill-checkbox-label" title="${escapeHtml(_climbLabel)}">
                                 <input type="checkbox" ${visibleSkills.includes('climbing') ? 'checked' : ''} onchange="toggleSkillVisibility('climbing')">
-                                <span class="skill-icon skill-icon-climbing">◢</span> <span class="skill-label-text">Climbing</span>
+                                <span class="skill-icon skill-icon-climbing">◢</span> <span class="skill-label-text">${escapeHtml(_climbLabel)}</span>
                             </label>
-                            <label class="skill-checkbox-label" title="Descending">
+                            <label class="skill-checkbox-label" title="${escapeHtml(_descendLabel)}">
                                 <input type="checkbox" ${visibleSkills.includes('skills') ? 'checked' : ''} onchange="toggleSkillVisibility('skills')">
-                                <span class="skill-icon skill-icon-skills">◣</span> <span class="skill-label-text">Descending</span>
+                                <span class="skill-icon skill-icon-skills">◣</span> <span class="skill-label-text">${escapeHtml(_descendLabel)}</span>
                             </label>
                         </div>
                         <div style="flex: 1;"></div>
@@ -8602,23 +8865,34 @@
                                 <option value="lastName" ${globalSort === 'lastName' ? 'selected' : ''}>Last Name</option>
                                 <option value="grade" ${globalSort === 'grade' ? 'selected' : ''}>Grade</option>
                                 <option value="gender" ${globalSort === 'gender' ? 'selected' : ''}>Gender</option>
-                                <option value="pace" ${globalSort === 'pace' ? 'selected' : ''}>Endurance Rating</option>
-                                <option value="climbing" ${globalSort === 'climbing' ? 'selected' : ''}>Climbing Rating</option>
-                                <option value="skills" ${globalSort === 'skills' ? 'selected' : ''}>Descending Rating</option>
+                                ${visibleSkills.includes('pace') || globalSort === 'pace' ? `<option value="pace" ${globalSort === 'pace' ? 'selected' : ''}>${escapeHtml(_paceLabel)}</option>` : ''}
+                                ${visibleSkills.includes('climbing') || globalSort === 'climbing' ? `<option value="climbing" ${globalSort === 'climbing' ? 'selected' : ''}>${escapeHtml(_climbLabel)}</option>` : ''}
+                                ${visibleSkills.includes('skills') || globalSort === 'skills' ? `<option value="skills" ${globalSort === 'skills' ? 'selected' : ''}>${escapeHtml(_descendLabel)}</option>` : ''}
                             </select>
                         </div>
                     </div>
-                ` : '';
-                // Resize the spacer since the banner height changed
+                    ${_hasAssignments ? `
+                    <div id="groups-resize-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; flex-wrap: wrap;">
+                        <span style="font-size: 15px; color: #333; font-weight: 600;">${_numGroups} Group${_numGroups !== 1 ? 's' : ''}${_hasRidersInGroups ? `, ${_sizeRange} Riders/Group` : ''}</span>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button id="fewer-groups-btn" type="button" class="btn-small" onclick="tryFewerGroups()" ${_fewerDisabled ? 'disabled' : ''} style="font-size: 12px; padding: 5px 12px; background: #757575; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;${_fewerDisabled ? ' opacity:0.4; cursor:not-allowed;' : ''}">Make Larger Groups</button>
+                            <button id="more-groups-btn" type="button" class="btn-small" onclick="tryMoreGroups()" style="font-size: 12px; padding: 5px 12px; background: #757575; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">Make Smaller Groups</button>
+                        </div>
+                    </div>
+                    ` : ''}
+                `;
                 requestAnimationFrame(() => {
                     if (typeof updateSidebarTop === 'function') updateSidebarTop();
                 });
             }
 
-            // Build "Add Group" placeholder (only when groups already exist)
             const addGroupHtml = ride.groups.length > 0 ? `
-                <div id="add-group-placeholder" class="add-group-placeholder" onclick="addGroup()" style="display: flex; align-items: center; justify-content: center; min-height: 200px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; cursor: pointer; transition: background 0.15s;">
-                    <button type="button" class="btn-small" onclick="event.stopPropagation(); addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
+                <div id="add-group-placeholder" class="add-group-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px 0; min-height: 200px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; transition: background 0.15s;">
+                    <div id="add-group-buttons-row" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                        <button type="button" class="btn-small" onclick="event.stopPropagation(); addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
+                        <button type="button" class="btn-small" onclick="event.stopPropagation(); autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>
+                    </div>
+                    <button type="button" class="btn-small" onclick="event.stopPropagation(); switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>
                 </div>
             ` : '';
 
@@ -8655,6 +8929,13 @@
                         placeholder.style.borderRadius = '8px';
                     }
                 }
+                // Match wizard button width to the row of buttons above it
+                document.querySelectorAll('#add-group-buttons-row').forEach(row => {
+                    const wizardBtn = row.parentElement && row.parentElement.querySelector('button[onclick*="switchToWizardFromPlanner"]');
+                    if (row && wizardBtn) {
+                        wizardBtn.style.width = row.offsetWidth + 'px';
+                    }
+                });
             });
 
             // Update publish buttons after container is updated

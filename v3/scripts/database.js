@@ -193,28 +193,29 @@ async function updateRider(id, riderData) {
         .from('riders')
         .update(dbData)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    const row = data[0];
     
     // Map back to app structure
     return {
-        ...(data.extra_data || {}),
-        id: data.id,
-        name: data.name,
-        nickname: data.nickname || '',
-        phone: data.phone,
-        email: data.email,
-        grade: data.grade,
-        gender: data.gender,
-        racingGroup: data.racing_group,
-        fitness: data.endurance || data.fitness,
-        climbing: data.climbing || '3',
-        skills: data.descending || data.skills,
-        photo: data.photo,
-        notes: data.notes,
-        archived: data.archived || false
+        ...(row.extra_data || {}),
+        id: row.id,
+        name: row.name,
+        nickname: row.nickname || '',
+        phone: row.phone,
+        email: row.email,
+        grade: row.grade,
+        gender: row.gender,
+        racingGroup: row.racing_group,
+        fitness: row.endurance || row.fitness,
+        climbing: row.climbing || '3',
+        skills: row.descending || row.skills,
+        photo: row.photo,
+        notes: row.notes,
+        archived: row.archived || false
     };
 }
 
@@ -346,11 +347,11 @@ async function updateCoach(id, coachData) {
         .from('coaches')
         .update(dbData)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
-    return mapCoachDbToApp(data);
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    return mapCoachDbToApp(data[0]);
 }
 
 function mapCoachDbToApp(coach) {
@@ -713,11 +714,11 @@ async function updateRiderFeedback(id, feedbackData) {
         .from('rider_feedback')
         .update(feedbackData)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
-    return data;
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    return data[0];
 }
 
 // ============ RIDE NOTES ============
@@ -1151,11 +1152,11 @@ async function markInvitationAsUsed(token, userId) {
             used_by: userId
         })
         .eq('token', token)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
-    return data;
+    if (!data || data.length === 0) throw new Error('Update returned no rows — token may be invalid');
+    return data[0];
 }
 
 async function getAllAdminInvitations() {
@@ -1320,18 +1321,19 @@ async function updateRace(id, raceData) {
         .from('races')
         .update(dbData)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    const row = data[0];
     
     // Map back to app structure
     return {
-        id: data.id,
-        name: data.name,
-        raceDate: data.race_date,
-        preRideDate: data.pre_ride_date,
-        location: data.location
+        id: row.id,
+        name: row.name,
+        raceDate: row.race_date,
+        preRideDate: row.pre_ride_date,
+        location: row.location
     };
 }
 
@@ -1517,25 +1519,26 @@ async function updateRoute(id, route) {
             updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .select()
-        .single();
+        .select();
     
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    const row = data[0];
     
     return {
-        id: data.id,
-        name: data.name,
-        description: data.description,
-        stravaEmbedCode: data.strava_embed_code,
-        stravaUrl: data.strava_url || null,
-        distance: data.distance || null,
-        elevation: data.elevation || null,
-        estimatedTime: data.estimated_time || null,
-        fitnessMin: data.fitness_min || 1,
-        fitnessMax: data.fitness_max || null,
-        skillsMin: data.skills_min || 1,
-        skillsMax: data.skills_max || null,
-        startLocation: data.start_location || null
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        stravaEmbedCode: row.strava_embed_code,
+        stravaUrl: row.strava_url || null,
+        distance: row.distance || null,
+        elevation: row.elevation || null,
+        estimatedTime: row.estimated_time || null,
+        fitnessMin: row.fitness_min || 1,
+        fitnessMax: row.fitness_max || null,
+        skillsMin: row.skills_min || 1,
+        skillsMax: row.skills_max || null,
+        startLocation: row.start_location || null
     };
 }
 
@@ -2214,23 +2217,24 @@ async function updateScheduledAbsence(id, updates) {
         .from('scheduled_absences')
         .update(payload)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
 
     if (error) {
         console.error('Error updating scheduled absence:', error);
         throw error;
     }
+    if (!data || data.length === 0) throw new Error('Update returned no rows — session may have expired');
+    const row = data[0];
 
     return {
-        id: data.id,
-        personType: data.person_type,
-        personId: data.person_id,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        reason: data.reason,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
+        id: row.id,
+        personType: row.person_type,
+        personId: row.person_id,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        reason: row.reason,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 

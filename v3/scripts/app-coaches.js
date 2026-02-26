@@ -103,10 +103,10 @@
 
         function renderCoaches() {
             const list = document.getElementById('coaches-list');
-            // Filter out archived unless toggle is on
-            const visibleCoaches = showArchivedCoaches ? data.coaches : data.coaches.filter(c => !c.archived);
-            if (visibleCoaches.length === 0) {
-                const archivedCount = data.coaches.filter(c => c.archived).length;
+            const activeCoaches = data.coaches.filter(c => !c.archived);
+            const archivedCoachesList = data.coaches.filter(c => c.archived);
+            if (activeCoaches.length === 0 && (!showArchivedCoaches || archivedCoachesList.length === 0)) {
+                const archivedCount = archivedCoachesList.length;
                 const msg = archivedCount > 0
                     ? `No active coaches. ${archivedCount} archived coach(es) hidden. <button class="btn-small secondary" style="margin-left:8px;" onclick="toggleShowArchivedCoaches()">Show Archived</button>`
                     : 'No coaches yet. Click "Add Coach" below to get started.';
@@ -114,11 +114,11 @@
                 return;
             }
             
-            // Separate coaches with roles from those without
+            // Separate active coaches with roles from those without
             const coachesWithRoles = [];
             const coachesWithoutRoles = [];
             
-            visibleCoaches.forEach(coach => {
+            activeCoaches.forEach(coach => {
                 if (getCoachRole(coach.id)) {
                     coachesWithRoles.push(coach);
                 } else {
@@ -212,11 +212,15 @@
                 const resizeHandle = (key !== 'actions') ? `<div class="column-resize-handle" onmousedown="handleColumnResizeStart(event, 'coach', '${key}')"></div>` : '';
                 
                 let content = '';
+                const isSkillCol = (key === 'pace' || key === 'climbing' || key === 'skills');
+                const displayLabel = isSkillCol && typeof getSkillSortLabel === 'function'
+                    ? getSkillSortLabel(key === 'pace' ? 'pace' : key, true)
+                    : def.label;
                 if (def.sortable) {
                     const sortKey = key === 'level' ? 'level' : key === 'pace' ? 'pace' : key === 'skills' ? 'skills' : key === 'climbing' ? 'climbing' : 'name';
-                    content = `<div class="roster-header-sortable" style="position: relative;" onclick="sortCoaches('${sortKey}')" title="Click to sort by ${def.label}" ${draggableAttr} ${dragHandlers}>${def.label}${resizeHandle}</div>`;
+                    content = `<div class="roster-header-sortable" style="position: relative;" onclick="sortCoaches('${sortKey}')" title="Click to sort by ${def.label}" ${draggableAttr} ${dragHandlers}>${displayLabel}${resizeHandle}</div>`;
                 } else {
-                    content = `<div style="position: relative;" ${draggableAttr} ${dragHandlers}>${def.label}${resizeHandle}</div>`;
+                    content = `<div style="position: relative;" ${draggableAttr} ${dragHandlers}>${displayLabel}${resizeHandle}</div>`;
                 }
                 return content;
             });
@@ -325,6 +329,15 @@
                                 return `<div class="roster-cell" data-label="Phone">
                                     ${formatPhoneForDisplay(coach.phone || '')}
                                 </div>`;
+                            case 'workPhone':
+                                return `<div class="roster-cell" data-label="Work Phone">${formatPhoneForDisplay(coach.workPhone || '')}</div>`;
+                            case 'homePhone':
+                                return `<div class="roster-cell" data-label="Home Phone">${formatPhoneForDisplay(coach.homePhone || '')}</div>`;
+                            case 'email':
+                                const coachEmail = coach.email || '';
+                                return `<div class="roster-cell" data-label="Email">${coachEmail ? `<a href="mailto:${escapeHtml(coachEmail)}" style="color:#1976d2;text-decoration:none;">${escapeHtml(coachEmail)}</a>` : ''}</div>`;
+                            case 'gender':
+                                return `<div class="roster-cell" data-label="Gender">${escapeHtml((coach.gender || '').toUpperCase())}</div>`;
                             case 'level':
                                 return `<div class="roster-cell" data-label="Coach Level">
                                     ${escapeHtml(levelLabel)}
@@ -381,8 +394,53 @@
                 }
             });
 
-            // Add "Show Archived" button below the coach roster
-            const archivedCoachCount = data.coaches.filter(c => c.archived).length;
+            // Archived coaches section: shown at the bottom, sorted by name, separated by a divider
+            const archivedCoachCount = archivedCoachesList.length;
+            if (showArchivedCoaches && archivedCoachCount > 0) {
+                const sortedArchivedCoaches = [...archivedCoachesList].sort((a, b) => {
+                    const aName = getSortableLastName(a.name || '');
+                    const bName = getSortableLastName(b.name || '');
+                    return aName.localeCompare(bName);
+                });
+                htmlContent += `<div class="roster-archived-divider" style="grid-column: 1 / -1; padding: 10px 16px 6px; margin-top: 12px; border-top: 2px solid #ccc; color: #888; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Archived Coaches (${archivedCoachCount})</div>`;
+                sortedArchivedCoaches.forEach(coach => {
+                    const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
+                    const levelNum = levelRaw === 'N/A' ? 0 : parseInt(levelRaw || '1', 10);
+                    const levelClass = levelRaw === 'N/A' || levelNum === 0 ? 'coach-level-na' : levelNum === 1 ? 'coach-level-1' : levelNum === 2 ? 'coach-level-2' : levelNum === 3 ? 'coach-level-3' : '';
+                    const rowCells = columnOrder.filter(key => key !== 'photo').map(key => {
+                        switch(key) {
+                            case 'name':
+                                const coachNickname = (coach.nickname || '').trim();
+                                let coachNameWithNickname;
+                                if (coachNickname && coach.nicknameMode === 'firstName') {
+                                    coachNameWithNickname = `${coachNickname} ${coach.lastName || ''}`.trim();
+                                } else if (coachNickname) {
+                                    coachNameWithNickname = coachNickname;
+                                } else {
+                                    coachNameWithNickname = coach.name || '';
+                                }
+                                return `<div class="roster-cell roster-name" data-label="Name">
+                                    ${escapeHtml(coachNameWithNickname)}
+                                    ${coach.phone ? `<a href="${formatPhoneForTel(coach.phone)}" class="roster-phone-icon coach-phone-icon" title="Call ${formatPhoneForDisplay(coach.phone)}">📞</a>` : ''}
+                                </div>`;
+                            case 'actions':
+                                return `<div class="roster-actions">
+                                    <button class="btn-small" onclick="openEditCoachModal(${coach.id})">View/Edit Full Record</button>
+                                </div>`;
+                            default:
+                                const additionalVal = coach[key] || '';
+                                const colDef = columnPool.find(c => c.key === key);
+                                return `<div class="roster-cell" data-label="${escapeHtml(colDef ? colDef.label : key)}">${escapeHtml(String(additionalVal))}</div>`;
+                        }
+                    });
+                    htmlContent += `
+                        <div class="roster-row coach-grid-template ${levelClass} roster-row-archived" data-coach-id="${coach.id}" style="grid-template-columns: ${gridTemplate};">
+                            ${rowCells.join('')}
+                        </div>
+                    `;
+                });
+            }
+
             if (archivedCoachCount > 0) {
                 htmlContent += `<div style="text-align:center; padding:8px;">
                     <button class="btn-small secondary show-archived-btn" onclick="toggleShowArchivedCoaches()">${showArchivedCoaches ? 'Hide' : 'Show'} Archived Coaches (${archivedCoachCount})</button>
@@ -390,6 +448,8 @@
             }
 
             list.innerHTML = htmlContent;
+
+            requestAnimationFrame(() => { if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap(); });
 
             // Update CSV button label based on roster state
             const csvBtn = document.getElementById('btn-csv-coaches');
