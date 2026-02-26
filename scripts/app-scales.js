@@ -538,8 +538,8 @@
             clampRange(routeFitnessMin, routeFitnessMax);
             clampRange(routeSkillsMin, routeSkillsMax);
 
-            if (routeFitnessMin || routeFitnessMax) updateFitnessRange();
-            if (routeSkillsMin  || routeSkillsMax)  updateSkillsRange();
+            if ((routeFitnessMin || routeFitnessMax) && typeof updateFitnessRange === 'function') updateFitnessRange();
+            if ((routeSkillsMin  || routeSkillsMax)  && typeof updateSkillsRange === 'function') updateSkillsRange();
         }
         
         function updateRouteSliderLabels() {
