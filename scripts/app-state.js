@@ -70,6 +70,7 @@
         let practicePlannerView = 'home'; // 'home' | 'groupMethod' | 'planner' | 'picker'
         let practicePickerMode = null;    // 'future' | 'past' when in picker
         const USE_PRACTICE_PLANNER_LANDING = false; // Set true to show "What do you want to do?" and group-method pages
+        let _initialRideSelectionDone = false;
         
         let isReadOnlyMode = false;
         window.isReadOnlyMode = false;
@@ -237,21 +238,68 @@
         // Column definitions for roster reordering
         const riderColumnDefs = [
             { key: 'name', label: 'Name', sortable: true, width: 'minmax(220px, 1.8fr)' },
+            { key: 'nickname', label: 'Nickname', sortable: false, width: 'minmax(130px, 1fr)' },
             { key: 'gender', label: 'Gender', sortable: true, width: 'minmax(90px, 0.7fr)' },
             { key: 'grade', label: 'Grade', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'racingGroup', label: 'Racing Group', sortable: true, width: 'minmax(160px, 1fr)' },
+            { key: 'phone', label: 'Cell Phone', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'email', label: 'Email', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'address', label: 'Address', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'birthday', label: 'Birthday', sortable: false, width: 'minmax(110px, 0.8fr)' },
             { key: 'pace', label: 'Endurance Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'climbing', label: 'Climbing Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'skills', label: 'Descending Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'bike', label: 'Bike', sortable: false, width: 'minmax(100px, 0.7fr)' },
+            { key: 'primaryParentName', label: 'Primary Parent/Guardian', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'primaryParentPhone', label: 'Primary Parent Cell', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'primaryParentEmail', label: 'Primary Parent Email', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'primaryParentAddress', label: 'Primary Parent Address', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'secondParentName', label: 'Second Parent/Guardian', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'secondParentPhone', label: 'Second Parent Cell', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'secondParentEmail', label: 'Second Parent Email', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'alternateContactName', label: 'Alternate Contact', sortable: false, width: 'minmax(160px, 1fr)' },
+            { key: 'alternateContactRelationship', label: 'Alt. Contact Relation', sortable: false, width: 'minmax(140px, 0.9fr)' },
+            { key: 'alternateContactPhone', label: 'Alt. Contact Cell', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'primaryPhysician', label: 'Primary Physician', sortable: false, width: 'minmax(160px, 1fr)' },
+            { key: 'primaryPhysicianPhone', label: 'Physician Phone', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'medicalInsuranceCompany', label: 'Medical Insurance', sortable: false, width: 'minmax(160px, 1fr)' },
+            { key: 'medicalInsuranceAccountNumber', label: 'Insurance Account #', sortable: false, width: 'minmax(140px, 1fr)' },
+            { key: 'allergiesOrMedicalNeeds', label: 'Allergies/Medical', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'notes', label: 'Notes', sortable: false, width: 'minmax(80px, 0.5fr)' },
             { key: 'actions', label: '', sortable: false, width: 'minmax(160px, 0.9fr)' }
         ];
         
         const coachColumnDefs = [
             { key: 'name', label: 'Name', sortable: true, width: 'minmax(220px, 1.8fr)' },
+            { key: 'nickname', label: 'Nickname', sortable: false, width: 'minmax(130px, 1fr)' },
             { key: 'level', label: 'Coach Level', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'gender', label: 'Gender', sortable: true, width: 'minmax(90px, 0.7fr)' },
+            { key: 'phone', label: 'Cell Phone', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'workPhone', label: 'Work Phone', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'homePhone', label: 'Home Phone', sortable: false, width: 'minmax(130px, 1fr)' },
+            { key: 'email', label: 'Email', sortable: false, width: 'minmax(180px, 1.2fr)' },
             { key: 'pace', label: 'Endurance Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'climbing', label: 'Climbing Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
             { key: 'skills', label: 'Descending Rating', sortable: true, width: 'minmax(130px, 0.9fr)' },
+            { key: 'bike', label: 'Bike', sortable: false, width: 'minmax(100px, 0.7fr)' },
+            { key: 'registered', label: 'Registered', sortable: false, width: 'minmax(110px, 0.8fr)' },
+            { key: 'paid', label: 'Paid', sortable: false, width: 'minmax(80px, 0.6fr)' },
+            { key: 'backgroundCheck', label: 'Background Check', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'level3Exam', label: 'Level 3 Exam', sortable: false, width: 'minmax(120px, 0.8fr)' },
+            { key: 'pduCeu', label: 'PDU/CEU Units', sortable: false, width: 'minmax(120px, 0.8fr)' },
+            { key: 'fieldWorkHours', label: 'Field Work Hours', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'firstAid', label: 'First Aid', sortable: false, width: 'minmax(180px, 1.2fr)' },
+            { key: 'cprExpires', label: 'CPR Expires', sortable: false, width: 'minmax(120px, 0.8fr)' },
+            { key: 'concussionTraining', label: 'Concussion Training', sortable: false, width: 'minmax(150px, 1fr)' },
+            { key: 'nicaPhilosophy', label: 'NICA Philosophy', sortable: false, width: 'minmax(140px, 0.9fr)' },
+            { key: 'abuseAwareness', label: 'Abuse Awareness', sortable: false, width: 'minmax(140px, 0.9fr)' },
+            { key: 'licenseLevel1', label: 'License Level 1', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'licenseLevel2', label: 'License Level 2', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'licenseLevel3', label: 'License Level 3', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'otbClassroom', label: 'OTB Classroom', sortable: false, width: 'minmax(130px, 0.9fr)' },
+            { key: 'otbOutdoor', label: 'OTB Outdoor', sortable: false, width: 'minmax(120px, 0.8fr)' },
+            { key: 'nicaSummit', label: 'NICA Summit', sortable: false, width: 'minmax(120px, 0.8fr)' },
+            { key: 'notes', label: 'Notes', sortable: false, width: 'minmax(80px, 0.5fr)' },
             { key: 'actions', label: '', sortable: false, width: 'minmax(160px, 0.9fr)' }
         ];
 

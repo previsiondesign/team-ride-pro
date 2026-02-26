@@ -21,6 +21,23 @@
             return normalizePaceScaleOrder(data.seasonSettings && data.seasonSettings.paceScaleOrder);
         }
 
+        function getSkillSortLabel(skillKey, useHtml = false) {
+            const scale = getUnifiedScale();
+            const order = getPaceScaleOrder();
+            const typeWord = order === 'fastest_to_slowest' ? 'Ranking' : 'Rating';
+            const range = `(1-${scale})`;
+            let name = skillKey;
+            if (skillKey === 'pace') name = 'Endurance';
+            else if (skillKey === 'climbing') name = 'Climb';
+            else if (skillKey === 'skills') name = 'Descend';
+            if (useHtml) {
+                return `<span class="skill-label">${name}<br>${typeWord} ${range}</span>`;
+            }
+            return `${name} ${typeWord} ${range}`;
+        }
+
+        function syncSkillHeaderWrap() { /* no-op — skill headers are always two lines */ }
+
         function normalizeGroupPaceOrder(value, fallback = 'fastest_to_slowest') {
             if (value === 'fastest_to_slowest' || value === 'slowest_to_fastest') {
                 return value;

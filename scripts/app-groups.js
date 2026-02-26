@@ -1023,11 +1023,15 @@
 
         function renderEmptyGroupCard() {
             return `
-                <div class="coach-group empty-group" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; padding: 30px;">
-                    <div class="empty-message" style="margin-bottom: 12px; color: #555;">
+                <div class="coach-group empty-group" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; padding: 30px 30px 40px; gap: 10px;">
+                    <div class="empty-message" style="margin-bottom: 2px; color: #555;">
                         No groups yet. Add a group to begin assigning riders and coaches.
                     </div>
-                    <button type="button" class="btn-small" onclick="addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
+                    <div id="add-group-buttons-row" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button type="button" class="btn-small" onclick="addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
+                        <button type="button" class="btn-small" onclick="autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>
+                    </div>
+                    <button type="button" class="btn-small" onclick="switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>
                 </div>
             `;
         }

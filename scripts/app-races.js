@@ -20,6 +20,7 @@
         function closeAddRacesModal() {
             const modal = document.getElementById('add-races-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
         }
@@ -293,6 +294,7 @@
         function closeAutoAssignSettingsModal() {
             const modal = document.getElementById('auto-assign-settings-modal');
             if (!modal) return;
+            if (modal.contains(document.activeElement)) document.activeElement.blur();
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
             autoAssignSettingsDraft = null;
