@@ -543,8 +543,8 @@
                 <!-- Welcome Screen Preference -->
                 <div class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
                     <h3 style="margin-bottom: 12px; color: #555;">Personal Preferences</h3>
-                    <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #555;">
-                        <input type="checkbox" id="welcome-screen-enabled-toggle" onchange="handleWelcomeScreenSettingToggle(this.checked)">
+                    <label class="settings-pref-row">
+                        <input type="checkbox" id="welcome-screen-enabled-toggle" class="settings-checkbox" onchange="handleWelcomeScreenSettingToggle(this.checked)">
                         <span>Show welcome screen with shortcut options</span>
                     </label>
                 </div>
@@ -656,8 +656,8 @@
                 <!-- Developer Mode -->
                 <div id="developer-mode-section" class="section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
                     <h3 style="margin-bottom: 8px; color: #555;">Developer mode (local-only sandbox)</h3>
-                    <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: #555;">
-                        <input type="checkbox" id="developer-mode-toggle" onchange="handleDeveloperModeToggle(this.checked)" style="transform: scale(1.1); margin-top: 2px;">
+                    <label class="settings-pref-row">
+                        <input type="checkbox" id="developer-mode-toggle" class="settings-checkbox" onchange="handleDeveloperModeToggle(this.checked)">
                         <span>
                             When ON, your changes are saved only in this browser and will <strong>not</strong> affect the live database. Other admins can continue using the site normally.
                         </span>

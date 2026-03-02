@@ -416,7 +416,7 @@
             }
             data.seasonSettings.groupPaceOrder = normalized;
             saveRideToDB(ride);
-            if (typeof updateSeasonSettings === 'function') {
+            if (!window.isDeveloperMode && typeof updateSeasonSettings === 'function') {
                 updateSeasonSettings(data.seasonSettings);
             }
             renderAssignments(ride);
@@ -568,11 +568,13 @@
 
         function saveAutoAssignSettingsInline() {
             saveData();
-            if (typeof updateAutoAssignSettings === 'function') {
-                updateAutoAssignSettings({ parameters: data.autoAssignSettings.parameters });
-            }
-            if (data.seasonSettings && typeof updateSeasonSettings === 'function') {
-                updateSeasonSettings(data.seasonSettings);
+            if (!window.isDeveloperMode) {
+                if (typeof updateAutoAssignSettings === 'function') {
+                    updateAutoAssignSettings({ parameters: data.autoAssignSettings.parameters });
+                }
+                if (data.seasonSettings && typeof updateSeasonSettings === 'function') {
+                    updateSeasonSettings(data.seasonSettings);
+                }
             }
             alert('Group assignment rules saved!');
         }

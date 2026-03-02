@@ -1380,7 +1380,10 @@
             isDeveloperMode = true;
             window.isDeveloperMode = true;
             window._devModeEnteredAt = new Date().toISOString();
-            _lastBannerPollHadOtherUser = true;
+            /* Do not set _lastBannerPollHadOtherUser = true here: we just released the lock ourselves,
+               so the next poll would see "lock free" and wrongly prompt "other user logged out".
+               Only prompt when we had previously observed another user holding the lock (set in poll). */
+            _lastBannerPollHadOtherUser = false;
             try {
                 localStorage.setItem(DEV_MODE_STORAGE_KEY, 'true');
                 localStorage.setItem('trp_dev_mode_entered_at', window._devModeEnteredAt);

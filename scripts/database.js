@@ -30,6 +30,11 @@ function filterSafeColumns(obj, safeSet) {
     return { safe, extra };
 }
 
+/** When true, all Supabase writes in this module must no-op (developer mode: no DB changes). */
+function skipSupabaseWriteInDevMode() {
+    return typeof window !== 'undefined' && window.isDeveloperMode === true;
+}
+
 // ============ RIDERS ============
 
 async function getAllRiders() {
@@ -103,6 +108,7 @@ async function getRiderById(id) {
 }
 
 async function createRider(riderData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createRider'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -161,6 +167,7 @@ async function createRider(riderData) {
 }
 
 async function updateRider(id, riderData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateRider'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -220,6 +227,7 @@ async function updateRider(id, riderData) {
 }
 
 async function deleteRider(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteRider'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -276,6 +284,7 @@ async function getCoachById(id) {
 }
 
 async function createCoach(coachData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createCoach'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
@@ -315,6 +324,7 @@ async function createCoach(coachData) {
 }
 
 async function updateCoach(id, coachData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateCoach'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -392,6 +402,7 @@ function mapCoachDbToApp(coach) {
 }
 
 async function deleteCoachRecord(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteCoachRecord'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -580,6 +591,8 @@ async function getRideById(id) {
 }
 
 async function createRide(rideData) {
+    // Developer mode: no Supabase writes (includes practice planning groups, assignments)
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createRide'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const dbData = buildRideDbData(rideData);
@@ -593,6 +606,8 @@ async function createRide(rideData) {
 }
 
 async function updateRide(id, rideData) {
+    // Developer mode: no Supabase writes (includes practice planning groups, assignments, attendance)
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateRide'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const dbData = buildRideDbData(rideData);
@@ -648,6 +663,7 @@ async function updateRide(id, rideData) {
 }
 
 async function deleteRide(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteRide'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -684,6 +700,7 @@ async function getRiderFeedback(rideId, riderId = null) {
 }
 
 async function createRiderFeedback(feedbackData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createRiderFeedback'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -707,6 +724,7 @@ async function createRiderFeedback(feedbackData) {
 }
 
 async function updateRiderFeedback(id, feedbackData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateRiderFeedback'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -741,6 +759,7 @@ async function getRideNotes(rideId) {
 }
 
 async function upsertRideNotes(rideId, notes) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping upsertRideNotes'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -781,6 +800,7 @@ async function getRiderAvailability(rideId) {
 }
 
 async function setRiderAvailability(rideId, riderId, available) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping setRiderAvailability'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -925,6 +945,7 @@ async function getSeasonSettings() {
 }
 
 async function updateSeasonSettings(settings) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateSeasonSettings'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const dbData = buildSeasonDbData(settings);
@@ -966,6 +987,7 @@ async function getAutoAssignSettings() {
 }
 
 async function updateAutoAssignSettings(settings) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateAutoAssignSettings'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -999,6 +1021,7 @@ async function getUserRole(userId) {
 }
 
 async function setUserRole(userId, role) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping setUserRole'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1040,6 +1063,7 @@ async function getUserPreference(prefKey) {
 }
 
 async function setUserPreference(prefKey, prefValue) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping setUserPreference'); return prefValue; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
@@ -1084,6 +1108,7 @@ async function getAllUsersWithRoles() {
 // ============ ADMIN INVITATIONS ============
 
 async function createAdminInvitation(email) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createAdminInvitation'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1141,6 +1166,7 @@ async function getAdminInvitationByToken(token) {
 }
 
 async function markInvitationAsUsed(token, userId) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping markInvitationAsUsed'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1193,6 +1219,7 @@ async function getAdminInvitationsByEmail(email) {
 }
 
 async function expireAdminInvitationsByEmail(email) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping expireAdminInvitationsByEmail'); return []; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
@@ -1211,6 +1238,7 @@ async function expireAdminInvitationsByEmail(email) {
 }
 
 async function deleteAdminInvitation(invitationId) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteAdminInvitation'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
@@ -1276,6 +1304,7 @@ async function getAllRaces() {
 }
 
 async function createRace(raceData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createRace'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1306,6 +1335,7 @@ async function createRace(raceData) {
 }
 
 async function updateRace(id, raceData) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateRace'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1338,6 +1368,7 @@ async function updateRace(id, raceData) {
 }
 
 async function deleteRace(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteRace'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1350,6 +1381,7 @@ async function deleteRace(id) {
 }
 
 async function upsertAllRaces(racesArray) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping upsertAllRaces'); return []; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1453,6 +1485,7 @@ async function getRouteById(id) {
 }
 
 async function createRoute(route) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createRoute'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1497,6 +1530,7 @@ async function createRoute(route) {
 }
 
 async function updateRoute(id, route) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateRoute'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1543,6 +1577,7 @@ async function updateRoute(id, route) {
 }
 
 async function deleteRoute(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteRoute'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1557,6 +1592,7 @@ async function deleteRoute(id) {
 // ============ BACKUPS ============
 
 async function createBackup(backupName, backupData, backupType = 'manual') {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createBackup'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1608,6 +1644,7 @@ async function getBackupById(id) {
 }
 
 async function deleteBackup(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteBackup'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     
@@ -1702,6 +1739,7 @@ async function getAllUsersWithLoginInfo() {
 }
 
 async function disableAdminUser(userId, email) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping disableAdminUser'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
@@ -1726,6 +1764,7 @@ async function disableAdminUser(userId, email) {
 }
 
 async function enableAdminUser(userId) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping enableAdminUser'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
 
@@ -1745,6 +1784,7 @@ async function enableAdminUser(userId) {
 }
 
 async function setAllowDevAccess(userId, allowed) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping setAllowDevAccess'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const { error } = await client
@@ -1786,6 +1826,7 @@ async function getAdminEditLock() {
 }
 
 async function upsertAdminEditLock(lockInfo) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping upsertAdminEditLock'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const { error } = await client
@@ -1801,6 +1842,7 @@ async function upsertAdminEditLock(lockInfo) {
 }
 
 async function clearAdminEditLock(userId) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping clearAdminEditLock'); return; }
     const client = getSupabaseClient();
     if (!client) return;
     // Only clear if the lock is owned by the current user
@@ -1836,6 +1878,7 @@ async function getTakeOverRequest() {
 }
 
 async function createTakeOverRequest(requesterInfo) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createTakeOverRequest'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     // Delete any existing row first to avoid RLS UPDATE policy blocking the upsert.
@@ -1858,6 +1901,7 @@ async function createTakeOverRequest(requesterInfo) {
 }
 
 async function respondToTakeOverRequest(status, responseMessage = null) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping respondToTakeOverRequest'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
     const { error } = await client
@@ -1872,6 +1916,7 @@ async function respondToTakeOverRequest(status, responseMessage = null) {
 }
 
 async function clearTakeOverRequest() {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping clearTakeOverRequest'); return; }
     const client = getSupabaseClient();
     if (!client) return;
     try {
@@ -1984,6 +2029,7 @@ function generateVerificationCode() {
 // Create a verification code in the database
 // Returns: { code: string, id: uuid }
 async function createVerificationCode(phoneOrEmail, userType, userId) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createVerificationCode'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not available');
     
@@ -2036,7 +2082,9 @@ async function verifyCode(phoneOrEmail, code) {
     if (!data) {
         return { valid: false, message: 'Invalid or expired code. Please request a new code.' };
     }
-    
+    if (skipSupabaseWriteInDevMode()) {
+        return { valid: true, userType: data.user_type, userId: data.user_id };
+    }
     // Mark code as verified
     const { error: updateError } = await client
         .from('verification_codes')
@@ -2171,6 +2219,7 @@ async function loadScheduledAbsences() {
 }
 
 async function createScheduledAbsence(absence) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createScheduledAbsence'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('No Supabase client');
 
@@ -2204,6 +2253,7 @@ async function createScheduledAbsence(absence) {
 }
 
 async function updateScheduledAbsence(id, updates) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping updateScheduledAbsence'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('No Supabase client');
 
@@ -2239,6 +2289,7 @@ async function updateScheduledAbsence(id, updates) {
 }
 
 async function deleteScheduledAbsence(id) {
+    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteScheduledAbsence'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('No Supabase client');
 

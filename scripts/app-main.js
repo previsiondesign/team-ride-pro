@@ -1495,6 +1495,9 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.mobile-menu-item').forEach(t => t.classList.remove('active'));
+            // Hide developer/read-only banners on assignment tabs (rider + coach assignments)
+            const onAssignmentsTab = (tabName === 'assignments' || tabName === 'coach-assignments');
+            document.body.classList.toggle('assignments-tabs-active', !!onAssignmentsTab);
             
             if (element) {
                 element.classList.add('active');
@@ -3257,13 +3260,15 @@
                 ride.availableCoaches = Array.from(new Set(ride.availableCoaches)); // Deduplicate
             }
             
-            // Build rider assignment map
+            // Build rider assignment map (use normalized numeric IDs so lookup matches rider.id whether number or string)
             const riderAssignmentMap = {};
             const groupLabelMap = {};
             ride.groups.forEach(group => {
                 groupLabelMap[group.id] = group.label;
-                group.riders.forEach(riderId => {
-                    riderAssignmentMap[riderId] = group.id;
+                (group.riders || []).forEach(riderId => {
+                    const nId = typeof riderId === 'string' ? parseInt(riderId, 10) : riderId;
+                    const key = Number.isFinite(nId) ? nId : riderId;
+                    riderAssignmentMap[key] = group.id;
                 });
             });
             
@@ -3304,10 +3309,11 @@
             }
             
             const ridersData = ridersToShow.map(rider => {
-                // Normalize rider ID for comparison
+                // Normalize rider ID for comparison (match assignment map key type)
                 const riderId = typeof rider.id === 'string' ? parseInt(rider.id, 10) : rider.id;
+                const normalizedId = Number.isFinite(riderId) ? riderId : rider.id;
                 const isAvailable = Number.isFinite(riderId) ? normalizedAvailableRiderIds.has(riderId) : ride.availableRiders.includes(rider.id);
-                const assignedGroupId = riderAssignmentMap[rider.id];
+                const assignedGroupId = riderAssignmentMap[normalizedId];
                 const assignedGroupLabel = assignedGroupId ? groupLabelMap[assignedGroupId] : null;
                 
                 const fitnessScale = getFitnessScale();
