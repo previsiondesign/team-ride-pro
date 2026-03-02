@@ -7315,10 +7315,10 @@
                     return;
                 }
 
-                // Generate both PDFs and HTML export
+                // Generate both PDFs (mobile + desktop) with staggered saves
+                // to avoid browser multi-download permission prompts
                 generateMobileFriendlyPDF(ride);
-                generateDesktopPrintFriendlyPDF(ride);
-                generateHTMLExport(ride);
+                setTimeout(() => { generateDesktopPrintFriendlyPDF(ride); }, 800);
                 
             } catch (error) {
                 console.error('Error generating exports:', error);
