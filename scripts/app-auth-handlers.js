@@ -1,5 +1,13 @@
         // app-auth-handlers.js — Login flows, lock conflict, developer mode, auto-logout, role-based access
 
+        // Timeouts — standard Web APIs used throughout; behavior is cross-platform (Mac + PC).
+        const IDLE_LOGOUT_MS = 10 * 60 * 1000;           // 10 minutes inactivity
+        const IDLE_CHECK_INTERVAL_MS = 60 * 1000;       // check every 1 min
+        const TAKEOVER_COUNTDOWN_SEC = 45;              // auto-allow after 45s with no response
+        const TAKEOVER_POLL_MS = 1200;                  // lock holder: check for requests every 1.2s
+        const REQUESTER_POLL_MS = 800;                  // requester: check for response every 0.8s
+        const SESSION_REFRESH_INTERVAL_MS = 2 * 60 * 1000; // validate session with Supabase every 2 min
+
         // Authentication handlers
         function showAuthError(message, type = 'error') {
             const errorDiv = document.getElementById('auth-error');
@@ -893,7 +901,7 @@
                             alert('Access request was cleared or expired. Try again.');
                             return;
                         }
-                        if (req.status === 'approved') {
+                        if (req.status === 'granted') {
                             clearInterval(lockConflictRequestPollTimer);
                             lockConflictRequestPollTimer = null;
                             overlay.style.display = 'none';
@@ -903,13 +911,13 @@
                             clearInterval(lockConflictRequestPollTimer);
                             lockConflictRequestPollTimer = null;
                             overlay.style.display = 'none';
-                            const reason = req.deny_reason ? ` Reason: ${req.deny_reason}` : '';
+                            const reason = req.response_message ? ` Reason: ${req.response_message}` : '';
                             alert(`Access denied by ${name}.${reason}`);
                         }
                     } catch (e) {
                         console.warn('Request access poll error:', e);
                     }
-                }, 1500);
+                }, REQUESTER_POLL_MS);
             }
         }
 
@@ -1057,7 +1065,7 @@
                     } catch (e) {
                         console.warn('Take over poll error:', e);
                     }
-                }, 1500);
+                }, REQUESTER_POLL_MS);
             };
             document.getElementById('lock-conflict-developer').onclick = () => {
                 if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
@@ -1125,7 +1133,7 @@
                     } catch (e) {
                         console.warn('Take over check poll error:', e);
                     }
-                }, 2500);
+                }, TAKEOVER_POLL_MS);
             } catch (error) {
                 console.warn('Failed to initialize admin edit lock:', error);
             }
@@ -1157,9 +1165,8 @@
             };
             overlay.addEventListener('click', stopBackdropClose);
 
-            // Warn if user tries to close tab/window without responding (after 30s they are auto-logged out)
             if (takeOverBeforeUnloadHandler) window.removeEventListener('beforeunload', takeOverBeforeUnloadHandler);
-            takeOverBeforeUnloadHandler = () => 'Someone is waiting for your response. If you leave without answering, you will be logged out in 30 seconds.';
+            takeOverBeforeUnloadHandler = () => 'Someone is waiting for your response. If you leave without answering, you will be logged out in 45 seconds.';
             window.addEventListener('beforeunload', takeOverBeforeUnloadHandler);
 
             let responded = false;
@@ -1218,7 +1225,7 @@
                 }
                 overlay.style.display = 'none';
             };
-            takeOverCountdownSeconds = 30;
+            takeOverCountdownSeconds = TAKEOVER_COUNTDOWN_SEC;
             if (countdownEl) countdownEl.textContent = 'Auto-allowing in ' + takeOverCountdownSeconds + ' seconds…';
             if (takeOverCountdownTimer) clearInterval(takeOverCountdownTimer);
             takeOverCountdownTimer = setInterval(() => {
@@ -1565,18 +1572,53 @@
             }
 
             setupAutoLogoutOnClose();
+            setupSessionRefreshPoll();
 
-            // Register page lifecycle handlers so data is saved when tab goes to background
-            // (e.g., Mac desktop switch) and reloaded when it comes back
             document.addEventListener('visibilitychange', handleVisibilityChange);
             window.addEventListener('focus', handleWindowFocus);
         }
 
+        // Ping Supabase every 2 min to refresh session and detect stale/invalidated login (reduces "user shown as logged in when not").
+        function setupSessionRefreshPoll() {
+            setInterval(function() {
+                const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+                if (!client || !client.auth) return;
+                client.auth.getSession().then(function({ data: { session } }) {
+                    if (!session) return null;
+                    return client.auth.refreshSession();
+                }).then(function(result) {
+                    if (!result) return;
+                    if (result.error || !result.data || !result.data.session) {
+                        if (typeof signOut === 'function') signOut().catch(function() {});
+                        if (typeof handleAuthStateChange === 'function') handleAuthStateChange(false);
+                    }
+                }).catch(function() {});
+            }, SESSION_REFRESH_INTERVAL_MS);
+        }
+
         function setupAutoLogoutOnClose() {
-            // Mark this browser session as active.
-            // sessionStorage survives page refreshes but is cleared when the
-            // browser/tab is closed — we use this to distinguish refresh vs close.
+            // sessionStorage survives refresh but is cleared when the tab/window is closed (in most browsers).
             sessionStorage.setItem('teamridepro_session_active', 'true');
+
+            // Idle logout: 10 minutes with no activity (mouse, keyboard, touch, scroll). Cross-platform.
+            let lastActivityAt = Date.now();
+            let idleCheckTimer = null;
+            const bumpActivity = () => { lastActivityAt = Date.now(); };
+            ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(ev => {
+                document.addEventListener(ev, bumpActivity, { passive: true });
+            });
+            idleCheckTimer = setInterval(function() {
+                if (Date.now() - lastActivityAt < IDLE_LOGOUT_MS) return;
+                clearInterval(idleCheckTimer);
+                idleCheckTimer = null;
+                const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+                if (!client || !client.auth.getSession) return;
+                client.auth.getSession().then(function({ data: { session } }) {
+                    if (!session) return;
+                    if (typeof signOut === 'function') signOut().catch(function() {});
+                    if (typeof handleAuthStateChange === 'function') handleAuthStateChange(false);
+                }).catch(function() {});
+            }, IDLE_CHECK_INTERVAL_MS);
 
             const handleBeforeUnload = () => {
                 // Flush data to localStorage synchronously (survives page unload)
@@ -1586,7 +1628,7 @@
                     }
                 } catch (e) {}
 
-                // Clear intervals synchronously
+                if (idleCheckTimer) { clearInterval(idleCheckTimer); idleCheckTimer = null; }
                 if (adminEditLockInterval) { clearInterval(adminEditLockInterval); adminEditLockInterval = null; }
                 if (takeOverCheckInterval) { clearInterval(takeOverCheckInterval); takeOverCheckInterval = null; }
 
@@ -1635,6 +1677,28 @@
             window.addEventListener('beforeunload', handleBeforeUnload);
         }
 
+        // Clear Supabase auth tokens from both storages (auth may use sessionStorage or localStorage).
+        function clearSupabaseAuthFromStorage() {
+            let cleared = 0;
+            try {
+                const url = window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '');
+                let projectRef = '';
+                try {
+                    if (url) projectRef = new URL(url).hostname.split('.')[0] || '';
+                } catch (e) {}
+                const match = (key) => (projectRef && key.startsWith('sb-' + projectRef + '-') && key.includes('auth-token')) || /^sb-.*-auth-token/.test(key);
+                for (let i = localStorage.length - 1; i >= 0; i--) {
+                    const k = localStorage.key(i);
+                    if (k && match(k)) { try { localStorage.removeItem(k); cleared++; } catch (e) {} }
+                }
+                for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                    const k = sessionStorage.key(i);
+                    if (k && match(k)) { try { sessionStorage.removeItem(k); cleared++; } catch (e) {} }
+                }
+            } catch (e) { console.warn('clearSupabaseAuthFromStorage error:', e); }
+            return cleared;
+        }
+
         // Called once at startup (from init).  If sessionStorage is empty it means
         // the browser was closed since the last visit — clear the stored Supabase
         // auth token so the user must sign in again.
@@ -1643,60 +1707,16 @@
             let navigationType = '';
             try {
                 const nav = performance.getEntriesByType('navigation');
-                if (Array.isArray(nav) && nav[0] && nav[0].type) {
-                    navigationType = nav[0].type;
-                }
-            } catch (e) {
-                navigationType = '';
+                if (Array.isArray(nav) && nav[0] && nav[0].type) navigationType = nav[0].type;
+            } catch (e) {}
+
+            if (wasActive) return;
+            if (navigationType === 'reload') return;
+
+            const n = clearSupabaseAuthFromStorage();
+            if (n > 0) {
+                try { localStorage.setItem('trp_auto_logout_at', Date.now().toString()); } catch (e) {}
             }
-
-            if (wasActive) {
-                // This is a page refresh (or same-tab navigation) — session continues.
-                return;
-            }
-
-            // Reload in the same tab should keep auth; true fresh opens should not.
-            if (navigationType === 'reload') {
-                return;
-            }
-
-            // Browser/tab was closed → clear Supabase auth artifacts from localStorage
-            try {
-                const url = window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '');
-                let projectRef = '';
-                try {
-                    if (url) {
-                        projectRef = new URL(url).hostname.split('.')[0] || '';
-                    }
-                } catch (e) {
-                    projectRef = '';
-                }
-
-                const keysToClear = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (!key) continue;
-                    if (projectRef) {
-                        if (key.startsWith('sb-' + projectRef + '-') && key.includes('auth-token')) {
-                            keysToClear.push(key);
-                        }
-                    } else if (/^sb-.*-auth-token/.test(key)) {
-                        keysToClear.push(key);
-                    }
-                }
-
-                keysToClear.forEach(k => {
-                    try { localStorage.removeItem(k); } catch (e) {}
-                });
-                if (keysToClear.length > 0) {
-                    console.log(`Auto-logout: cleared ${keysToClear.length} stale auth token entr${keysToClear.length === 1 ? 'y' : 'ies'} after close.`);
-                    try { localStorage.setItem('trp_auto_logout_at', Date.now().toString()); } catch (e) {}
-                }
-            } catch (e) {
-                console.warn('checkAutoLogoutOnOpen error:', e);
-            }
-
-            // Also clear developer mode flag
             try {
                 localStorage.removeItem(DEV_MODE_STORAGE_KEY);
                 localStorage.removeItem('trp_dev_mode_entered_at');
