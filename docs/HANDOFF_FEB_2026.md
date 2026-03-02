@@ -8,8 +8,8 @@
 ## Project Overview
 
 - **Name:** TeamRide Pro (Tam High MTB Team Roster & Practice Manager)
-- **Local path:** `D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\Team Practice Pro`
-  - **NOTE:** The folder is scheduled to be renamed to `TeamRide Pro`. If it has already been renamed, the path is `...\MTB Team\TeamRide Pro`. The workspace file is already `TeamRide Pro.code-workspace`.
+- **Local path:** `D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\TeamRide Pro`
+- **v3 worktree path:** `D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\TeamRide Pro v3`
 - **Repo:** `previsiondesign/team-ride-pro` on GitHub
 - **Live site (v2):** https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html
 - **GitHub Pages** serves from the `main` branch
@@ -27,12 +27,25 @@ Single-page app: roster management, practice scheduling, group assignments, rout
 
 Both branches share the same Supabase database and configuration.
 
-### How to work with branches
+### Local Setup: Git Worktrees
 
-- **Work on v3:** `git checkout v3-dev`
-- **Hotfix v2:** `git checkout main`, fix, commit, push
-- **Bring v2 fixes into v3:** `git checkout v3-dev && git merge main`
-- **Deploy v3 as production (when ready):** merge `v3-dev` into `main`, or reconfigure GitHub Pages
+Both branches are checked out simultaneously using **git worktrees** — no branch switching needed:
+
+| Local Folder | Branch | Purpose |
+|-------------|--------|---------|
+| `TeamRide Pro\` | `main` | v2 production (frozen, live on GitHub Pages) |
+| `TeamRide Pro v3\` | `v3-dev` | v3 development (active work happens here) |
+
+Both folders are fully functional git checkouts linked to the same repo. Commits in either folder go to the correct branch automatically.
+
+### How to work with worktrees
+
+- **v3 development:** Edit files in `TeamRide Pro v3\`, commit, push
+- **v2 hotfix:** Edit files in `TeamRide Pro\`, commit, push to main (GitHub Pages updates)
+- **Local testing:** Open `TeamRide Pro\teamridepro_v2.html` or `TeamRide Pro v3\teamridepro_v3.html` in a browser
+- **Bring v2 fixes into v3:** In the v3 folder, run `git merge main`
+- **Deploy v3 as production (when ready):** merge `v3-dev` into `main` (via PR or local merge), update `index.html` to point to `teamridepro_v3.html`, push
+- **Cleanup after v2 retirement:** `git worktree remove "../TeamRide Pro v3"` from the main folder, then delete the `v3-dev` branch if no longer needed
 
 ### What's different on `v3-dev` vs `main`
 
@@ -165,12 +178,20 @@ Body (end): `app-main.js`
 - Inline `<style>` extracted to `styles-overrides.css`
 - `teamridepro_v2.html` reduced from ~30,260 to ~1,800 lines
 
-### 5. Project Renaming & v3 Branch Setup (This Session)
+### 5. Project Renaming & v3 Branch Setup (Earlier Session)
 
 - Workspace file renamed: `Team Practice Pro.code-workspace` → `TeamRide Pro.code-workspace`
-- Folder rename pending (user must close Cursor and rename manually)
+- Folder renamed: `Team Practice Pro` → `TeamRide Pro` (completed)
 - `v3-dev` branch created and pushed to `origin/v3-dev`
 - All v3-dev organizational changes (gitignore, file moves) committed and pushed
+
+### 6. Git Worktree Setup (This Session)
+
+- Created a git worktree so both branches are checked out simultaneously:
+  - `TeamRide Pro\` = `main` (v2 production)
+  - `TeamRide Pro v3\` = `v3-dev` (v3 development)
+- No branch switching needed — edit files in the appropriate folder
+- Both HTML files can be opened in a browser for local testing at any time
 
 ---
 
@@ -230,9 +251,12 @@ All in `sql/` directory. Run against Supabase SQL editor. Notable recent ones:
 
 ## Run / Test
 
-- **Local:** Open `teamridepro_v2.html` (main) or `teamridepro_v3.html` (v3-dev) in a browser. Supabase config is in `scripts/supabase-config.js`.
-- **Local server:** `node server.js` (on main) or `cd server && node server.js` (on v3-dev)
-- **Push to live (v2):** Commit and push to `main`. GitHub Pages rebuilds in 1-2 min. Hard refresh: `Ctrl+Shift+R`.
+- **Local v2:** Open `TeamRide Pro\teamridepro_v2.html` in a browser
+- **Local v3:** Open `TeamRide Pro v3\teamridepro_v3.html` in a browser
+- **Supabase config:** `scripts/supabase-config.js` (same in both folders)
+- **Local server (v2):** `node server.js` (in `TeamRide Pro\`)
+- **Local server (v3):** `cd server && node server.js` (in `TeamRide Pro v3\`)
+- **Push to live (v2):** Commit and push to `main` from `TeamRide Pro\`. GitHub Pages rebuilds in 1-2 min. Hard refresh: `Ctrl+Shift+R`.
 
 ---
 
@@ -240,8 +264,8 @@ All in `sql/` directory. Run against Supabase SQL editor. Notable recent ones:
 
 1. **Strava route previews are disabled** — cross-origin iframes can't be captured automatically. Routes can use a manually-uploaded cached preview image.
 2. **`app-main.js` is very large (~28,500+ lines)** — `docs/SPLIT_STRATEGY_TEAMRIDEPRO_V2.md` describes a further multi-file split (Option B) if editor stability is an issue.
-3. **Folder rename pending** — local folder may still be `Team Practice Pro` instead of `TeamRide Pro`. User needs to close Cursor, rename in Explorer, and reopen via `TeamRide Pro.code-workspace`.
-4. **Old workspace file** — `Team Practice Pro.code-workspace` may still exist on disk as an untracked file; safe to delete.
+3. ~~**Folder rename pending**~~ — RESOLVED. Folder renamed to `TeamRide Pro`, workspace file is `TeamRide Pro.code-workspace`.
+4. **Old workspace file** — `Team Practice Pro.code-workspace` exists in `temp/` as an untracked file; safe to delete.
 
 ---
 
@@ -249,6 +273,7 @@ All in `sql/` directory. Run against Supabase SQL editor. Notable recent ones:
 
 | Doc | Purpose |
 |-----|---------|
+| **docs/SESSION_HANDOFF_FEB13_2026.md** | Session handoff (Feb 13, 2026) — chat recovery, worktree setup, cross-branch workflow |
 | **docs/CHAT_HANDOFF.md** | Prior handoff (Feb 2025) — Phase 1 split, lockout bypass details |
 | **docs/CHAT_SESSION_HANDOFF.md** | Older handoff (Jan 2025) — crash recovery, attendance fix |
 | **docs/SPLIT_STRATEGY_TEAMRIDEPRO_V2.md** | HTML/JS split strategy; Option B for further splitting app-main.js |
@@ -260,11 +285,11 @@ All in `sql/` directory. Run against Supabase SQL editor. Notable recent ones:
 
 ## If Continuing From Here
 
-1. **v3 development:** Switch to `v3-dev` to start building new features. The v3 branch is fully set up with clean organization.
-2. **v2 hotfixes:** Stay on `main` to fix urgent production issues without touching v3.
+1. **v3 development:** Open the `TeamRide Pro v3\` folder in Cursor. All v3 work happens here on the `v3-dev` branch.
+2. **v2 hotfixes:** Open the `TeamRide Pro\` folder in Cursor. This is the `main` branch — push here to update the live site.
 3. **Further code splitting:** If `app-main.js` causes editor performance issues, consider splitting into `app-routes-races.js`, `app-assignments.js`, etc. per `docs/SPLIT_STRATEGY_TEAMRIDEPRO_V2.md`.
-4. **Folder rename:** If not yet done, close Cursor → rename `Team Practice Pro` to `TeamRide Pro` in Explorer → reopen `TeamRide Pro.code-workspace`.
+4. **Retire v2 (when ready):** Merge `v3-dev` into `main`, update `index.html` to point to `teamridepro_v3.html`, push, then clean up with `git worktree remove "../TeamRide Pro v3"` and delete the `v3-dev` branch.
 
 ---
 
-*Handoff written February 13, 2026 for starting a new AI chat session.*
+*Handoff written February 13, 2026 for starting a new AI chat session. Updated same day with worktree setup.*
