@@ -4,6 +4,11 @@
             box-sizing: border-box;
         }
 
+        /* Prevent horizontal page scroll on small viewports; allow scroll inside scrollable areas */
+        html {
+            overflow-x: hidden;
+        }
+
         body {
             font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: url('assets/background.jpg') center/cover no-repeat fixed #f0f0f0;
@@ -2066,6 +2071,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 12px;
+            overflow-y: auto;
         }
 
         .auth-overlay.hidden {
@@ -2103,7 +2110,9 @@
             border-radius: 12px;
             box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25);
             width: min(400px, 90%);
+            max-width: 100%;
             padding: 32px;
+            margin: auto;
         }
 
         .login-title {
@@ -3222,6 +3231,7 @@
                 right: 8px;
             }
             .container {
+                min-width: 0; /* Allow shrink so content fits viewport */
                 padding: 8px 14px;
                 margin: 5px 8px 8px 8px;
             }
@@ -3285,9 +3295,14 @@
             }
 
             .container {
+                min-width: 0;
                 padding: 6px 10px;
                 margin: 0 6px 6px 6px;
                 border-radius: 10px;
+            }
+
+            .sticky-top {
+                min-width: 0;
             }
 
             h1 {
@@ -3352,6 +3367,46 @@
                 text-overflow: ellipsis;
                 margin: 0;
                 line-height: 1.2;
+            }
+
+            /* Header user name/role: truncate so bar doesn't overflow */
+            .user-info {
+                min-width: 0;
+                max-width: 50%;
+            }
+            .user-name {
+                display: block;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            /* Season dashboard: stack practices and races on narrow screens */
+            .season-dashboard-row {
+                flex-direction: column;
+            }
+
+            /* Practice rows: stack grid columns into one column */
+            .practice-row {
+                grid-template-columns: 1fr;
+            }
+
+            /* Tables: allow horizontal scroll instead of breaking layout */
+            .routes-list-table,
+            .modal-edit-table {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+            }
+            .routes-list-table table,
+            .modal-edit-table table {
+                min-width: 0;
+            }
+
+            /* Param rows (e.g. requirements): stack on mobile */
+            .param-row {
+                grid-template-columns: 1fr;
+                gap: 6px;
             }
 
             .tab-content {
@@ -3710,6 +3765,20 @@
                 padding: 20px 10px;
                 font-size: 16px;
             }
+
+            /* Auth overlay: fit and scroll on small screens */
+            .auth-overlay {
+                align-items: flex-start;
+                padding: 16px;
+            }
+            .login-container {
+                padding: 20px 16px;
+                width: 100%;
+                max-width: 100%;
+            }
+            .login-title {
+                font-size: 22px;
+            }
         }
 
         /* Small mobile devices (max-width: 480px) */
@@ -3719,6 +3788,7 @@
             }
 
             .sticky-top {
+                min-width: 0; /* Allow shrink to viewport */
                 padding: 0 8px;
                 top: 4px;
                 left: 4px;
@@ -3763,6 +3833,13 @@
                 margin: 5px;
                 width: calc(100% - 10px) !important;
                 max-width: calc(100% - 10px) !important;
+            }
+
+            .login-container {
+                padding: 16px 12px;
+            }
+            .login-title {
+                font-size: 20px;
             }
         }
 

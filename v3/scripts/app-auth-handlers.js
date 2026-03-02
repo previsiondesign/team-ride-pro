@@ -45,6 +45,75 @@
             document.getElementById('admin-request-form').style.display = 'block';
             document.getElementById('password-reset-form').style.display = 'none';
             hideAuthError();
+            const statusEl = document.getElementById('admin-request-status');
+            if (statusEl) {
+                statusEl.style.display = 'none';
+                statusEl.textContent = '';
+            }
+        }
+
+        async function submitAdminAccessRequest() {
+            const nameInput = document.getElementById('admin-request-name');
+            const phoneInput = document.getElementById('admin-request-phone');
+            const emailInput = document.getElementById('admin-request-email');
+            const statusEl = document.getElementById('admin-request-status');
+            const name = (nameInput && nameInput.value || '').trim();
+            const phone = (phoneInput && phoneInput.value || '').trim();
+            const email = (emailInput && emailInput.value || '').trim();
+
+            if (!statusEl) return;
+            statusEl.style.display = 'block';
+            statusEl.style.color = '';
+            statusEl.style.backgroundColor = '';
+
+            if (!name || !email) {
+                statusEl.textContent = 'Please enter your name and email.';
+                statusEl.style.color = '#721c24';
+                statusEl.style.backgroundColor = '#f8d7da';
+                return;
+            }
+
+            const supabaseUrl = window.SUPABASE_URL || '';
+            const anonKey = window.SUPABASE_ANON_KEY || '';
+            if (!supabaseUrl || !anonKey) {
+                statusEl.textContent = 'Service not configured. Please try again later.';
+                statusEl.style.color = '#721c24';
+                statusEl.style.backgroundColor = '#f8d7da';
+                return;
+            }
+
+            statusEl.textContent = 'Sending request...';
+            statusEl.style.color = '#666';
+
+            try {
+                const response = await fetch(`${supabaseUrl}/functions/v1/send-admin-access-request`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': anonKey,
+                        'Authorization': `Bearer ${anonKey}`
+                    },
+                    body: JSON.stringify({ name, phone, email })
+                });
+                const result = await response.json().catch(() => ({}));
+
+                if (response.ok && result.success) {
+                    statusEl.textContent = result.message || 'Request sent. An administrator will be in touch.';
+                    statusEl.style.color = '#155724';
+                    statusEl.style.backgroundColor = '#d4edda';
+                    if (nameInput) nameInput.value = '';
+                    if (phoneInput) phoneInput.value = '';
+                    if (emailInput) emailInput.value = '';
+                } else {
+                    statusEl.textContent = result.error || 'Request failed. Please try again.';
+                    statusEl.style.color = '#721c24';
+                    statusEl.style.backgroundColor = '#f8d7da';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Request failed. Please check your connection and try again.';
+                statusEl.style.color = '#721c24';
+                statusEl.style.backgroundColor = '#f8d7da';
+            }
         }
 
         function showPasswordReset() {
@@ -739,6 +808,7 @@
         }
 
         let _bannerLockPollInterval = null;
+        let _lastBannerPollHadOtherUser = false;
 
         async function reloadFreshDataInDevMode() {
             if (!isDeveloperMode) return;
@@ -812,16 +882,38 @@
         }
 
         async function pollBannerLockStatus() {
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             try {
                 if (typeof getAdminEditLock !== 'function') {
                     updateBannerUserStatus(null);
+                    _lastBannerPollHadOtherUser = false;
                     return;
                 }
                 const lock = await getAdminEditLock();
+                const otherUserHasLock = !!(lock && lock.user_id && currentUser && lock.user_id !== currentUser.id);
+                const lockNowFree = !lock || !lock.user_id || (currentUser && lock.user_id === currentUser.id);
+
+                if ((isReadOnlyMode || isDeveloperMode) && _lastBannerPollHadOtherUser && lockNowFree) {
+                    _lastBannerPollHadOtherUser = false;
+                    const modeLabel = isReadOnlyMode ? 'read-only' : 'developer';
+                    const msg = 'The other user has logged out. Exit ' + modeLabel + ' mode for full access?';
+                    if (confirm(msg)) {
+                        if (isReadOnlyMode) {
+                            setReadOnlyMode(false, null);
+                            if (typeof initAdminEditLock === 'function') await initAdminEditLock();
+                        } else {
+                            exitDeveloperMode();
+                            if (typeof initAdminEditLock === 'function') await initAdminEditLock();
+                        }
+                    }
+                }
+
+                _lastBannerPollHadOtherUser = otherUserHasLock;
                 updateBannerUserStatus(lock);
             } catch (e) {
                 console.warn('Banner lock status poll error:', e);
                 updateBannerUserStatus(null);
+                _lastBannerPollHadOtherUser = false;
             }
         }
 
@@ -926,6 +1018,7 @@
             window.isReadOnlyMode = isReadOnlyMode;
             readOnlyLockInfo = lockInfo || null;
             readOnlyNoticeShown = false;
+            if (isReadOnlyMode && lockInfo && lockInfo.user_id) _lastBannerPollHadOtherUser = true;
             const banner = document.getElementById('read-only-banner');
             if (banner) {
                 if (isReadOnlyMode) {
@@ -1287,6 +1380,7 @@
             isDeveloperMode = true;
             window.isDeveloperMode = true;
             window._devModeEnteredAt = new Date().toISOString();
+            _lastBannerPollHadOtherUser = true;
             try {
                 localStorage.setItem(DEV_MODE_STORAGE_KEY, 'true');
                 localStorage.setItem('trp_dev_mode_entered_at', window._devModeEnteredAt);
