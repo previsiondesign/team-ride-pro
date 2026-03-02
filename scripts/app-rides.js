@@ -1295,7 +1295,7 @@
                 return 'Admin invitations table not found. Please run sql/ADD_ADMIN_INVITATIONS_TABLE.sql in Supabase.';
             }
             if (status === 401 || status === 403) {
-                return 'Permission denied. Please ensure you are signed in as a coach-admin.';
+                return 'Permission denied. Please ensure you are signed in as a coach-admin or admin.';
             }
             return message || 'Failed to send invitation.';
         }
@@ -1621,7 +1621,7 @@
                     const regDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
                     html += `<td style="padding: 8px;">${regDate}</td>`;
                     const isCurrentUser = currentUser && user.id === currentUser.id;
-                    const actionButton = user.role === 'coach-admin'
+                    const actionButton = (user.role === 'coach-admin' || user.role === 'admin')
                         ? (isDisabled
                             ? `<button class="btn-small secondary" onclick="enableAdmin('${user.id}')">Enable Admin</button>`
                             : (isCurrentUser ? '' : `<button class="btn-small danger" onclick="disableAdmin('${user.id}', '${escapeHtml(user.email || '')}')">Disable Admin</button>`))

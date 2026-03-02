@@ -629,9 +629,10 @@
             if (client && currentUser && typeof updateSeasonSettings === 'function' && typeof updateAutoAssignSettings === 'function') {
                 // Authenticated user - save to Supabase only (no localStorage fallback)
                 try {
-                    // Check if user has coach-admin role before saving settings
-                    const hasPermission = typeof hasRole === 'function' ? hasRole('coach-admin') : false;
-                    
+                    // Coach-admin and admin can save; if role not loaded yet, attempt save and let RLS allow/deny
+                    const role = typeof getCurrentUserRole === 'function' ? getCurrentUserRole() : null;
+                    const hasPermission = (typeof isCoach === 'function' && isCoach()) || role === null;
+
                     // Save season settings (including timeEstimationSettings) - only if user has permission
                     if (data.seasonSettings && hasPermission) {
                         try {
@@ -660,16 +661,16 @@
                             };
                             const result = await updateSeasonSettings(seasonData);
                         } catch (error) {
-                            // Handle RLS errors gracefully - user may not have coach-admin role yet
+                            // Handle RLS errors gracefully - user may not have admin/coach-admin role yet
                             if (error.message && error.message.includes('row-level security')) {
-                                console.warn('User does not have permission to save season settings. They may need to be assigned the coach-admin role.');
+                                console.warn('User does not have permission to save season settings. They may need to be assigned the coach-admin or admin role.');
                                 // Don't show error to user - this is expected for new users without roles
                             } else {
                                 throw error; // Re-throw other errors
                             }
                         }
                     } else if (data.seasonSettings && !hasPermission) {
-                        console.warn('User does not have coach-admin role - skipping season settings save');
+                        console.warn('User does not have coach-admin or admin role - skipping season settings save');
                     }
                     
                     // Save auto-assign settings - only if user has permission
@@ -1844,7 +1845,7 @@
                 return 'Admin invitations table not found. Please run sql/ADD_ADMIN_INVITATIONS_TABLE.sql in Supabase.';
             }
             if (status === 401 || status === 403) {
-                return 'Permission denied. Please ensure you are signed in as a coach-admin.';
+                return 'Permission denied. Please ensure you are signed in as a coach-admin or admin.';
             }
             return message || 'Failed to send invitation.';
         }
@@ -2174,7 +2175,7 @@
                     const regDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
                     html += `<td style="padding: 8px;">${regDate}</td>`;
                     const isCurrentUser = currentUser && user.id === currentUser.id;
-                    const actionButton = user.role === 'coach-admin'
+                    const actionButton = (user.role === 'coach-admin' || user.role === 'admin')
                         ? (isDisabled
                             ? `<button class="btn-small secondary" onclick="enableAdmin('${user.id}')">Enable Admin</button>`
                             : (isCurrentUser ? '' : `<button class="btn-small danger" onclick="disableAdmin('${user.id}', '${escapeHtml(user.email || '')}')">Disable Admin</button>`))
@@ -3514,22 +3515,22 @@
                 // Attach event listeners to checkboxes using event delegation
                 // Use 'click' event instead of 'change' to catch the state after it changes
                 ridersContent.addEventListener('click', function handleRiderCheckboxClick(e) {
-                    // Only handle clicks on checkboxes
                     if (e.target.type !== 'checkbox' || !e.target.classList.contains('attendance-checkbox-input') || e.target.dataset.attendanceType !== 'rider') {
                         return;
                     }
-                    
-                    // Use setTimeout to read the checkbox state after it's been updated by the browser
-                    setTimeout(() => {
-                        const riderId = parseInt(e.target.dataset.riderId, 10);
-                        const isAvailable = e.target.checked;
-                        
-                        if (Number.isFinite(riderId)) {
-                            toggleRiderAvailability(riderId, isAvailable);
-                        } else {
-                            console.error('🔴 Invalid riderId:', e.target.dataset.riderId);
-                        }
-                    }, 0);
+                    e.preventDefault();
+                    const riderId = parseInt(e.target.dataset.riderId, 10);
+                    if (!Number.isFinite(riderId)) {
+                        console.error('🔴 Invalid riderId:', e.target.dataset.riderId);
+                        return;
+                    }
+                    const isAvailable = !e.target.checked;
+                    if (isAvailable === false) {
+                        const ride = data.rides.find(r => r.id === data.currentRide);
+                        if (ride && typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                    }
+                    e.target.checked = isAvailable;
+                    toggleRiderAvailability(riderId, isAvailable);
                 });
                 
                 // Allow clicking rider names to toggle their attendance checkbox
@@ -3778,24 +3779,23 @@
                 coachesList.appendChild(coachesContent);
                 
                 // Attach event listeners to checkboxes using event delegation
-                // Use 'click' event instead of 'change' to catch the state after it changes
                 coachesContent.addEventListener('click', function handleCoachCheckboxClick(e) {
-                    // Only handle clicks on checkboxes
                     if (e.target.type !== 'checkbox' || !e.target.classList.contains('attendance-checkbox-input') || e.target.dataset.attendanceType !== 'coach') {
                         return;
                     }
-                    
-                    // Use setTimeout to read the checkbox state after it's been updated by the browser
-                    setTimeout(() => {
-                        const coachId = parseInt(e.target.dataset.coachId, 10);
-                        const isAvailable = e.target.checked;
-                        
-                        if (Number.isFinite(coachId)) {
-                            toggleCoachAvailability(coachId, isAvailable);
-                        } else {
-                            console.error('🔴 Invalid coachId:', e.target.dataset.coachId);
-                        }
-                    }, 0);
+                    e.preventDefault();
+                    const coachId = parseInt(e.target.dataset.coachId, 10);
+                    if (!Number.isFinite(coachId)) {
+                        console.error('🔴 Invalid coachId:', e.target.dataset.coachId);
+                        return;
+                    }
+                    const isAvailable = !e.target.checked;
+                    if (isAvailable === false) {
+                        const ride = data.rides.find(r => r.id === data.currentRide);
+                        if (ride && typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                    }
+                    e.target.checked = isAvailable;
+                    toggleCoachAvailability(coachId, isAvailable);
                 });
                 
                 // Allow clicking coach names to toggle their attendance checkbox

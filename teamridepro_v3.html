@@ -245,7 +245,7 @@
                 <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
                     <button type="button" class="btn-small secondary" onclick="openSeasonDateRangePickerModal()" id="season-date-range-button">Season dates. . .</button>
                 </div>
-                <div style="display: flex; gap: 24px; margin-top: 16px; align-items: flex-start;">
+                <div class="season-dashboard-row" style="display: flex; gap: 24px; margin-top: 16px; align-items: flex-start;">
                     <div style="flex: 3; min-width: 0;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <label class="field-label" style="margin:0;">Regular Practices</label>
@@ -362,6 +362,10 @@
                 <button type="button" class="practice-planner-home-btn" onclick="openManualBuildFromSetup()">
                     Manually build groups
                 </button>
+                <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap;">
+                    <button type="button" class="btn-small" onclick="viewLastPracticeFromSetup()" style="font-size: 12px; padding: 6px 14px; background: #9e9e9e; color: #fff; border: none; border-radius: 6px; cursor: pointer;">View last practice</button>
+                    <button type="button" class="btn-small" onclick="openViewAnotherPracticeFromSetup()" style="font-size: 12px; padding: 6px 14px; background: #9e9e9e; color: #fff; border: none; border-radius: 6px; cursor: pointer;">View another practice</button>
+                </div>
             </div>
 
             <!-- Attendance Marking: center area during attendance mode -->
@@ -396,10 +400,6 @@
                 <button type="button" class="practice-planner-home-btn" onclick="openManualBuildFromSetup()">
                     Manually Build groups
                 </button>
-                <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap;">
-                    <button type="button" class="btn-small" onclick="viewLastPracticeFromSetup()" style="font-size: 12px; padding: 6px 14px; background: #9e9e9e; color: #fff; border: none; border-radius: 6px; cursor: pointer;">View last practice</button>
-                    <button type="button" class="btn-small" onclick="openViewAnotherPracticeFromSetup()" style="font-size: 12px; padding: 6px 14px; background: #9e9e9e; color: #fff; border: none; border-radius: 6px; cursor: pointer;">View another practice</button>
-                </div>
             </div>
 
             <!-- Copy from Prior Practice: inline selection view -->
@@ -1417,11 +1417,24 @@
             </div>
             
             <div id="admin-request-form" style="display: none;">
+                <p style="font-size: 14px; color: #64748b; margin-bottom: 16px;">Request admin access. An administrator will be notified and can approve you from the Settings page.</p>
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;">To get admin access, you need to receive an invitation from an existing administrator. Please contact your team administrator to request access.</p>
-                    <p style="font-size: 13px; color: #999; margin-top: 8px;">If you have received an invitation link, please use that link to create your account.</p>
+                    <div>
+                        <label class="field-label" for="admin-request-name">Name</label>
+                        <input type="text" id="admin-request-name" class="modal-field-input" placeholder="Your full name" autocomplete="name">
+                    </div>
+                    <div>
+                        <label class="field-label" for="admin-request-phone">Phone</label>
+                        <input type="tel" id="admin-request-phone" class="modal-field-input" placeholder="Phone number" autocomplete="tel">
+                    </div>
+                    <div>
+                        <label class="field-label" for="admin-request-email">Email</label>
+                        <input type="email" id="admin-request-email" class="modal-field-input" placeholder="your@email.com" autocomplete="email">
+                    </div>
+                    <div id="admin-request-status" style="font-size: 13px; display: none; margin-top: 4px;"></div>
+                    <button type="button" class="btn-small" onclick="submitAdminAccessRequest()" style="width: 100%; margin-top: 8px;">Submit Request</button>
                 </div>
-                
+                <p style="font-size: 13px; color: #999; margin-top: 16px;">If you already have an invitation link, use it to create your account.</p>
                 <div style="text-align: center; margin-top: 20px;">
                     <a href="#" class="auth-link" onclick="event.preventDefault(); showLogin();">Back to sign in</a>
                 </div>

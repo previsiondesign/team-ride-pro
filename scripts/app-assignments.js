@@ -2,16 +2,20 @@
 
         // ============ RIDE ASSIGNMENTS (MOBILE-FRIENDLY) ============
 
+        // Same logic as planner: next *planned* ride (planningStarted or has groups), not just next by date.
         function getNextUpcomingRide() {
             const now = new Date();
             now.setHours(0, 0, 0, 0);
             
-            // Get all non-cancelled, non-deleted rides with dates
+            const isPlanned = (ride) =>
+                ride.planningStarted === true || (Array.isArray(ride.groups) && ride.groups.length > 0);
+            
             const upcomingRides = (data.rides || [])
                 .filter(ride => {
-                    if (ride.deleted) return false; // Exclude deleted practices
+                    if (ride.deleted) return false;
                     if (ride.cancelled) return false;
                     if (!ride.date) return false;
+                    if (!isPlanned(ride)) return false; // Only show rides that are planned (like the planner)
                     const rideDate = parseISODate(ride.date);
                     if (!rideDate) return false;
                     rideDate.setHours(0, 0, 0, 0);
@@ -46,8 +50,8 @@
             if (!ride) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px 20px; color: #666;">
-                        <p style="font-size: 18px; margin-bottom: 8px;">No upcoming ride scheduled</p>
-                        <p style="font-size: 14px;">Check the Practice Planner to add practices.</p>
+                        <p style="font-size: 18px; margin-bottom: 8px;">No planned practice</p>
+                        <p style="font-size: 14px;">Open the Practice Planner and plan the next practice to see assignments here.</p>
                     </div>
                 `;
                 return;
@@ -410,8 +414,8 @@
             if (!ride) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px 20px; color: #666;">
-                        <p style="font-size: 18px; margin-bottom: 8px;">No upcoming ride scheduled</p>
-                        <p style="font-size: 14px;">Check the Practice Planner to add practices.</p>
+                        <p style="font-size: 18px; margin-bottom: 8px;">No planned practice</p>
+                        <p style="font-size: 14px;">Open the Practice Planner and plan the next practice to see assignments here.</p>
                     </div>
                 `;
                 return;

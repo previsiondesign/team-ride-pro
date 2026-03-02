@@ -2,6 +2,7 @@
 
 const ROLES = {
     COACH_ADMIN: 'coach-admin',
+    ADMIN: 'admin',       // Invited site admin (not on coach roster); same permissions as coach-admin
     RIDE_LEADER: 'ride_leader',
     RIDER: 'rider',
     PUBLIC: 'public' // No authentication required
@@ -13,9 +14,15 @@ function hasRole(role) {
     return currentRole === role;
 }
 
-// Check if user is a coach-admin
+// Check if user is a coach-admin or admin (both have full admin access)
 function isCoach() {
-    return hasRole(ROLES.COACH_ADMIN);
+    const r = getCurrentUserRole();
+    return r === ROLES.COACH_ADMIN || r === ROLES.ADMIN;
+}
+
+// True if user has coach-admin or admin role (for explicit permission checks)
+function hasCoachOrAdminRole() {
+    return isCoach();
 }
 
 // Check if user is a ride leader

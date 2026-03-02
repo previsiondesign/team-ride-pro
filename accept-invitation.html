@@ -139,6 +139,15 @@
         .hidden {
             display: none;
         }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+            .container {
+                padding: 24px 16px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -237,11 +246,12 @@
 
         async function finalizeInvitation(user) {
             try {
-                // Mark invitation as used
-                await markInvitationAsUsed(invitationToken, user.id);
+                // Grant admin role first (RLS allows insert only while invitation.used = false).
+                // Use 'admin' so invited users don't need to be on the coach roster.
+                await setUserRole(user.id, 'admin');
 
-                // Grant admin role
-                await setUserRole(user.id, 'coach-admin');
+                // Then mark invitation as used
+                await markInvitationAsUsed(invitationToken, user.id);
 
                 // Show success message
                 document.getElementById('loading').classList.add('hidden');

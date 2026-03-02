@@ -1721,7 +1721,7 @@ async function disableAdminUser(userId, email) {
         .from('user_roles')
         .delete()
         .eq('user_id', userId)
-        .eq('role', 'coach-admin');
+        .in('role', ['coach-admin', 'admin']);
     if (deleteError) throw deleteError;
 }
 
