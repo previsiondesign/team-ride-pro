@@ -351,6 +351,30 @@
             }
         }
 
+        /** True if ride date is strictly before today (date-only comparison). */
+        function isPastPractice(ride) {
+            if (!ride || !ride.date) return false;
+            const d = parseISODate(ride.date);
+            if (!d) return false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            d.setHours(0, 0, 0, 0);
+            return d < today;
+        }
+
+        /**
+         * If the ride is a past practice, show a one-time confirmation. Returns false if user cancels.
+         * Once the user clicks OK, the prompt is not shown again for that practice while it stays active.
+         * Skill-level edits should not call this (only groups/attendance).
+         */
+        function confirmEditPastPractice(ride) {
+            if (!ride || !isPastPractice(ride)) return true;
+            if (window._lastConfirmedPastPracticeRideId === ride.id) return true;
+            if (!confirm('This is a past practice, are you sure you want to edit?')) return false;
+            window._lastConfirmedPastPracticeRideId = ride.id;
+            return true;
+        }
+
         // ============ SCHEDULED ABSENCE HELPERS ============
 
         function formatAbsenceReason(reason) {

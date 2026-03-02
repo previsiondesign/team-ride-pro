@@ -1021,7 +1021,8 @@
             };
         }
 
-        function renderEmptyGroupCard() {
+        function renderEmptyGroupCard(ride) {
+            const isPast = ride && typeof isPastPractice === 'function' && isPastPractice(ride);
             return `
                 <div class="coach-group empty-group" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; padding: 30px 30px 40px; gap: 10px;">
                     <div class="empty-message" style="margin-bottom: 2px; color: #555;">
@@ -1029,9 +1030,9 @@
                     </div>
                     <div id="add-group-buttons-row" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
                         <button type="button" class="btn-small" onclick="addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
-                        <button type="button" class="btn-small" onclick="autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>
+                        ${isPast ? '' : `<button type="button" class="btn-small" onclick="autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>`}
                     </div>
-                    <button type="button" class="btn-small" onclick="switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>
+                    ${isPast ? '' : `<button type="button" class="btn-small" onclick="switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>`}
                 </div>
             `;
         }
@@ -1390,6 +1391,7 @@
                 item.textContent = `Move to ${group.label}`;
                 item.onclick = () => {
                     menu.remove();
+                    if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {
@@ -1426,6 +1428,7 @@
             unassignItem.textContent = 'Unassign';
             unassignItem.onclick = () => {
                 menu.remove();
+                if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                 if (type === 'rider') {
                     removeRiderFromGroups(ride, id);
                 } else {
@@ -1481,6 +1484,7 @@
                 item.textContent = `Move to ${group.label}`;
                 item.onclick = () => {
                     menu.remove();
+                    if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {
@@ -1543,6 +1547,7 @@
                             item.textContent = `Assign as ${label}`;
                             item.onclick = () => {
                                 menu.remove();
+                                if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                                 // Swap: put current coach in the target role, put target coach in current role
                                 if (myRole && myRole !== 'extraRoam') {
                                     currentGroup.coaches[myRole] = otherCoachId;
@@ -1572,6 +1577,7 @@
             unassignItem.textContent = 'Unassign';
             unassignItem.onclick = () => {
                 menu.remove();
+                if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                 if (type === 'rider') {
                     removeRiderFromGroups(ride, id);
                 } else {
@@ -1638,6 +1644,7 @@
                 item.textContent = group.label;
                 item.onclick = () => {
                     menu.remove();
+                    if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {
