@@ -1833,8 +1833,11 @@
 
         function handleVisibilityChange() {
             if (document.hidden) {
-                // Page going to background (e.g., Mac desktop switch) -- flush pending saves
+                // Page going to background (e.g., Mac desktop switch) -- persist state so it survives
                 flushPendingSaves();
+                // Also push current ride to Supabase (fire-and-forget) so color names and other
+                // in-memory edits are persisted; avoids loss when returning after 60s reload.
+                flushPendingRideSavesAsync().catch(function () {});
             } else if (!isReloading) {
                 // Don't reload before initial auth/boot has completed
                 if (!appBootComplete) return;
@@ -1864,6 +1867,7 @@
                     initAdminEditLock();
 
                     // After reload completes, restore ephemeral state if Supabase lost it
+                    // (e.g. Mac desktop switch before save completed, or developer mode read-only)
                     if (groupColorSnapshot || visibleSkillsSnapshot) {
                         Promise.resolve(loadPromise).then(() => {
                             const ride = data.rides && data.rides.find(r => r.id === data.currentRide);
@@ -1871,8 +1875,10 @@
                             let needsRender = false;
                             if (groupColorSnapshot && Array.isArray(ride.groups)) {
                                 ride.groups.forEach(g => {
-                                    if (g && g.id && !g.colorName && groupColorSnapshot[g.id]) {
-                                        g.colorName = groupColorSnapshot[g.id];
+                                    if (!g || !g.id || g.colorName) return;
+                                    const name = groupColorSnapshot[g.id] || groupColorSnapshot[String(g.id)];
+                                    if (name) {
+                                        g.colorName = name;
                                         needsRender = true;
                                     }
                                 });
