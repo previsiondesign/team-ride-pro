@@ -25,11 +25,13 @@
 
         .container {
             max-width: 800px;
+            width: 100%;
             margin: 0 auto;
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             padding: 30px;
+            box-sizing: border-box;
         }
 
         .header {
@@ -218,9 +220,18 @@
             color: #666;
         }
 
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+            .container {
+                padding: 20px 16px;
+            }
+        }
+
         @media (max-width: 600px) {
             .container {
-                padding: 20px;
+                padding: 16px 12px;
             }
 
             .header h1 {
@@ -229,6 +240,13 @@
 
             .ride-info {
                 padding: 15px;
+            }
+
+            .ride-detail-row {
+                flex-wrap: wrap;
+            }
+            .ride-detail-label {
+                min-width: 100%;
             }
         }
     </style>

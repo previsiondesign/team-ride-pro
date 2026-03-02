@@ -1,0 +1,8 @@
+# Allow unauthenticated access to send-admin-access-request
+# (used from the login page by users who don't have an account yet)
+[functions.send-admin-access-request]
+verify_jwt = false
+
+# Allow unauthenticated GET for "Approve from email" link (one-time token in URL)
+[functions.approve-admin-request]
+verify_jwt = false
