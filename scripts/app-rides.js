@@ -1051,6 +1051,33 @@
             renderRides();
         }
 
+        function viewLastPracticeFromSetup() {
+            const allRides = (data.rides || [])
+                .filter(r => !r.deleted && r.date)
+                .map(r => ({ ride: r, date: parseISODate(r.date) }))
+                .filter(item => item.date !== null)
+                .sort((a, b) => b.date - a.date);
+            if (allRides.length === 0) {
+                alert('No practices found.');
+                return;
+            }
+            const lastRide = allRides[0].ride;
+            data.currentRide = lastRide.id;
+            saveData();
+            practicePlannerView = 'planner';
+            loadCurrentRide();
+            renderRides();
+        }
+
+        function openViewAnotherPracticeFromSetup() {
+            practicePlannerView = 'picker';
+            practicePickerMode = 'all';
+            const titleEl = document.getElementById('practice-calendar-picker-title');
+            if (titleEl) titleEl.textContent = 'Select a practice';
+            renderPracticePickerCalendar();
+            renderRides();
+        }
+
         function closePracticeCalendarPicker() {
             practicePlannerView = 'home';
             practicePickerMode = null;
@@ -1077,6 +1104,7 @@
             dateObj.setHours(0, 0, 0, 0);
             if (practicePickerMode === 'future' && dateObj < today) return;
             if (practicePickerMode === 'past' && dateObj >= today) return;
+            if (practicePickerMode !== 'all' && practicePickerMode !== 'future' && practicePickerMode !== 'past') return;
             let ride = (data.rides || []).find(r => r.date && String(r.date).substring(0, 10) === dateKey && !r.deleted);
             if (!ride) {
                 ride = {
@@ -3775,7 +3803,9 @@
                 container.className = 'season-calendar-empty';
                 container.innerHTML = pickerMode === 'future'
                     ? 'No future practices in the season.'
-                    : 'No past practices in the season.';
+                    : pickerMode === 'past'
+                        ? 'No past practices in the season.'
+                        : 'No practices in the season.';
                 return;
             }
 
@@ -3841,8 +3871,10 @@
                     const isPickerSelectable = isPickerRelevant && (() => {
                         currentDate.setHours(0, 0, 0, 0);
                         const isPast = currentDate < today;
+                        if (pickerMode === 'all') {
+                            return !isRideDateExcludedFromPlanner(dateKey);
+                        }
                         if (pickerMode === 'future' && !isPast) {
-                            // In future picker, exclude planner-excluded practices
                             return !isRideDateExcludedFromPlanner(dateKey);
                         }
                         if (pickerMode === 'past' && isPast) {
@@ -5108,6 +5140,7 @@
         function autoGenerateFromPlanner() {
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride) return;
+            if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
             if (ride.groups && ride.groups.length > 0) {
                 if (!confirm('Auto-generating groups will replace all current groups and their rider/coach assignments. Continue?')) return;
             }
@@ -5121,6 +5154,7 @@
                     alert('No practice selected.');
                     return;
                 }
+                if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
                 if (ride.cancelled) {
                     alert('Cannot assign riders and coaches to a cancelled practice.');
                     return;
@@ -6267,6 +6301,7 @@
                 alert('Error: Current practice not found.');
                 return;
             }
+            if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
             
             if (!sourceRide) {
                 console.error('Source ride not found. Looking for ID:', sourceRideId, 'Available ride IDs:', data.rides.map(r => ({ id: r.id, type: typeof r.id })));
@@ -6645,7 +6680,8 @@
         function unassignAllCoaches() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
-            
+            if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+
             if (!confirm('Unassign all coaches from groups? Coaches will be moved to the unassigned palette.')) return;
             
             // Save state before change (for undo/redo)
@@ -6783,10 +6819,10 @@
         }
 
         function clearAllAndRestartPlanning() {
-            if (!confirm('Clear all groups, attendance, and restart planning from scratch? This cannot be undone.')) return;
-
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (!confirm('Clear all groups, attendance, and restart planning from scratch? This cannot be undone.')) return;
 
             clearGroupResizeMemory(ride.id);
             clearAssignmentHistory();
@@ -8814,7 +8850,7 @@
                     };
                     return getGroupNumber(a) - getGroupNumber(b);
                 }).map(renderGroupCard).join('')
-                : renderEmptyGroupCard();
+                : renderEmptyGroupCard(ride);
 
             const cloneButtonHtml = '';
             
@@ -8886,13 +8922,14 @@
                 });
             }
 
+            const _isPast = typeof isPastPractice === 'function' && isPastPractice(ride);
             const addGroupHtml = ride.groups.length > 0 ? `
                 <div id="add-group-placeholder" class="add-group-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px 0; min-height: 200px; background: #e3f2fd; border: 2px dashed #90caf9; border-radius: 12px; transition: background 0.15s;">
                     <div id="add-group-buttons-row" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
                         <button type="button" class="btn-small" onclick="event.stopPropagation(); addGroup()" style="font-size: 14px; padding: 8px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Add Group</button>
-                        <button type="button" class="btn-small" onclick="event.stopPropagation(); autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>
+                        ${_isPast ? '' : `<button type="button" class="btn-small" onclick="event.stopPropagation(); autoGenerateFromPlanner()" style="font-size: 14px; padding: 8px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Auto-Generate Groups</button>`}
                     </div>
-                    <button type="button" class="btn-small" onclick="event.stopPropagation(); switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>
+                    ${_isPast ? '' : `<button type="button" class="btn-small" onclick="event.stopPropagation(); switchToWizardFromPlanner()" style="font-size: 13px; padding: 7px 20px; background: #fff; color: #1976d2; border: 2px solid #1976d2; border-radius: 6px; cursor: pointer; font-weight: 600;">Use Practice Planner Wizard</button>`}
                 </div>
             ` : '';
 
