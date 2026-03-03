@@ -655,7 +655,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        ${nameHtml}${levelBadgeHtml}
+                        <span class="coach-name-with-bike">${nameHtml}${levelBadgeHtml}</span>
                         ${badgeHtml ? (compact ? `<span class="badge-single">${badgeHtml}</span>` : badgeHtml) : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
@@ -734,7 +734,7 @@
                         let bg = '#777', fg = '#fff';
                         if (lvl === 2) { bg = '#ccc'; fg = '#333'; }
                         else if (lvl >= 3) { bg = '#f9a825'; fg = '#333'; }
-                        return `<span class="badge" style="font-size: 11px; padding: 2px 6px; background: ${bg}; color: ${fg}; margin-left: 4px; font-weight: 600;">${levelDisplay}</span>`;
+                        return `<span class="badge badge-level-inline" style="font-size: 11px; padding: 2px 6px; background: ${bg}; color: ${fg}; margin-left: 4px; font-weight: 600;">${levelDisplay}</span>`;
                     })()
                 });
                 
