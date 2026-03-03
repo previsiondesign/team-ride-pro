@@ -84,45 +84,6 @@
             };
         }
 
-        function getDefaultBikeModeForCoach(coach) {
-            if (!coach) return 'manual';
-            const manual = coach.bikeManual !== false;
-            const electric = !!coach.bikeElectric;
-            if (electric && !manual) return 'electric';
-            if (manual && !electric) return 'manual';
-            return (coach.bikePrimary === 'electric' || coach.bikePrimary === 'manual') ? coach.bikePrimary : 'manual';
-        }
-
-        function getCurrentCoachBikeMode(coach, ride) {
-            if (!coach) return 'manual';
-            const rideMode = ride && ride.coachBikeMode && typeof ride.coachBikeMode[coach.id] === 'string'
-                ? ride.coachBikeMode[coach.id]
-                : null;
-            return rideMode === 'electric' || rideMode === 'manual' ? rideMode : getDefaultBikeModeForCoach(coach);
-        }
-
-        function getEffectiveCoachFitness(coach, ride) {
-            if (!coach) return 5;
-            const scale = getFitnessScale();
-            if (getCurrentCoachBikeMode(coach, ride) === 'electric') {
-                const order = typeof getPaceScaleOrder === 'function' ? getPaceScaleOrder() : 'fastest_to_slowest';
-                return order === 'fastest_to_slowest' ? 1 : scale;
-            }
-            const raw = parseInt(coach.fitness ?? coach.level ?? '5', 10);
-            return Math.max(1, Math.min(scale, Number.isFinite(raw) ? raw : 5));
-        }
-
-        function getEffectiveCoachClimbing(coach, ride) {
-            if (!coach) return 3;
-            const scale = getClimbingScale();
-            if (getCurrentCoachBikeMode(coach, ride) === 'electric') {
-                const order = typeof getPaceScaleOrder === 'function' ? getPaceScaleOrder() : 'fastest_to_slowest';
-                return order === 'fastest_to_slowest' ? 1 : scale;
-            }
-            const raw = parseInt(coach.climbing ?? '3', 10);
-            return Math.max(1, Math.min(scale, Number.isFinite(raw) ? raw : 3));
-        }
-
         function computeGroupsInfo(ride) {
             return ride.groups.map(group => {
                 const capacity = groupCapacity(group);
@@ -550,8 +511,7 @@
                 absenceRecord = null,
                 sidebarCard = false,
                 inGroupCoach = false,
-                levelBadgeHtml = '',
-                ride = null
+                levelBadgeHtml = ''
             } = options;
 
             const coachFieldMapping = data.seasonSettings?.csvFieldMappings?.coaches?.enabledFields || {};
@@ -561,9 +521,9 @@
             const level = escapeHtml(levelRaw);
             const levelNum = levelRaw === 'N/A' ? 0 : parseInt(levelRaw || '1', 10);
             
-            // Get fitness value: use effective (max when e-bike) when ride in context
+            // Get fitness value clamped to current fitness scale (same as roster view)
             const fitnessScale = getFitnessScale();
-            const fitnessValue = ride != null ? getEffectiveCoachFitness(coach, ride) : Math.max(1, Math.min(fitnessScale, parseInt(coach.fitness || Math.ceil(fitnessScale / 2), 10)));
+            const fitnessValue = Math.max(1, Math.min(fitnessScale, parseInt(coach.fitness || Math.ceil(fitnessScale / 2), 10)));
             const fitness = escapeHtml(String(fitnessValue));
             
             // Extract firstName and lastName for formatting
@@ -656,45 +616,6 @@
                 ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`
                 : `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
 
-            const bikeManual = coach.bikeManual !== false;
-            const bikeElectric = !!coach.bikeElectric;
-            const currentMode = getCurrentCoachBikeMode(coach, ride);
-            const circleBase = 'display:inline-flex;align-items:center;justify-content:center;width:1.65em;height:1.65em;border:1px solid #000;border-radius:50%;font-size:0.825em;margin-left:4px;background:#fff;';
-            const circleBaseNoMargin = circleBase.replace('margin-left:4px;', '');
-            const activeCircleStyle = circleBase.replace('border:1px solid #000', 'border:2px solid #2196F3');
-            const activeCircleStyleNoMargin = activeCircleStyle.replace('margin-left:4px;', '');
-            const ebikeSymbolNudge = '<span style="position:relative;top:-1px;display:inline-block;">';
-            const ebikeSymbolNudgeClose = '</span>';
-            let bikeBadgeHtml = '';
-            const titleManual = 'Manual bike';
-            const titleEbike = 'E-bike';
-            if (bikeManual && bikeElectric) {
-                const typicalIsElectric = (coach.bikePrimary || 'manual') === 'electric';
-                const leftIcon = typicalIsElectric ? '\u{1F5F2}' : '\u{1F3B8}\uFE0E';
-                const rightIcon = typicalIsElectric ? '\u{1F3B8}\uFE0E' : '\u{1F5F2}';
-                const leftIsActive = (currentMode === 'electric') === typicalIsElectric;
-                const leftCircleStyle = leftIsActive ? (activeCircleStyleNoMargin + (typicalIsElectric ? 'color:#e65100;' : 'color:#2e7d32;')) : (circleBaseNoMargin + (typicalIsElectric ? 'color:#e65100;' : 'color:#2e7d32;') + 'opacity:0.8;transform:scale(0.9);');
-                const rightStyle = leftIsActive ? (circleBaseNoMargin + 'color:#9e9e9e;border-color:#9e9e9e;opacity:0.8;transform:scale(0.9);') : (activeCircleStyleNoMargin + (typicalIsElectric ? 'color:#2e7d32;' : 'color:#e65100;'));
-                const leftContent = typicalIsElectric ? (ebikeSymbolNudge + leftIcon + ebikeSymbolNudgeClose) : leftIcon;
-                const rightContent = typicalIsElectric ? rightIcon : (ebikeSymbolNudge + rightIcon + ebikeSymbolNudgeClose);
-                const rideId = ride && ride.id ? ride.id : 'null';
-                const switchTitle = typicalIsElectric ? 'Switch to manual bike' : 'Switch to e-bike';
-                const toggleOnclick = `event.stopPropagation();typeof toggleCoachBikeMode==='function'&&toggleCoachBikeMode(${coach.id},${rideId})`;
-                const leftStyle = leftCircleStyle + (!leftIsActive ? 'cursor:pointer;' : '');
-                const rightStyleClick = rightStyle + (leftIsActive ? 'cursor:pointer;' : '');
-                const leftTitle = leftIsActive ? (typicalIsElectric ? titleEbike : titleManual) : switchTitle;
-                const rightTitle = leftIsActive ? switchTitle : (typicalIsElectric ? titleEbike : titleManual);
-                const leftOnclick = !leftIsActive ? ` onclick="${toggleOnclick}"` : '';
-                const rightOnclick = leftIsActive ? ` onclick="${toggleOnclick}"` : '';
-                bikeBadgeHtml = `<span class="coach-bike-badges" style="display:inline-flex;align-items:center;gap:0;margin-left:10px;">` +
-                    `<span class="coach-bike-badge" style="${leftStyle}" title="${leftTitle}"${leftOnclick}>${leftContent}</span>` +
-                    `<span class="coach-bike-badge coach-bike-badge-switch" style="${rightStyleClick}" title="${rightTitle}"${rightOnclick}>${rightContent}</span>` +
-                    `</span>`;
-            } else if (bikeElectric) {
-                bikeBadgeHtml = `<span class="coach-bike-badge" style="${activeCircleStyle}color:#e65100;" title="${titleEbike}">${ebikeSymbolNudge}\u{1F5F2}${ebikeSymbolNudgeClose}</span>`;
-            }
-            // Manual-only coaches: no bike icon (per user request)
-
             // Show badges based on visibleSkills (global toolbar) or sortBy fallback
             const skillsToShow = visibleSkills || [sortBy];
             let badgeHtml = '';
@@ -714,7 +635,7 @@
                 }
                 if (skillsToShow.includes('climbing')) {
                     const climbingScale = getClimbingScale();
-                    const climbingVal = ride != null ? getEffectiveCoachClimbing(coach, ride) : Math.max(1, Math.min(climbingScale, parseInt(coach.climbing || '3', 10)));
+                    const climbingVal = Math.max(1, Math.min(climbingScale, parseInt(coach.climbing || '3', 10)));
                     const climbingTooltip = getClimbingTooltip(climbingVal, climbingScale);
                     badges.push(`<span class="badge badge-climbing-${climbingVal}${coachBadgeSizeClass}" onclick="handleBadgeClick(event, 'coach', ${coach.id}, 'climbing', ${climbingVal})" style="cursor: pointer;" title="${climbingTooltip.replace(/\n/g, '&#10;')}" data-coach-id="${coach.id}" data-badge-type="climbing">◢${climbingVal}</span>`);
                 }
@@ -753,7 +674,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        <span class="coach-name-with-bike">${nameHtml}${levelBadgeHtml}${bikeBadgeHtml}</span>
+                        ${nameHtml}${levelBadgeHtml}
                         ${badgeHtml ? (compact ? `<span class="badge-single">${badgeHtml}</span>` : badgeHtml) : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
@@ -827,13 +748,12 @@
                     noPhoto: true,
                     visibleSkills: ride.visibleSkills || null,
                     inGroupCoach: true,
-                    ride,
                     levelBadgeHtml: (() => {
                         const lvl = parseInt(levelRaw || '1', 10);
                         let bg = '#777', fg = '#fff';
                         if (lvl === 2) { bg = '#ccc'; fg = '#333'; }
                         else if (lvl >= 3) { bg = '#f9a825'; fg = '#333'; }
-                        return `<span class="badge badge-level-inline" style="font-size: 11px; padding: 2px 6px; background: ${bg}; color: ${fg}; margin-left: 4px; font-weight: 600;">${levelDisplay}</span>`;
+                        return `<span class="badge" style="font-size: 11px; padding: 2px 6px; background: ${bg}; color: ${fg}; margin-left: 4px; font-weight: 600;">${levelDisplay}</span>`;
                     })()
                 });
                 
@@ -893,8 +813,7 @@
                     draggable: true,
                     compact: true,
                     sortBy: 'pace', // Coaches in groups always show pace (no sorting for coach slots)
-                    noPhoto: true,
-                    ride
+                    noPhoto: true
                 })
                 : '<div class="coach-slot-empty">Drop coach here</div>';
 
@@ -917,7 +836,7 @@
             let sortedCoaches = availableCoaches
                 .slice()
                 .sort((a, b) => {
-                    const fitnessDiff = getCoachFitnessValue(b, ride) - getCoachFitnessValue(a, ride);
+                    const fitnessDiff = getCoachFitnessValue(b) - getCoachFitnessValue(a);
                     if (fitnessDiff !== 0) return fitnessDiff;
                     const levelDiff = (parseInt(b.level, 10) || 0) - (parseInt(a.level, 10) || 0);
                     if (levelDiff !== 0) return levelDiff;
@@ -999,7 +918,7 @@
                 }
 
                 if (!entry.group.coaches.leader) {
-                    picks.sort((a, b) => getCoachFitnessValue(b, ride) - getCoachFitnessValue(a, ride));
+                    picks.sort((a, b) => getCoachFitnessValue(b) - getCoachFitnessValue(a));
 
                     let leaderIndex = -1;
                     if (useLeaderLevelConstraint) {
@@ -1272,13 +1191,7 @@
             }) || null;
         }
 
-        function getCoachFitnessValue(coach, ride) {
-            if (ride && getCurrentCoachBikeMode(coach, ride) === 'electric') {
-                const scale = getFitnessScale();
-                const order = typeof getPaceScaleOrder === 'function' ? getPaceScaleOrder() : 'fastest_to_slowest';
-                const fastestRaw = order === 'fastest_to_slowest' ? 1 : scale;
-                return getRelativePaceValue(fastestRaw);
-            }
+        function getCoachFitnessValue(coach) {
             const raw = parseInt(coach?.fitness ?? coach?.level ?? '5', 10);
             if (!Number.isFinite(raw)) return 5;
             return getRelativePaceValue(raw);
