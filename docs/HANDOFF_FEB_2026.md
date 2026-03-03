@@ -11,8 +11,8 @@
 - **Local path:** `D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\TeamRide Pro`
 - **v3 worktree path:** `D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\TeamRide Pro v3`
 - **Repo:** `previsiondesign/team-ride-pro` on GitHub
-- **Live site (v2):** https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html
-- **GitHub Pages** serves from the `main` branch
+- **Live site:** v3 is active development; push to `v3-dev` to update. v2 URL (frozen): https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html ; v3: …/teamridepro_v3.html
+- **GitHub Pages** serves from the `main` branch (when v3 is promoted, merge `v3-dev` → `main` and point index to v3)
 
 Single-page app: roster management, practice scheduling, group assignments, routes (Strava integration), attendance tracking, admin/user roles, backup/restore. Tech: vanilla JS, Supabase (Auth + Postgres DB + Edge Functions), GitHub Pages hosting.
 
@@ -22,8 +22,8 @@ Single-page app: roster management, practice scheduling, group assignments, rout
 
 | Branch | Purpose | Main HTML file | Status |
 |--------|---------|---------------|--------|
-| **`main`** | v2 production | `teamridepro_v2.html` | Live on GitHub Pages, do NOT break |
-| **`v3-dev`** | v3 development | `teamridepro_v3.html` | Active development branch |
+| **`main`** | v2 (legacy) | `teamridepro_v2.html` | **Frozen** — no longer developed. Do not push new features here. |
+| **`v3-dev`** | v3 (active) | `teamridepro_v3.html` | **Active development** — all new work and “live site” updates go here. Push to `v3-dev` to update the v3 site. |
 
 Both branches share the same Supabase database and configuration.
 
@@ -33,15 +33,15 @@ Both branches are checked out simultaneously using **git worktrees** — no bran
 
 | Local Folder | Branch | Purpose |
 |-------------|--------|---------|
-| `TeamRide Pro\` | `main` | v2 production (frozen, live on GitHub Pages) |
-| `TeamRide Pro v3\` | `v3-dev` | v3 development (active work happens here) |
+| `TeamRide Pro\` | `main` | v2 (frozen) — do not use for new features |
+| `TeamRide Pro v3\` | `v3-dev` | **v3 (active)** — develop and push here to update the site |
 
 Both folders are fully functional git checkouts linked to the same repo. Commits in either folder go to the correct branch automatically.
 
 ### How to work with worktrees
 
-- **v3 development:** Edit files in `TeamRide Pro v3\`, commit, push
-- **v2 hotfix:** Edit files in `TeamRide Pro\`, commit, push to main (GitHub Pages updates)
+- **v3 development (normal):** Edit files in `TeamRide Pro v3\`, commit, **push `origin v3-dev`** — this updates the v3 site.
+- **v2 (frozen):** Do not push new features to `main`. Only use for critical v2 hotfixes if v2 is still in use.
 - **Local testing:** Open `TeamRide Pro\teamridepro_v2.html` or `TeamRide Pro v3\teamridepro_v3.html` in a browser
 - **Bring v2 fixes into v3:** In the v3 folder, run `git merge main`
 - **Deploy v3 as production (when ready):** merge `v3-dev` into `main` (via PR or local merge), update `index.html` to point to `teamridepro_v3.html`, push
