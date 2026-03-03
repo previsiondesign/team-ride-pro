@@ -4375,6 +4375,72 @@
             }
         }
 
+        /** Returns array of { value, label, disabled } for custom route dropdown (same order/logic as renderRouteOptions). */
+        function getRouteOptionList(selectedRouteId, group, ride) {
+            const routes = data.routes || [];
+            const list = [];
+            if (routes.length === 0) {
+                list.push({ value: '', label: 'No routes available', disabled: true });
+                return list;
+            }
+
+            function routeOptionLabel(route, suffix) {
+                const dist = route.distance ? escapeHtml(route.distance) : '';
+                const elev = route.elevation ? escapeHtml(route.elevation) : '';
+                const name = toBoldUnicode(escapeHtml(route.name || 'Unnamed Route'));
+                let prefix = '';
+                if (dist && elev) prefix = `${dist}/${elev} – `;
+                else if (dist) prefix = `${dist} – `;
+                else if (elev) prefix = `${elev} – `;
+                return prefix + name + (suffix || '');
+            }
+
+            if (!group || !ride) {
+                routes.forEach(route => { list.push({ value: String(route.id), label: routeOptionLabel(route, ''), disabled: false }); });
+                list.push({ value: 'leader-choice', label: "Ride Leader's Choice", disabled: false });
+                return list;
+            }
+
+            const practiceLocation = (ride.meetLocation || '').trim().toLowerCase();
+            const rideIdNum = typeof ride.id === 'string' ? parseInt(ride.id, 10) : ride.id;
+            const showAllLocations = showAllRouteLocationsForRide === rideIdNum;
+
+            let localRoutes = [];
+            let otherLocationRoutes = [];
+            if (practiceLocation && !showAllLocations) {
+                routes.forEach(route => {
+                    const routeLoc = (route.startLocation || '').trim().toLowerCase();
+                    if (!routeLoc || routeLoc === practiceLocation) localRoutes.push(route);
+                });
+            } else if (practiceLocation && showAllLocations) {
+                routes.forEach(route => {
+                    const routeLoc = (route.startLocation || '').trim().toLowerCase();
+                    if (!routeLoc || routeLoc === practiceLocation) localRoutes.push(route);
+                    else otherLocationRoutes.push(route);
+                });
+            } else {
+                localRoutes = routes.slice();
+            }
+
+            localRoutes.forEach(route => { list.push({ value: String(route.id), label: routeOptionLabel(route, ''), disabled: false }); });
+            if (otherLocationRoutes.length > 0) {
+                list.push({ value: '', label: '── Other Locations ──', disabled: true });
+                otherLocationRoutes.forEach(route => {
+                    list.push({ value: String(route.id), label: routeOptionLabel(route, ` [${escapeHtml(route.startLocation || '')}]`), disabled: false });
+                });
+            }
+            list.push({ value: 'leader-choice', label: "Ride Leader's Choice", disabled: false });
+            if (practiceLocation) {
+                list.push({ value: '', label: '──────────', disabled: true });
+                list.push({
+                    value: showAllLocations ? '__toggle_this_location__' : '__toggle_all_locations__',
+                    label: showAllLocations ? '↩ Show only routes from this location' : '📍 Load routes from all locations',
+                    disabled: false
+                });
+            }
+            return list;
+        }
+
         function renderRouteOptions(selectedRouteId, group, ride) {
             const routes = data.routes || [];
             if (routes.length === 0) {

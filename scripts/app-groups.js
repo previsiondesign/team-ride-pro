@@ -305,6 +305,7 @@
                 visibleSkills = null,
                 scheduledAbsent = false,
                 absenceReasonText = '',
+                absenceRecord = null,
                 sidebarCard = false
             } = options;
 
@@ -341,7 +342,15 @@
             } else {
                 displayName = (effectiveFirstName + ' ' + effectiveLastName).trim() || rider.name || 'Rider';
             }
-            const safeName = escapeHtml(displayName);
+            // When sorting by grade or gender, show that value in parentheses after the name only
+            let displayNameWithSort = displayName;
+            if (sortBy === 'grade' && rider.grade) {
+                displayNameWithSort += ' (' + formatGradeLabel(rider.grade) + ')';
+            } else if (sortBy === 'gender' && rider.gender) {
+                const g = (rider.gender || '').toUpperCase();
+                displayNameWithSort += ' (' + (g === 'NB' ? 'X' : g) + ')';
+            }
+            const safeName = escapeHtml(displayNameWithSort);
             const fullName = (effectiveFirstName + ' ' + effectiveLastName).trim() || rider.name || 'Rider';
             const safeFullName = escapeHtml(fullName);
             let shortName;
@@ -416,7 +425,11 @@
             const visibleBadgeCount = skillsToShow.filter(s => ['pace','climbing','skills','grade','gender'].includes(s)).length;
             const badgeSizeClass = (sidebarCard && visibleBadgeCount >= 2) ? ' badge-sidebar' : '';
             if (scheduledAbsent && absenceReasonText) {
-                badgeHtml = `<span class="badge badge-absence" style="background: #9e9e9e; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: auto; white-space: nowrap;">${escapeHtml(absenceReasonText)}</span>`;
+                const badgeClick = (sidebarCard && absenceRecord && typeof openEditAbsenceFromRide === 'function')
+                    ? ` onclick="event.stopPropagation();openEditAbsenceFromRide('rider',${rider.id},${absenceRecord.id})" title="Edit absence"`
+                    : '';
+                const badgeStyle = 'background: #9e9e9e; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: auto; white-space: nowrap;' + (badgeClick ? ' cursor: pointer;' : '');
+                badgeHtml = `<span class="badge badge-absence" style="${badgeStyle}"${badgeClick}>${escapeHtml(absenceReasonText)}</span>`;
             } else if (!hideBadges) {
                 const badges = [];
                 if (skillsToShow.includes('pace')) {
@@ -495,6 +508,7 @@
                 visibleSkills = null,
                 scheduledAbsent = false,
                 absenceReasonText = '',
+                absenceRecord = null,
                 sidebarCard = false,
                 inGroupCoach = false,
                 levelBadgeHtml = ''
@@ -571,6 +585,7 @@
             if (!isAvailable) classes.push('attendance-off');
             if (compact) classes.push('compact');
             if (isUnassigned) classes.push('unassigned-card');
+            if (inGroupCoach) classes.push('coach-in-planner-bar');
             // Add level-based class for styling
             if (levelRaw === 'N/A' || levelNum === 0) {
                 classes.push('coach-level-na');
@@ -608,7 +623,11 @@
             const coachBadgeSizeClass = (sidebarCard && coachVisibleBadgeCount >= 2) ? ' badge-sidebar' : '';
             // If coach is scheduled absent, show absence reason badge instead of skills
             if (scheduledAbsent && absenceReasonText) {
-                badgeHtml = `<span class="badge badge-absence" style="background: #9e9e9e; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: auto; white-space: nowrap;">${escapeHtml(absenceReasonText)}</span>`;
+                const badgeClick = (sidebarCard && absenceRecord && typeof openEditAbsenceFromRide === 'function')
+                    ? ` onclick="event.stopPropagation();openEditAbsenceFromRide('coach',${coach.id},${absenceRecord.id})" title="Edit absence"`
+                    : '';
+                const badgeStyle = 'background: #9e9e9e; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: auto; white-space: nowrap;' + (badgeClick ? ' cursor: pointer;' : '');
+                badgeHtml = `<span class="badge badge-absence" style="${badgeStyle}"${badgeClick}>${escapeHtml(absenceReasonText)}</span>`;
             } else if (compact) {
                 const badges = [];
                 if (skillsToShow.includes('pace')) {
@@ -649,7 +668,7 @@
                 : '';
 
             return `
-                <div class="${classes.join(' ')}" ${dragAttributes} style="background: transparent !important; border: none !important; box-shadow: none !important; width: 100%;">
+                <div class="${classes.join(' ')}" ${dragAttributes} style="background: transparent !important; border: none !important; box-shadow: none !important; width: 100%;" data-in-group-bar="${inGroupCoach ? '1' : '0'}">
                     ${!noPhoto ? `<div class="avatar-circle coach">
                         ${photo ? `<img class="avatar-image" src="${photo}" alt="${safeName} photo">` : `<span class="avatar-placeholder">${initial}</span>`}
                     </div>` : ''}

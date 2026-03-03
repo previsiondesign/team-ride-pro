@@ -965,12 +965,16 @@
                 return `<div class="absence-row">
                     <span class="absence-dates">${startFormatted} – ${endFormatted}</span>
                     <span class="absence-reason">${formatAbsenceReason(a.reason)}</span>
+                    <button class="btn-small secondary absence-edit-btn" onclick="editCoachAbsence(${a.id})" title="Edit duration">Edit/Update</button>
                     <button class="absence-delete-btn" onclick="removeCoachAbsence(${a.id})" title="Remove absence">✕</button>
                 </div>`;
             }).join('');
         }
 
+        let editingCoachAbsenceId = null;
+
         function showCoachAbsenceForm() {
+            editingCoachAbsenceId = null;
             const form = document.getElementById('edit-coach-absence-form');
             if (form) {
                 form.style.display = 'block';
@@ -978,12 +982,76 @@
                 document.getElementById('edit-coach-absence-start').value = today;
                 document.getElementById('edit-coach-absence-end').value = today;
                 document.getElementById('edit-coach-absence-reason').value = 'injured';
+                const rem = document.getElementById('edit-coach-absence-remainder');
+                const spec = document.getElementById('edit-coach-absence-specific-practices');
+                const wrap = document.getElementById('edit-coach-absence-practices-wrap');
+                if (rem) rem.checked = false;
+                if (spec) spec.checked = false;
+                if (wrap) wrap.style.display = 'none';
+                populateCoachAbsencePracticesSelect();
             }
             const addBtn = document.getElementById('edit-coach-add-absence-btn');
             if (addBtn) addBtn.style.display = 'none';
         }
 
+        function showCoachAbsenceFormForEdit(absenceId) {
+            const a = data.scheduledAbsences.find(x => x.id === absenceId);
+            if (!a) return;
+            editingCoachAbsenceId = absenceId;
+            const form = document.getElementById('edit-coach-absence-form');
+            if (form) form.style.display = 'block';
+            document.getElementById('edit-coach-absence-start').value = a.startDate || '';
+            document.getElementById('edit-coach-absence-end').value = a.endDate || '';
+            document.getElementById('edit-coach-absence-reason').value = a.reason || 'other';
+            const rem = document.getElementById('edit-coach-absence-remainder');
+            if (rem) rem.checked = !!a.remainderOfSeason;
+            const spec = document.getElementById('edit-coach-absence-specific-practices');
+            const wrap = document.getElementById('edit-coach-absence-practices-wrap');
+            if (spec) spec.checked = Array.isArray(a.specificPracticeDays) && a.specificPracticeDays.length > 0;
+            if (wrap) wrap.style.display = spec && spec.checked ? 'block' : 'none';
+            populateCoachAbsencePracticesSelect();
+            const sel = document.getElementById('edit-coach-absence-practices');
+            if (sel && Array.isArray(a.specificPracticeDays)) {
+                Array.from(sel.options).forEach(opt => {
+                    opt.selected = a.specificPracticeDays.includes(Number(opt.value));
+                });
+            }
+            const addBtn = document.getElementById('edit-coach-add-absence-btn');
+            if (addBtn) addBtn.style.display = 'none';
+        }
+
+        function editCoachAbsence(absenceId) {
+            showCoachAbsenceFormForEdit(absenceId);
+        }
+
+        function populateCoachAbsencePracticesSelect() {
+            const sel = document.getElementById('edit-coach-absence-practices');
+            if (!sel || typeof getAbsencePracticeOptions !== 'function') return;
+            const options = getAbsencePracticeOptions();
+            sel.innerHTML = options.map(o => `<option value="${o.dayOfWeek}">${o.label}</option>`).join('');
+        }
+
+        function toggleCoachAbsenceRemainder() {
+            const rem = document.getElementById('edit-coach-absence-remainder');
+            const endInput = document.getElementById('edit-coach-absence-end');
+            if (!rem || !endInput) return;
+            if (rem.checked) {
+                const settings = data.seasonSettings || {};
+                const endStr = settings.endDate || '';
+                if (endStr) endInput.value = endStr;
+            }
+        }
+
+        function toggleCoachAbsenceSpecificPractices() {
+            const spec = document.getElementById('edit-coach-absence-specific-practices');
+            const wrap = document.getElementById('edit-coach-absence-practices-wrap');
+            const reasonSel = document.getElementById('edit-coach-absence-reason');
+            if (wrap) wrap.style.display = spec && spec.checked ? 'block' : 'none';
+            if (spec && spec.checked && reasonSel) reasonSel.value = 'schedule_conflict';
+        }
+
         function cancelCoachAbsenceForm() {
+            editingCoachAbsenceId = null;
             const form = document.getElementById('edit-coach-absence-form');
             if (form) form.style.display = 'none';
             const addBtn = document.getElementById('edit-coach-add-absence-btn');
@@ -995,6 +1063,10 @@
             const startDate = document.getElementById('edit-coach-absence-start').value;
             const endDate = document.getElementById('edit-coach-absence-end').value;
             const reason = document.getElementById('edit-coach-absence-reason').value;
+            const remainderOfSeason = document.getElementById('edit-coach-absence-remainder')?.checked || false;
+            const spec = document.getElementById('edit-coach-absence-specific-practices')?.checked || false;
+            const practicesSel = document.getElementById('edit-coach-absence-practices');
+            const specificPracticeDays = (spec && practicesSel) ? Array.from(practicesSel.selectedOptions).map(o => Number(o.value)) : null;
 
             if (!startDate || !endDate) {
                 alert('Please select both start and end dates.');
@@ -1006,14 +1078,29 @@
             }
 
             try {
-                const newAbsence = await createScheduledAbsence({
+                const payload = {
                     personType: 'coach',
                     personId: currentEditingCoachId,
-                    startDate: startDate,
-                    endDate: endDate,
-                    reason: reason
-                });
-                data.scheduledAbsences.push(newAbsence);
+                    startDate,
+                    endDate,
+                    reason,
+                    remainderOfSeason,
+                    specificPracticeDays: (specificPracticeDays && specificPracticeDays.length) ? specificPracticeDays : null
+                };
+                if (editingCoachAbsenceId) {
+                    const updated = await updateScheduledAbsence(editingCoachAbsenceId, {
+                        startDate,
+                        endDate,
+                        reason,
+                        remainderOfSeason,
+                        specificPracticeDays: payload.specificPracticeDays
+                    });
+                    const idx = data.scheduledAbsences.findIndex(a => a.id === editingCoachAbsenceId);
+                    if (idx !== -1) data.scheduledAbsences[idx] = updated;
+                } else {
+                    const newAbsence = await createScheduledAbsence(payload);
+                    data.scheduledAbsences.push(newAbsence);
+                }
                 renderCoachAbsencesList(currentEditingCoachId);
                 cancelCoachAbsenceForm();
             } catch (err) {

@@ -380,8 +380,9 @@
         function formatAbsenceReason(reason) {
             switch (reason) {
                 case 'injured': return 'Injured';
-                case 'vacation': return 'Vacation/Travel';
-                case 'suspension': return 'Behavior/Suspension';
+                case 'vacation': return 'Travel';
+                case 'suspension': return 'Suspended';
+                case 'schedule_conflict': return 'Conflict';
                 case 'other': return 'Other';
                 default: return reason || 'Other';
             }
@@ -393,10 +394,16 @@
             const checkDate = dateStr || new Date().toISOString().split('T')[0];
             return data.scheduledAbsences.filter(a => {
                 const aId = typeof a.personId === 'string' ? parseInt(a.personId, 10) : a.personId;
-                return a.personType === personType &&
-                    aId === pid &&
-                    a.startDate <= checkDate &&
-                    a.endDate >= checkDate;
+                if (a.personType !== personType || aId !== pid) return false;
+                if (a.startDate > checkDate || a.endDate < checkDate) return false;
+                if (Array.isArray(a.exceptionDates) && a.exceptionDates.includes(checkDate)) return false;
+                const days = a.specificPracticeDays;
+                if (days && days.length > 0) {
+                    const d = new Date(checkDate + 'T00:00:00');
+                    const dayOfWeek = d.getDay();
+                    if (!days.includes(dayOfWeek)) return false;
+                }
+                return true;
             });
         }
 

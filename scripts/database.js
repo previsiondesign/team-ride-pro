@@ -227,16 +227,32 @@ async function updateRider(id, riderData) {
 }
 
 async function deleteRider(id) {
-    if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping deleteRider'); return; }
+    console.log('[DeleteRider] database.js deleteRider() called with id =', id);
+    if (skipSupabaseWriteInDevMode()) { console.log('[DeleteRider] Developer mode: skipping deleteRider'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
-    
-    const { error } = await client
+
+    // Normalize id for DB (riders.id is bigint; string vs number can cause no match)
+    const idForDb = typeof id === 'string' ? parseInt(id, 10) : id;
+    if (!Number.isFinite(idForDb)) throw new Error('Invalid rider id for delete: ' + id);
+
+    console.log('[DeleteRider] Calling Supabase delete riders where id =', idForDb, '(type:', typeof idForDb, ')');
+    const { data, error } = await client
         .from('riders')
         .delete()
-        .eq('id', id);
-    
-    if (error) throw error;
+        .eq('id', idForDb)
+        .select('id');
+
+    if (error) {
+        console.error('[DeleteRider] Supabase error:', error);
+        throw error;
+    }
+    const deletedCount = Array.isArray(data) ? data.length : 0;
+    console.log('[DeleteRider] Supabase response: deletedCount =', deletedCount, 'data =', data);
+    if (deletedCount === 0) {
+        console.warn('[DeleteRider] No row was deleted (RLS may have blocked it, or id not found). id =', idForDb);
+        throw new Error('No rider row was deleted. You may not have permission to delete this rider, or the id was not found.');
+    }
 }
 
 // Alias for consistency
@@ -2213,6 +2229,9 @@ async function loadScheduledAbsences() {
         startDate: row.start_date,
         endDate: row.end_date,
         reason: row.reason,
+        remainderOfSeason: row.remainder_of_season || false,
+        specificPracticeDays: Array.isArray(row.specific_practice_days) ? row.specific_practice_days : null,
+        exceptionDates: Array.isArray(row.exception_dates) ? row.exception_dates : null,
         createdAt: row.created_at,
         updatedAt: row.updated_at
     }));
@@ -2223,15 +2242,20 @@ async function createScheduledAbsence(absence) {
     const client = getSupabaseClient();
     if (!client) throw new Error('No Supabase client');
 
+    const insertPayload = {
+        person_type: absence.personType,
+        person_id: absence.personId,
+        start_date: absence.startDate,
+        end_date: absence.endDate,
+        reason: absence.reason
+    };
+    if (absence.remainderOfSeason !== undefined) insertPayload.remainder_of_season = !!absence.remainderOfSeason;
+    if (absence.specificPracticeDays !== undefined) insertPayload.specific_practice_days = absence.specificPracticeDays && absence.specificPracticeDays.length ? absence.specificPracticeDays : null;
+    if (absence.exceptionDates !== undefined) insertPayload.exception_dates = absence.exceptionDates && absence.exceptionDates.length ? absence.exceptionDates : null;
+
     const { data, error } = await client
         .from('scheduled_absences')
-        .insert({
-            person_type: absence.personType,
-            person_id: absence.personId,
-            start_date: absence.startDate,
-            end_date: absence.endDate,
-            reason: absence.reason
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
@@ -2247,6 +2271,9 @@ async function createScheduledAbsence(absence) {
         startDate: data.start_date,
         endDate: data.end_date,
         reason: data.reason,
+        remainderOfSeason: data.remainder_of_season || false,
+        specificPracticeDays: Array.isArray(data.specific_practice_days) ? data.specific_practice_days : null,
+        exceptionDates: Array.isArray(data.exception_dates) ? data.exception_dates : null,
         createdAt: data.created_at,
         updatedAt: data.updated_at
     };
@@ -2261,6 +2288,9 @@ async function updateScheduledAbsence(id, updates) {
     if (updates.endDate !== undefined) payload.end_date = updates.endDate;
     if (updates.startDate !== undefined) payload.start_date = updates.startDate;
     if (updates.reason !== undefined) payload.reason = updates.reason;
+    if (updates.remainderOfSeason !== undefined) payload.remainder_of_season = !!updates.remainderOfSeason;
+    if (updates.specificPracticeDays !== undefined) payload.specific_practice_days = updates.specificPracticeDays && updates.specificPracticeDays.length ? updates.specificPracticeDays : null;
+    if (updates.exceptionDates !== undefined) payload.exception_dates = updates.exceptionDates && updates.exceptionDates.length ? updates.exceptionDates : null;
     payload.updated_at = new Date().toISOString();
 
     const { data, error } = await client
@@ -2283,6 +2313,9 @@ async function updateScheduledAbsence(id, updates) {
         startDate: row.start_date,
         endDate: row.end_date,
         reason: row.reason,
+        remainderOfSeason: row.remainder_of_season || false,
+        specificPracticeDays: Array.isArray(row.specific_practice_days) ? row.specific_practice_days : null,
+        exceptionDates: Array.isArray(row.exception_dates) ? row.exception_dates : null,
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };

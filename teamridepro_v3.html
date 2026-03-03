@@ -21,7 +21,7 @@
     <!-- Supabase Configuration, Auth, Database Functions, and Roles -->
     <script src="scripts/supabase-config.js?v=20260217a"></script>
     <script src="scripts/auth.js?v=20260217a"></script>
-    <script src="scripts/database.js?v=20260217a"></script>
+    <script src="scripts/database.js?v=20260302"></script>
     <script src="scripts/roles.js?v=20260217a"></script>
     <!-- jsPDF library for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -413,7 +413,7 @@
                     <table style="width: 100%; border-top: 1px solid #ddd; background: #f9f9f9; border-collapse: collapse;">
                         <tr>
                             <td style="padding: 6px 16px; font-size: 14px; cursor: pointer; width: 30px;" onclick="document.getElementById('copy-prior-include-rider-attendance').click()">
-                                <input type="checkbox" id="copy-prior-include-rider-attendance" style="margin: 0; cursor: pointer;">
+                                <input type="checkbox" id="copy-prior-include-rider-attendance" style="margin: 0; cursor: pointer;" onclick="event.stopPropagation()">
                             </td>
                             <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-rider-attendance').click()">
                                 Include Rider attendance
@@ -421,7 +421,7 @@
                         </tr>
                         <tr>
                             <td style="padding: 6px 16px; font-size: 14px; cursor: pointer;" onclick="document.getElementById('copy-prior-include-coach-attendance').click()">
-                                <input type="checkbox" id="copy-prior-include-coach-attendance" checked style="margin: 0; cursor: pointer;">
+                                <input type="checkbox" id="copy-prior-include-coach-attendance" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation()">
                             </td>
                             <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-coach-attendance').click()">
                                 Include Coach Attendance
@@ -429,7 +429,7 @@
                         </tr>
                         <tr>
                             <td style="padding: 6px 16px; font-size: 14px; cursor: pointer;" onclick="document.getElementById('copy-prior-include-routes').click()">
-                                <input type="checkbox" id="copy-prior-include-routes" checked style="margin: 0; cursor: pointer;">
+                                <input type="checkbox" id="copy-prior-include-routes" checked style="margin: 0; cursor: pointer;" onclick="event.stopPropagation()">
                             </td>
                             <td style="padding: 6px 8px; font-size: 14px; cursor: pointer; text-align: left;" onclick="document.getElementById('copy-prior-include-routes').click()">
                                 Include Assigned Routes
@@ -1193,9 +1193,14 @@
                         <td>
                             <div id="edit-coach-absences-list" class="absences-list"></div>
                             <div id="edit-coach-absence-form" class="absence-form" style="display:none;">
-                                <div class="absence-form-row">
-                                    <label>Start Date <input type="date" id="edit-coach-absence-start" class="modal-field-input"></label>
-                                    <label>End Date <input type="date" id="edit-coach-absence-end" class="modal-field-input"></label>
+                                <div class="absence-form-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                    <label style="display:flex;align-items:center;gap:4px;">Start <input type="date" id="edit-coach-absence-start" class="modal-field-input" style="max-width:115px;"></label>
+                                    <label style="display:flex;align-items:center;gap:4px;">End <input type="date" id="edit-coach-absence-end" class="modal-field-input" style="max-width:115px;"></label>
+                                    <label style="display:flex;align-items:center;gap:6px;margin-left:4px;"><input type="checkbox" id="edit-coach-absence-remainder" onchange="toggleCoachAbsenceRemainder()"> Remainder of Season</label>
+                                </div>
+                                <div class="absence-form-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    <label style="display:flex;align-items:center;gap:6px;flex-shrink:0;"><input type="checkbox" id="edit-coach-absence-specific-practices" onchange="toggleCoachAbsenceSpecificPractices()"> Specific Practices</label>
+                                    <div id="edit-coach-absence-practices-wrap" style="display:none;"><select id="edit-coach-absence-practices" class="modal-field-input" multiple style="min-height:52px;min-width:140px;max-width:200px;"></select></div>
                                 </div>
                                 <div class="absence-form-row">
                                     <label>Reason
@@ -1203,6 +1208,7 @@
                                             <option value="injured">Injured</option>
                                             <option value="vacation">Vacation/Travel</option>
                                             <option value="suspension">Behavior/Suspension</option>
+                                            <option value="schedule_conflict">Schedule Conflict</option>
                                             <option value="other">Other</option>
                                         </select>
                                     </label>
@@ -1295,9 +1301,14 @@
                         <td>
                             <div id="edit-rider-absences-list" class="absences-list"></div>
                             <div id="edit-rider-absence-form" class="absence-form" style="display:none;">
-                                <div class="absence-form-row">
-                                    <label>Start Date <input type="date" id="edit-rider-absence-start" class="modal-field-input"></label>
-                                    <label>End Date <input type="date" id="edit-rider-absence-end" class="modal-field-input"></label>
+                                <div class="absence-form-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                    <label style="display:flex;align-items:center;gap:4px;">Start <input type="date" id="edit-rider-absence-start" class="modal-field-input" style="max-width:115px;"></label>
+                                    <label style="display:flex;align-items:center;gap:4px;">End <input type="date" id="edit-rider-absence-end" class="modal-field-input" style="max-width:115px;"></label>
+                                    <label style="display:flex;align-items:center;gap:6px;margin-left:4px;"><input type="checkbox" id="edit-rider-absence-remainder" onchange="toggleRiderAbsenceRemainder()"> Remainder of Season</label>
+                                </div>
+                                <div class="absence-form-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    <label style="display:flex;align-items:center;gap:6px;flex-shrink:0;"><input type="checkbox" id="edit-rider-absence-specific-practices" onchange="toggleRiderAbsenceSpecificPractices()"> Specific Practices</label>
+                                    <div id="edit-rider-absence-practices-wrap" style="display:none;"><select id="edit-rider-absence-practices" class="modal-field-input" multiple style="min-height:52px;min-width:140px;max-width:200px;"></select></div>
                                 </div>
                                 <div class="absence-form-row">
                                     <label>Reason
@@ -1305,6 +1316,7 @@
                                             <option value="injured">Injured</option>
                                             <option value="vacation">Vacation/Travel</option>
                                             <option value="suspension">Behavior/Suspension</option>
+                                            <option value="schedule_conflict">Schedule Conflict</option>
                                             <option value="other">Other</option>
                                         </select>
                                     </label>
@@ -1651,27 +1663,6 @@
         </div>
     </div>
 
-    <!-- Clone Practice Modal -->
-    <div id="clone-practice-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal" style="max-width: 600px;">
-            <div class="modal-header">
-                <span>Clone Entire Practice</span>
-                <button class="btn-small secondary" onclick="closeClonePracticeModal()">Close</button>
-            </div>
-            <div class="modal-body">
-                <p style="font-size: 14px; color: #666; margin: 0 0 16px 0;">
-                    Select a practice date to clone. This will copy all groups, assignments, and attendance settings to the current practice date.
-                </p>
-                <div id="clone-practice-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;">
-                    <!-- Practice list will be populated here -->
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #e0e0e0;">
-                <button class="btn-small secondary" onclick="closeClonePracticeModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Reschedule Practice Modal -->
     <div id="reschedule-practice-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal" style="max-width: 500px;" onclick="event.stopPropagation();">
@@ -1945,7 +1936,7 @@
     <!-- Feature modules -->
     <script src="scripts/app-auth-handlers.js?v=20260217a"></script>
     <script src="scripts/app-groups.js?v=20260217a"></script>
-    <script src="scripts/app-riders.js?v=20260217a"></script>
+    <script src="scripts/app-riders.js?v=20260302"></script>
     <script src="scripts/app-coaches.js?v=20260217a"></script>
     <script src="scripts/app-rides.js?v=20260217a"></script>
     <script src="scripts/app-season.js?v=20260217a"></script>

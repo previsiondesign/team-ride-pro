@@ -942,6 +942,11 @@
             renderRides();
         }
 
+        function getRideMeetLocation(ride) {
+            if (!ride) return '';
+            return (ride.meetLocation || (getPracticeForRide(ride) && getPracticeForRide(ride).meetLocation) || '').trim();
+        }
+
         function executeCopyFromPrior() {
             if (!_selectedPriorRideId) {
                 alert('Please select a practice to copy from first.');
@@ -955,9 +960,26 @@
                 return;
             }
 
-            const includeRiderAtt = document.getElementById('copy-prior-include-rider-attendance')?.checked;
-            const includeCoachAtt = document.getElementById('copy-prior-include-coach-attendance')?.checked;
-            const includeRoutes = document.getElementById('copy-prior-include-routes')?.checked;
+            let includeRiderAtt = document.getElementById('copy-prior-include-rider-attendance')?.checked;
+            let includeCoachAtt = document.getElementById('copy-prior-include-coach-attendance')?.checked;
+            let includeRoutes = document.getElementById('copy-prior-include-routes')?.checked;
+
+            // If including routes, warn when source practice has a different starting location
+            if (includeRoutes) {
+                const currentLoc = getRideMeetLocation(ride);
+                const sourceLoc = getRideMeetLocation(sourceRide);
+                const currentNorm = currentLoc.toLowerCase();
+                const sourceNorm = sourceLoc.toLowerCase();
+                if (currentNorm && sourceNorm && currentNorm !== sourceNorm) {
+                    const msg = `The practice you're copying from has a different starting location:\n\n` +
+                        `Source: "${sourceLoc}"\n` +
+                        `This practice: "${currentLoc}"\n\n` +
+                        `Routes are often location-specific. Do you still want to import the assigned routes?`;
+                    if (!confirm(msg)) {
+                        includeRoutes = false;
+                    }
+                }
+            }
 
             const rideDate = ride.date || '';
             const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
@@ -4298,155 +4320,6 @@
             cancelPracticeTargetDate = null;
         }
 
-        function openClonePracticeModal() {
-            const ride = data.rides.find(r => r.id === data.currentRide);
-            if (!ride) {
-                alert('No practice selected.');
-                return;
-            }
-            if (ride.cancelled) {
-                alert('Cannot clone to a cancelled practice.');
-                return;
-            }
-            if (ride.groups && ride.groups.length > 0) {
-                alert('Cannot clone when groups are already assigned. Please clear assignments first.');
-                return;
-            }
-
-            const modal = document.getElementById('clone-practice-modal');
-            const listContainer = document.getElementById('clone-practice-list');
-            if (!modal || !listContainer) return;
-
-            const currentDate = parseISODate(ride.date);
-            if (!currentDate) {
-                alert('Invalid practice date.');
-                return;
-            }
-
-            // Get all practices with groups assigned (excluding current practice)
-            const allRides = (data.rides || [])
-                .filter(r => {
-                    if (!r.date || r.deleted || r.cancelled) return false;
-                    if (r.id === ride.id) return false; // Exclude current practice
-                    if (!r.groups || r.groups.length === 0) return false; // Only practices with groups
-                    return true;
-                })
-                .map(r => ({
-                    ride: r,
-                    date: parseISODate(r.date)
-                }))
-                .filter(r => r.date)
-                .sort((a, b) => b.date - a.date); // Most recent first
-
-            if (allRides.length === 0) {
-                listContainer.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No other practices with group assignments found.</p>';
-            } else {
-                listContainer.innerHTML = allRides.map(({ ride: sourceRide, date: sourceDate }) => {
-                    const dateStr = sourceDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                    const groupCount = sourceRide.groups ? sourceRide.groups.length : 0;
-                    const riderCount = sourceRide.availableRiders ? sourceRide.availableRiders.length : 0;
-                    const coachCount = sourceRide.availableCoaches ? sourceRide.availableCoaches.length : 0;
-                    return `
-                        <button class="btn-small" onclick="cloneEntirePractice(${sourceRide.id})" style="text-align: left; padding: 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer; transition: background 0.2s;">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${dateStr}</div>
-                            <div style="font-size: 12px; color: #666;">${groupCount} group${groupCount !== 1 ? 's' : ''}, ${riderCount} rider${riderCount !== 1 ? 's' : ''}, ${coachCount} coach${coachCount !== 1 ? 'es' : ''}</div>
-                        </button>
-                    `;
-                }).join('');
-            }
-
-            modal.classList.add('visible');
-            modal.setAttribute('aria-hidden', 'false');
-        }
-
-        function closeClonePracticeModal() {
-            const modal = document.getElementById('clone-practice-modal');
-            if (modal) {
-                if (modal.contains(document.activeElement)) document.activeElement.blur();
-                modal.classList.remove('visible');
-                modal.setAttribute('aria-hidden', 'true');
-            }
-        }
-
-        function cloneEntirePractice(sourceRideId) {
-            const ride = data.rides.find(r => r.id === data.currentRide);
-            if (!ride) {
-                alert('No practice selected.');
-                return;
-            }
-            if (ride.cancelled) {
-                alert('Cannot clone to a cancelled practice.');
-                return;
-            }
-            if (ride.groups && ride.groups.length > 0) {
-                alert('Cannot clone when groups are already assigned. Please clear assignments first.');
-                return;
-            }
-
-            const sourceRide = data.rides.find(r => r.id === sourceRideId);
-            if (!sourceRide || !sourceRide.groups || sourceRide.groups.length === 0) {
-                alert('Source practice not found or has no groups assigned.');
-                return;
-            }
-
-            // Confirm with user
-            const sourceDate = parseISODate(sourceRide.date);
-            const sourceDateStr = sourceDate ? sourceDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : sourceRide.date;
-            const currentDate = parseISODate(ride.date);
-            const currentDateStr = currentDate ? currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ride.date;
-            
-            if (!confirm(`Clone entire practice from ${sourceDateStr} to ${currentDateStr}?\n\nThis will:\n- Copy all groups and assignments\n- Override attendance settings (riders and coaches) from the source practice\n- Copy routes from the source practice`)) {
-                return;
-            }
-
-            // Clone attendance settings (override current practice's attendance)
-            ride.availableCoaches = sourceRide.availableCoaches ? [...sourceRide.availableCoaches] : [];
-            ride.availableRiders = sourceRide.availableRiders ? [...sourceRide.availableRiders] : [];
-
-            // Deep clone groups (create new group objects to avoid reference issues)
-            ride.groups = sourceRide.groups.map(sourceGroup => {
-                const newGroup = createGroup(sourceGroup.label);
-                
-                // Copy riders (use all riders from source group)
-                newGroup.riders = sourceGroup.riders ? [...sourceGroup.riders] : [];
-                
-                // Copy coaches
-                if (sourceGroup.coaches) {
-                    if (sourceGroup.coaches.leader) {
-                        newGroup.coaches.leader = sourceGroup.coaches.leader;
-                    }
-                    if (sourceGroup.coaches.sweep) {
-                        newGroup.coaches.sweep = sourceGroup.coaches.sweep;
-                    }
-                    if (sourceGroup.coaches.roam) {
-                        newGroup.coaches.roam = sourceGroup.coaches.roam;
-                    }
-                    if (Array.isArray(sourceGroup.coaches.extraRoam)) {
-                        newGroup.coaches.extraRoam = [...sourceGroup.coaches.extraRoam];
-                    }
-                }
-                
-                // Copy other group properties including routeId
-                newGroup.routeId = sourceGroup.routeId || null;
-                newGroup.sortBy = sourceGroup.sortBy;
-                
-                return newGroup;
-            });
-
-            // Close modal
-            closeClonePracticeModal();
-
-            // Save and render
-            saveRideToDB(ride);
-            renderAssignments(ride);
-
-            // Show the More/Fewer Groups buttons
-            const moreGroupsBtn = document.getElementById('more-groups-btn');
-            const fewerGroupsBtn = document.getElementById('fewer-groups-btn');
-            if (moreGroupsBtn) moreGroupsBtn.style.display = '';
-            if (fewerGroupsBtn) fewerGroupsBtn.style.display = '';
-        }
-
         async function confirmCancelPractice() {
             const targetDate = cancelPracticeTargetDate || contextMenuDate;
             if (!targetDate) return;
@@ -6704,6 +6577,57 @@
             });
         }
 
+        function toggleRouteDropdown(event, triggerEl) {
+            event.stopPropagation();
+            const wrap = triggerEl.closest('.route-selector-wrap');
+            if (!wrap) return;
+            const panel = wrap.querySelector('.route-dropdown-panel');
+            if (!panel) return;
+            const isOpen = panel.style.display === 'block';
+            document.querySelectorAll('.route-dropdown-panel').forEach(p => { p.style.display = 'none'; });
+            document.querySelectorAll('.route-selector-trigger .route-selector-arrow').forEach(s => { s.textContent = '▼'; });
+            if (!isOpen) {
+                // Size dropdown to fill upward but stop short of group header (so group name stays visible)
+                const card = wrap.closest('.coach-group');
+                const header = card ? card.querySelector('.coach-group-header') : null;
+                if (card) {
+                    const triggerRect = triggerEl.getBoundingClientRect();
+                    const topBound = header ? header.getBoundingClientRect().bottom : card.getBoundingClientRect().top;
+                    const spaceAbove = triggerRect.top - topBound - 12;
+                    panel.style.maxHeight = Math.max(160, spaceAbove) + 'px';
+                }
+                panel.style.display = 'block';
+                const arrow = triggerEl.querySelector('.route-selector-arrow');
+                if (arrow) arrow.textContent = '▲';
+                const close = (e) => {
+                    if (!wrap.contains(e.target)) {
+                        panel.style.display = 'none';
+                        const a = triggerEl.querySelector('.route-selector-arrow');
+                        if (a) a.textContent = '▼';
+                        document.removeEventListener('click', close);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', close), 0);
+            }
+        }
+
+        function chooseRouteOption(event) {
+            const el = event.target.closest('.route-dropdown-option');
+            if (!el || el.classList.contains('route-dropdown-sep')) return;
+            const value = el.getAttribute('data-value');
+            const groupId = el.getAttribute('data-group-id');
+            const rideId = el.getAttribute('data-ride-id');
+            if (value === '' || value == null) return;
+            if (typeof handleRouteSelectChange === 'function') handleRouteSelectChange(groupId, value, rideId, null);
+            const wrap = el.closest('.route-selector-wrap');
+            if (wrap) {
+                const panel = wrap.querySelector('.route-dropdown-panel');
+                if (panel) panel.style.display = 'none';
+                const arrow = wrap.querySelector('.route-selector-trigger .route-selector-arrow');
+                if (arrow) arrow.textContent = '▼';
+            }
+        }
+
         function unassignAllCoaches() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
@@ -8848,17 +8772,17 @@
                             </div>
                         </div>
                         
-                        <!-- Route Section -->
-                        <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0;">
-                            <div onclick="toggleGroupSection('route')" style="cursor: pointer; padding: 4px 8px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; margin-bottom: 4px;">
-                                <span style="font-weight: 600; font-size: 13px; color: #333;">Route${routeName ? `: ${routeName}` : ''}</span>
-                                <span style="font-size: 12px; color: #666;">${groupSectionsState.route ? '▼' : '▶'}</span>
+                        <!-- Route Section: single custom dropdown (no redundant select) -->
+                        <div class="route-selector-wrap" style="margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0; position: relative;">
+                            <div class="route-selector-trigger" onclick="toggleRouteDropdown(event, this)" role="button" tabindex="0" style="cursor: pointer; padding: 4px 8px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; font-weight: 600; font-size: 13px; color: #333;">
+                                <span class="route-selector-label">Route: ${escapeHtml(routeName || (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : '-- Select Route --'))}</span>
+                                <span class="route-selector-arrow" style="font-size: 12px; color: #666;">▼</span>
                             </div>
-                            <div data-section="route" style="${groupSectionsState.route ? '' : 'display: none;'}">
-                                <select onchange="handleRouteSelectChange(${group.id}, this.value, '${ride.id}', this)" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
-                                    <option value="">-- Select Route --</option>
-                                    ${renderRouteOptions(group.routeId, group, ride)}
-                                </select>
+                            <div class="route-dropdown-panel" style="display: none; position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 2px; background: #fff; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 280px; overflow-y: auto; z-index: 100;">
+                                ${(typeof getRouteOptionList === 'function' ? getRouteOptionList(group.routeId, group, ride) : []).map(item => item.disabled
+                                    ? `<div class="route-dropdown-option route-dropdown-sep">${escapeHtml(item.label)}</div>`
+                                    : `<div class="route-dropdown-option" data-value="${escapeHtml(String(item.value))}" data-group-id="${group.id}" data-ride-id="${ride.id}" onclick="chooseRouteOption(event)">${escapeHtml(item.label)}</div>`
+                                ).join('')}
                             </div>
                         </div>
                         ${warningsHtml}
@@ -8879,8 +8803,6 @@
                 }).map(renderGroupCard).join('')
                 : renderEmptyGroupCard(ride);
 
-            const cloneButtonHtml = '';
-            
             // Build global toolbar for sort + skill visibility + action buttons — render into the fixed practice banner
             const globalSort = ride.globalGroupSort || 'pace';
             const visibleSkills = ride.visibleSkills || ['pace'];

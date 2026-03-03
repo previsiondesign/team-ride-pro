@@ -70,16 +70,56 @@
             });
         }
 
+        let _riderDeleteInProgress = false;
+
         async function deleteRider(id) {
             if (!canEditRiders()) {
                 alert('You do not have permission to delete riders');
-                return;
+                return false;
             }
+            if (_riderDeleteInProgress) return false;
+            if (!confirm('Delete this rider?')) return false;
 
-            if (confirm('Delete this rider?')) {
+            _riderDeleteInProgress = true;
+            try {
+                const client = getSupabaseClient();
+                const canPersistDelete = !!client && typeof window !== 'undefined' && window.isDeveloperMode !== true;
+                const riderName = data.riders.find(r => r.id === id)?.name || id;
+                console.log('[DeleteRider] id =', id, 'type =', typeof id, 'riderName =', riderName, 'canPersistDelete =', canPersistDelete);
+                if (canPersistDelete) {
+                    const idForDb = typeof id === 'string' ? parseInt(id, 10) : id;
+                    if (!Number.isFinite(idForDb)) {
+                        alert('Invalid rider id.');
+                        return false;
+                    }
+                    try {
+                        const { data: deletedRows, error } = await client.from('riders').delete().eq('id', idForDb).select('id');
+                        console.log('[DeleteRider] Supabase response: deletedCount =', deletedRows?.length ?? 0, 'data =', deletedRows, 'error =', error);
+                        if (error) {
+                            console.error('[DeleteRider] Supabase error:', error);
+                            alert(error.message || 'Failed to delete rider.');
+                            return false;
+                        }
+                        const deletedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
+                        if (deletedCount === 0) {
+                            console.warn('[DeleteRider] No row deleted (RLS or id not found). id =', idForDb);
+                            alert('No rider row was deleted. You may not have permission, or the id was not found. They will reappear after refresh.');
+                            return false;
+                        }
+                    } catch (err) {
+                        console.error('[DeleteRider] Error:', err);
+                        alert(err.message || 'Failed to delete rider.');
+                        return false;
+                    }
+                } else if (client && typeof window !== 'undefined' && window.isDeveloperMode === true) {
+                    alert('Developer Mode is on, so the rider was not deleted from the database. They will reappear after refresh. Turn off Developer Mode to delete permanently.');
+                } else if (!client && typeof window !== 'undefined') {
+                    alert('Not connected to the database. Rider removed from this session only; they will reappear after refresh.');
+                }
+
                 // Remove from riders array
                 data.riders = data.riders.filter(r => r.id !== id);
-                
+
                 // Also update any rides that reference this rider
                 for (const ride of data.rides) {
                     if (ride.availableRiders && ride.availableRiders.includes(id)) {
@@ -95,12 +135,15 @@
                         saveRideToDB(ride);
                     }
                 }
-                
+
                 saveData();
                 renderRiders();
                 if (data.currentRide) {
                     renderRides();
                 }
+                return true;
+            } finally {
+                _riderDeleteInProgress = false;
             }
         }
 
@@ -602,12 +645,11 @@
             }
         }
 
-        function deleteRiderFromModal() {
+        async function deleteRiderFromModal() {
             if (!currentEditingRiderId) return;
-            if (!confirm('Delete this rider?')) return;
-            
-            deleteRider(currentEditingRiderId);
-            closeEditRiderModal();
+            const id = currentEditingRiderId;
+            const deleted = await deleteRider(id);
+            if (deleted) closeEditRiderModal();
         }
 
         function showNotesModal(id, type) {
@@ -2600,6 +2642,24 @@
 
         // ============ RIDER ABSENCE FUNCTIONS ============
 
+        const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        function getAbsencePracticeOptions() {
+            const settings = data.seasonSettings || {};
+            const practices = Array.isArray(settings.practices) ? settings.practices : [];
+            const seen = new Set();
+            const out = [];
+            practices.forEach(p => {
+                if (p.specificDate != null && p.specificDate !== '') return;
+                const dow = typeof p.dayOfWeek === 'string' ? parseInt(p.dayOfWeek, 10) : p.dayOfWeek;
+                if (!Number.isFinite(dow) || dow < 0 || dow > 6 || seen.has(dow)) return;
+                seen.add(dow);
+                out.push({ dayOfWeek: dow, label: DAY_NAMES[dow] });
+            });
+            out.sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+            return out;
+        }
+
         function renderRiderAbsencesList(riderId) {
             const container = document.getElementById('edit-rider-absences-list');
             if (!container) return;
@@ -2614,12 +2674,16 @@
                 return `<div class="absence-row">
                     <span class="absence-dates">${startFormatted} – ${endFormatted}</span>
                     <span class="absence-reason">${formatAbsenceReason(a.reason)}</span>
+                    <button class="btn-small secondary absence-edit-btn" onclick="editRiderAbsence(${a.id})" title="Edit duration">Edit/Update</button>
                     <button class="absence-delete-btn" onclick="removeRiderAbsence(${a.id})" title="Remove absence">✕</button>
                 </div>`;
             }).join('');
         }
 
+        let editingRiderAbsenceId = null;
+
         function showRiderAbsenceForm() {
+            editingRiderAbsenceId = null;
             const form = document.getElementById('edit-rider-absence-form');
             if (form) {
                 form.style.display = 'block';
@@ -2627,12 +2691,94 @@
                 document.getElementById('edit-rider-absence-start').value = today;
                 document.getElementById('edit-rider-absence-end').value = today;
                 document.getElementById('edit-rider-absence-reason').value = 'injured';
+                const rem = document.getElementById('edit-rider-absence-remainder');
+                const spec = document.getElementById('edit-rider-absence-specific-practices');
+                const wrap = document.getElementById('edit-rider-absence-practices-wrap');
+                if (rem) rem.checked = false;
+                if (spec) spec.checked = false;
+                if (wrap) wrap.style.display = 'none';
+                populateRiderAbsencePracticesSelect();
             }
             const addBtn = document.getElementById('edit-rider-add-absence-btn');
             if (addBtn) addBtn.style.display = 'none';
         }
 
+        function showRiderAbsenceFormForEdit(absenceId) {
+            const a = data.scheduledAbsences.find(x => x.id === absenceId);
+            if (!a) return;
+            editingRiderAbsenceId = absenceId;
+            const form = document.getElementById('edit-rider-absence-form');
+            if (form) form.style.display = 'block';
+            document.getElementById('edit-rider-absence-start').value = a.startDate || '';
+            document.getElementById('edit-rider-absence-end').value = a.endDate || '';
+            document.getElementById('edit-rider-absence-reason').value = a.reason || 'other';
+            const rem = document.getElementById('edit-rider-absence-remainder');
+            if (rem) rem.checked = !!a.remainderOfSeason;
+            const spec = document.getElementById('edit-rider-absence-specific-practices');
+            const wrap = document.getElementById('edit-rider-absence-practices-wrap');
+            if (spec) spec.checked = Array.isArray(a.specificPracticeDays) && a.specificPracticeDays.length > 0;
+            if (wrap) wrap.style.display = spec && spec.checked ? 'block' : 'none';
+            populateRiderAbsencePracticesSelect();
+            const sel = document.getElementById('edit-rider-absence-practices');
+            if (sel && Array.isArray(a.specificPracticeDays)) {
+                Array.from(sel.options).forEach(opt => {
+                    opt.selected = a.specificPracticeDays.includes(Number(opt.value));
+                });
+            }
+            const addBtn = document.getElementById('edit-rider-add-absence-btn');
+            if (addBtn) addBtn.style.display = 'none';
+        }
+
+        function editRiderAbsence(absenceId) {
+            showRiderAbsenceFormForEdit(absenceId);
+        }
+
+        function openEditAbsenceFromRide(personType, personId, absenceId) {
+            if (personType === 'rider') {
+                openEditRiderModal(personId);
+                setTimeout(() => {
+                    showRiderAbsenceFormForEdit(absenceId);
+                    const el = document.getElementById('edit-rider-absences-list');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 150);
+            } else {
+                if (typeof openEditCoachModal === 'function') openEditCoachModal(personId);
+                setTimeout(() => {
+                    if (typeof showCoachAbsenceFormForEdit === 'function') showCoachAbsenceFormForEdit(absenceId);
+                    const el = document.getElementById('edit-coach-absences-list');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 150);
+            }
+        }
+
+        function populateRiderAbsencePracticesSelect() {
+            const sel = document.getElementById('edit-rider-absence-practices');
+            if (!sel) return;
+            const options = getAbsencePracticeOptions();
+            sel.innerHTML = options.map(o => `<option value="${o.dayOfWeek}">${o.label}</option>`).join('');
+        }
+
+        function toggleRiderAbsenceRemainder() {
+            const rem = document.getElementById('edit-rider-absence-remainder');
+            const endInput = document.getElementById('edit-rider-absence-end');
+            if (!rem || !endInput) return;
+            if (rem.checked) {
+                const settings = data.seasonSettings || {};
+                const endStr = settings.endDate || '';
+                if (endStr) endInput.value = endStr;
+            }
+        }
+
+        function toggleRiderAbsenceSpecificPractices() {
+            const spec = document.getElementById('edit-rider-absence-specific-practices');
+            const wrap = document.getElementById('edit-rider-absence-practices-wrap');
+            const reasonSel = document.getElementById('edit-rider-absence-reason');
+            if (wrap) wrap.style.display = spec && spec.checked ? 'block' : 'none';
+            if (spec && spec.checked && reasonSel) reasonSel.value = 'schedule_conflict';
+        }
+
         function cancelRiderAbsenceForm() {
+            editingRiderAbsenceId = null;
             const form = document.getElementById('edit-rider-absence-form');
             if (form) form.style.display = 'none';
             const addBtn = document.getElementById('edit-rider-add-absence-btn');
@@ -2644,6 +2790,10 @@
             const startDate = document.getElementById('edit-rider-absence-start').value;
             const endDate = document.getElementById('edit-rider-absence-end').value;
             const reason = document.getElementById('edit-rider-absence-reason').value;
+            const remainderOfSeason = document.getElementById('edit-rider-absence-remainder')?.checked || false;
+            const spec = document.getElementById('edit-rider-absence-specific-practices')?.checked || false;
+            const practicesSel = document.getElementById('edit-rider-absence-practices');
+            const specificPracticeDays = (spec && practicesSel) ? Array.from(practicesSel.selectedOptions).map(o => Number(o.value)) : null;
 
             if (!startDate || !endDate) {
                 alert('Please select both start and end dates.');
@@ -2655,14 +2805,29 @@
             }
 
             try {
-                const newAbsence = await createScheduledAbsence({
+                const payload = {
                     personType: 'rider',
                     personId: currentEditingRiderId,
-                    startDate: startDate,
-                    endDate: endDate,
-                    reason: reason
-                });
-                data.scheduledAbsences.push(newAbsence);
+                    startDate,
+                    endDate,
+                    reason,
+                    remainderOfSeason,
+                    specificPracticeDays: (specificPracticeDays && specificPracticeDays.length) ? specificPracticeDays : null
+                };
+                if (editingRiderAbsenceId) {
+                    const updated = await updateScheduledAbsence(editingRiderAbsenceId, {
+                        startDate,
+                        endDate,
+                        reason,
+                        remainderOfSeason,
+                        specificPracticeDays: payload.specificPracticeDays
+                    });
+                    const idx = data.scheduledAbsences.findIndex(a => a.id === editingRiderAbsenceId);
+                    if (idx !== -1) data.scheduledAbsences[idx] = updated;
+                } else {
+                    const newAbsence = await createScheduledAbsence(payload);
+                    data.scheduledAbsences.push(newAbsence);
+                }
                 renderRiderAbsencesList(currentEditingRiderId);
                 cancelRiderAbsenceForm();
             } catch (err) {

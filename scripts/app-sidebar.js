@@ -884,6 +884,7 @@
                             isUnassigned: isUnassigned,
                             scheduledAbsent: entry.scheduledAbsent,
                             absenceReasonText: entry.absenceReason || '',
+                            absenceRecord: entry.absenceRecord || null,
                             visibleSkills: sidebarVisibleSkills,
                             sidebarCard: true
                         });
@@ -900,6 +901,7 @@
                             isUnassigned: isUnassigned,
                             scheduledAbsent: entry.scheduledAbsent,
                             absenceReasonText: entry.absenceReason || '',
+                            absenceRecord: entry.absenceRecord || null,
                             visibleSkills: sidebarVisibleSkills,
                             sidebarCard: true
                         });
@@ -1007,6 +1009,8 @@
                         const absenceStatus = rideDate ? isScheduledAbsent(personType, id, rideDate) : { absent: false };
 
                         if (absenceStatus.absent && absenceStatus.absence) {
+                            const absence = absenceStatus.absence;
+                            const isSpecificPractices = Array.isArray(absence.specificPracticeDays) && absence.specificPracticeDays.length > 0;
                             const person = type === 'riders'
                                 ? (data.riders || []).find(r => r.id === id)
                                 : (data.coaches || []).find(c => c.id === id);
@@ -1020,35 +1024,52 @@
                                     personName = person.name || 'This person';
                                 }
                             }
-                            const endFormatted = absenceStatus.absence.endDate
-                                ? new Date(absenceStatus.absence.endDate + 'T00:00:00').toLocaleDateString()
-                                : 'unknown';
-                            const reasonText = absenceStatus.reason || 'an absence';
 
-                            const userConfirmed = confirm(
-                                `${personName} has been marked absent due to ${reasonText} through ${endFormatted}. Are they back earlier than expected?`
-                            );
-
-                            if (userConfirmed) {
-                                // Update the absence end date to one day before the practice date
-                                const practiceDate = new Date(rideDate + 'T00:00:00');
-                                const newEndDate = new Date(practiceDate);
-                                newEndDate.setDate(newEndDate.getDate() - 1);
-                                const newEndDateStr = newEndDate.toISOString().split('T')[0];
-
+                            if (isSpecificPractices) {
+                                const ok = confirm(
+                                    `${personName} will be marked attending for this practice only.`
+                                );
+                                if (!ok) {
+                                    e.target.checked = false;
+                                    return;
+                                }
                                 try {
-                                    const updated = await updateScheduledAbsence(absenceStatus.absence.id, { endDate: newEndDateStr });
-                                    const idx = data.scheduledAbsences.findIndex(a => a.id === absenceStatus.absence.id);
-                                    if (idx !== -1) {
-                                        data.scheduledAbsences[idx] = updated;
+                                    const existing = absence.exceptionDates || [];
+                                    if (!existing.includes(rideDate)) {
+                                        const updated = await updateScheduledAbsence(absence.id, { exceptionDates: [...existing, rideDate] });
+                                        const idx = data.scheduledAbsences.findIndex(a => a.id === absence.id);
+                                        if (idx !== -1) data.scheduledAbsences[idx] = updated;
                                     }
                                 } catch (err) {
-                                    console.error('Failed to update absence end date:', err);
+                                    console.error('Failed to update absence:', err);
+                                    e.target.checked = false;
+                                    return;
                                 }
+                                if (typeof renderSidebars === 'function') renderSidebars();
                             } else {
-                                // Revert the checkbox
-                                e.target.checked = false;
-                                return;
+                                const endFormatted = absence.endDate
+                                    ? new Date(absence.endDate + 'T00:00:00').toLocaleDateString()
+                                    : 'unknown';
+                                const reasonText = absenceStatus.reason || 'an absence';
+                                const userConfirmed = confirm(
+                                    `${personName} has been marked absent due to ${reasonText} through ${endFormatted}. Are they back earlier than expected?`
+                                );
+                                if (userConfirmed) {
+                                    const practiceDate = new Date(rideDate + 'T00:00:00');
+                                    const newEndDate = new Date(practiceDate);
+                                    newEndDate.setDate(newEndDate.getDate() - 1);
+                                    const newEndDateStr = newEndDate.toISOString().split('T')[0];
+                                    try {
+                                        const updated = await updateScheduledAbsence(absence.id, { endDate: newEndDateStr });
+                                        const idx = data.scheduledAbsences.findIndex(a => a.id === absence.id);
+                                        if (idx !== -1) data.scheduledAbsences[idx] = updated;
+                                    } catch (err) {
+                                        console.error('Failed to update absence end date:', err);
+                                    }
+                                } else {
+                                    e.target.checked = false;
+                                    return;
+                                }
                             }
                         }
                     }
