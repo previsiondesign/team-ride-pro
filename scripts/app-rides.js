@@ -523,7 +523,7 @@
                     persistLastOpenedRide();
                     saveData();
                 }
-                if (practicePlannerView === 'home' || practicePlannerView === 'groupMethod' || practicePlannerView === 'picker') {
+                if (practicePlannerView === 'home' || practicePlannerView === 'groupMethod') {
                     practicePlannerView = 'planner';
                 }
                 if (practicePlannerView === 'planner') {
@@ -643,6 +643,7 @@
 
         async function persistLastOpenedRide() {
             if (data.currentRide == null) return;
+            if (window.isDeveloperMode) return;
             if (!data.seasonSettings) data.seasonSettings = {};
             data.seasonSettings.lastOpenedRideId = data.currentRide;
             if (typeof updateSeasonSettings === 'function') {
@@ -962,31 +963,42 @@
             const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
             const isCoachAbsent = (id) => rideDate && isScheduledAbsent('coach', id, rideDate).absent;
 
+            // Normalize IDs to numbers so assignment vs unassigned logic matches (avoids same rider in group + unassigned)
+            const toNum = (id) => (typeof id === 'string' ? parseInt(id, 10) : id);
+            const norm = (id) => { const n = toNum(id); return Number.isFinite(n) ? n : id; };
+
             if (includeRiderAtt) {
                 ride.availableRiders = (sourceRide.availableRiders ? [...sourceRide.availableRiders] : [])
+                    .map(norm)
                     .filter(id => !isRiderAbsent(id));
             } else {
                 ensureRideAttendanceDefaults(ride);
             }
             if (includeCoachAtt) {
                 ride.availableCoaches = (sourceRide.availableCoaches ? [...sourceRide.availableCoaches] : [])
+                    .map(norm)
                     .filter(id => !isCoachAbsent(id));
             } else if (!Array.isArray(ride.availableCoaches) || ride.availableCoaches.length === 0) {
-                ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => c.id);
+                ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => norm(c.id));
             }
 
-            const currentAvailableRiders = new Set(ride.availableRiders || []);
-            const currentAvailableCoaches = new Set(ride.availableCoaches || []);
+            const currentAvailableRiders = new Set((ride.availableRiders || []).map(norm));
+            const currentAvailableCoaches = new Set((ride.availableCoaches || []).map(norm));
 
             ride.groups = sourceRide.groups.map(srcGroup => {
                 const newGroup = createGroup(srcGroup.label);
-                newGroup.riders = srcGroup.riders ? srcGroup.riders.filter(id => currentAvailableRiders.has(id) && !isRiderAbsent(id)) : [];
+                newGroup.riders = (srcGroup.riders || [])
+                    .map(id => norm(id))
+                    .filter(id => currentAvailableRiders.has(id) && !isRiderAbsent(id));
                 if (srcGroup.coaches) {
-                    newGroup.coaches.leader = (srcGroup.coaches.leader && currentAvailableCoaches.has(srcGroup.coaches.leader) && !isCoachAbsent(srcGroup.coaches.leader)) ? srcGroup.coaches.leader : null;
-                    newGroup.coaches.sweep = (srcGroup.coaches.sweep && currentAvailableCoaches.has(srcGroup.coaches.sweep) && !isCoachAbsent(srcGroup.coaches.sweep)) ? srcGroup.coaches.sweep : null;
-                    newGroup.coaches.roam = (srcGroup.coaches.roam && currentAvailableCoaches.has(srcGroup.coaches.roam) && !isCoachAbsent(srcGroup.coaches.roam)) ? srcGroup.coaches.roam : null;
+                    const lead = srcGroup.coaches.leader ? norm(srcGroup.coaches.leader) : null;
+                    const sweep = srcGroup.coaches.sweep ? norm(srcGroup.coaches.sweep) : null;
+                    const roam = srcGroup.coaches.roam ? norm(srcGroup.coaches.roam) : null;
+                    newGroup.coaches.leader = (lead && currentAvailableCoaches.has(lead) && !isCoachAbsent(lead)) ? lead : null;
+                    newGroup.coaches.sweep = (sweep && currentAvailableCoaches.has(sweep) && !isCoachAbsent(sweep)) ? sweep : null;
+                    newGroup.coaches.roam = (roam && currentAvailableCoaches.has(roam) && !isCoachAbsent(roam)) ? roam : null;
                     newGroup.coaches.extraRoam = Array.isArray(srcGroup.coaches.extraRoam)
-                        ? srcGroup.coaches.extraRoam.filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id))
+                        ? srcGroup.coaches.extraRoam.map(id => norm(id)).filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id))
                         : [];
                 }
                 newGroup.routeId = includeRoutes ? (srcGroup.routeId || null) : null;
@@ -1052,16 +1064,18 @@
         }
 
         function viewLastPracticeFromSetup() {
-            const allRides = (data.rides || [])
-                .filter(r => !r.deleted && r.date)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const pastRides = (data.rides || [])
+                .filter(r => !r.deleted && r.date && !r.cancelled)
                 .map(r => ({ ride: r, date: parseISODate(r.date) }))
-                .filter(item => item.date !== null)
+                .filter(item => item.date !== null && item.date < today)
                 .sort((a, b) => b.date - a.date);
-            if (allRides.length === 0) {
-                alert('No practices found.');
+            if (pastRides.length === 0) {
+                alert('No past practices found.');
                 return;
             }
-            const lastRide = allRides[0].ride;
+            const lastRide = pastRides[0].ride;
             data.currentRide = lastRide.id;
             saveData();
             practicePlannerView = 'planner';
@@ -6315,13 +6329,15 @@
             // Save state before change
             saveAssignmentState(ride);
 
-            // Get current practice's available coaches and riders
-            const currentAvailableCoaches = new Set(ride.availableCoaches || []);
-            const currentAvailableRiders = new Set(ride.availableRiders || []);
+            // Normalize IDs to numbers so Set.has() and assignment lookups match (avoids "in group but also unassigned")
+            const toNum = (id) => (typeof id === 'string' ? parseInt(id, 10) : id);
+            const norm = (id) => { const n = toNum(id); return Number.isFinite(n) ? n : id; };
+            const currentAvailableCoaches = new Set((ride.availableCoaches || []).map(norm));
+            const currentAvailableRiders = new Set((ride.availableRiders || []).map(norm));
 
-            // Get source practice's available coaches and riders
-            const sourceAvailableCoaches = new Set(sourceRide.availableCoaches || []);
-            const sourceAvailableRiders = new Set(sourceRide.availableRiders || []);
+            // Get source practice's available coaches and riders (normalized)
+            const sourceAvailableCoaches = new Set((sourceRide.availableCoaches || []).map(norm));
+            const sourceAvailableRiders = new Set((sourceRide.availableRiders || []).map(norm));
 
             // Find new attendees (attending current but not source)
             const newCoaches = Array.from(currentAvailableCoaches).filter(id => !sourceAvailableCoaches.has(id));
@@ -6336,25 +6352,32 @@
             const isRiderAbsent = (id) => rideDate && isScheduledAbsent('rider', id, rideDate).absent;
             const isCoachAbsent = (id) => rideDate && isScheduledAbsent('coach', id, rideDate).absent;
 
-            // Copy groups from source practice
+            // Copy groups from source practice (use normalized IDs so assignment/unassigned logic matches)
             ride.groups = sourceRide.groups.map(sourceGroup => {
                 const newGroup = createGroup(sourceGroup.label);
                 
-                // Copy riders (only those available in current practice and not scheduled absent)
-                newGroup.riders = sourceGroup.riders.filter(riderId => currentAvailableRiders.has(riderId) && !isRiderAbsent(riderId));
+                // Copy riders (only those available in current practice and not scheduled absent); store normalized ids
+                newGroup.riders = (sourceGroup.riders || [])
+                    .map(riderId => norm(riderId))
+                    .filter(riderId => currentAvailableRiders.has(riderId) && !isRiderAbsent(riderId));
                 
-                // Copy coaches (only those available in current practice and not scheduled absent)
-                if (sourceGroup.coaches.leader && currentAvailableCoaches.has(sourceGroup.coaches.leader) && !isCoachAbsent(sourceGroup.coaches.leader)) {
-                    newGroup.coaches.leader = sourceGroup.coaches.leader;
+                // Copy coaches (only those available in current practice and not scheduled absent); use normalized ids
+                if (sourceGroup.coaches.leader) {
+                    const id = norm(sourceGroup.coaches.leader);
+                    if (currentAvailableCoaches.has(id) && !isCoachAbsent(id)) newGroup.coaches.leader = id;
                 }
-                if (sourceGroup.coaches.sweep && currentAvailableCoaches.has(sourceGroup.coaches.sweep) && !isCoachAbsent(sourceGroup.coaches.sweep)) {
-                    newGroup.coaches.sweep = sourceGroup.coaches.sweep;
+                if (sourceGroup.coaches.sweep) {
+                    const id = norm(sourceGroup.coaches.sweep);
+                    if (currentAvailableCoaches.has(id) && !isCoachAbsent(id)) newGroup.coaches.sweep = id;
                 }
-                if (sourceGroup.coaches.roam && currentAvailableCoaches.has(sourceGroup.coaches.roam) && !isCoachAbsent(sourceGroup.coaches.roam)) {
-                    newGroup.coaches.roam = sourceGroup.coaches.roam;
+                if (sourceGroup.coaches.roam) {
+                    const id = norm(sourceGroup.coaches.roam);
+                    if (currentAvailableCoaches.has(id) && !isCoachAbsent(id)) newGroup.coaches.roam = id;
                 }
                 if (Array.isArray(sourceGroup.coaches.extraRoam)) {
-                    newGroup.coaches.extraRoam = sourceGroup.coaches.extraRoam.filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id));
+                    newGroup.coaches.extraRoam = sourceGroup.coaches.extraRoam
+                        .map(id => norm(id))
+                        .filter(id => currentAvailableCoaches.has(id) && !isCoachAbsent(id));
                 }
                 
                 // Auto-promote qualified L2/L3 coach to leader if original leader is absent
@@ -6436,6 +6459,10 @@
                 coaches: newCoaches,
                 riders: newRiders
             };
+
+            // Keep availableRiders/availableCoaches normalized (numbers) so sidebar/assignment logic matches
+            ride.availableRiders = Array.from(currentAvailableRiders);
+            ride.availableCoaches = Array.from(currentAvailableCoaches);
 
             // Save and render
             saveRideToDB(ride);

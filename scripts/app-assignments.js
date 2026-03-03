@@ -36,6 +36,34 @@
             return (data.routes || []).find(route => String(route.id) === String(routeId)) || null;
         }
 
+        /** Store Strava embed HTML per preview id (set during render); used by toggleAssignmentRoutePreview */
+        window.__assignmentRouteEmbeds = window.__assignmentRouteEmbeds || {};
+        /** Store Strava URL per preview id for fallback when embed fails or is missing */
+        window.__assignmentRouteUrls = window.__assignmentRouteUrls || {};
+
+        /** Toggle inline Strava route preview below route title in assignment tabs. Id = container element id. */
+        function toggleAssignmentRoutePreview(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.style.display === 'none' || !el.style.display) {
+                if (!el.innerHTML) {
+                    const embed = window.__assignmentRouteEmbeds && window.__assignmentRouteEmbeds[id];
+                    const url = window.__assignmentRouteUrls && window.__assignmentRouteUrls[id];
+                    if (embed && (typeof embed === 'string' && embed.trim().length > 0)) {
+                        el.innerHTML = embed;
+                    } else {
+                        // No embed or empty – show link instead of grey empty box
+                        const link = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #FC4C02; font-weight: 500;">View full map on Strava →</a>` : 'Map preview not available.';
+                        el.innerHTML = `<div style="padding: 16px; background: #f5f5f5; border-radius: 4px; font-size: 13px; color: #666;">${link}</div>`;
+                    }
+                }
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+        window.toggleAssignmentRoutePreview = toggleAssignmentRoutePreview;
+
         async function renderRideAssignments() {
             const container = document.getElementById('ride-assignments-container');
             if (!container) return;
@@ -198,20 +226,26 @@
                                 ` : ''}
                                 
                                 ${route ? (() => {
-                                    // Try to get Strava URL from stored field or extract from embed code
                                     let stravaUrl = route.stravaUrl;
                                     if (!stravaUrl && route.stravaEmbedCode) {
-                                        // Try to extract URL from embed code
                                         const urlMatch = route.stravaEmbedCode.match(/https?:\/\/[^\s"'<>]+strava\.com[^\s"'<>]*/i);
-                                        if (urlMatch) {
-                                            stravaUrl = urlMatch[0];
-                                        }
+                                        if (urlMatch) stravaUrl = urlMatch[0];
                                     }
+                                    const previewId = 'route-preview-' + groupId;
+                                    window.__assignmentRouteUrls = window.__assignmentRouteUrls || {};
+                                    if (stravaUrl) window.__assignmentRouteUrls[previewId] = stravaUrl;
+                                    if (route.stravaEmbedCode) {
+                                        window.__assignmentRouteEmbeds[previewId] = route.stravaEmbedCode;
+                                    }
+                                    const routeName = escapeHtml(route.name || 'Unnamed Route');
+                                    const clickableTitle = route.stravaEmbedCode
+                                        ? `<button type="button" class="assignment-route-title-toggle" style="font-weight: 600; margin-bottom: 4px; background: none; border: none; padding: 0; font-size: inherit; text-align: left;" onclick="toggleAssignmentRoutePreview('${previewId}')" title="Show Strava map">${routeName} ▸</button>`
+                                        : `<div style="font-weight: 600; margin-bottom: 4px;">${routeName}</div>`;
                                     return `
                                         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
                                             <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">Route:</strong>
                                             <div style="font-size: 14px; color: #333;">
-                                                <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
+                                                ${clickableTitle}
                                                 ${route.distance || route.elevation ? `
                                                     <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                                         ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
@@ -219,15 +253,14 @@
                                                         ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
                                                     </div>
                                                 ` : ''}
+                                                <div id="${previewId}" class="assignment-route-preview" style="display: none;"></div>
                                                 ${stravaUrl ? `
                                                     <a href="${escapeHtml(stravaUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; margin-top: 6px; font-size: 12px; color: #FC4C02; text-decoration: none; font-weight: 500;">
                                                         View Full Map on Strava →
                                                     </a>
-                                                ` : route.stravaEmbedCode ? `
-                                                    <div style="font-size: 11px; color: #999; margin-top: 4px; font-style: italic;">
-                                                        (Strava link not available - route may need to be re-saved)
-                                                    </div>
-                                                ` : ''}
+                                                ` : route.stravaEmbedCode ? '' : `
+                                                    <div style="font-size: 11px; color: #999; margin-top: 4px; font-style: italic;">(No Strava map)</div>
+                                                `}
                                             </div>
                                         </div>
                                     `;
@@ -644,20 +677,26 @@
                                 ` : ''}
                                 
                                 ${route ? (() => {
-                                    // Try to get Strava URL from stored field or extract from embed code
                                     let stravaUrl = route.stravaUrl;
                                     if (!stravaUrl && route.stravaEmbedCode) {
-                                        // Try to extract URL from embed code
                                         const urlMatch = route.stravaEmbedCode.match(/https?:\/\/[^\s"'<>]+strava\.com[^\s"'<>]*/i);
-                                        if (urlMatch) {
-                                            stravaUrl = urlMatch[0];
-                                        }
+                                        if (urlMatch) stravaUrl = urlMatch[0];
                                     }
+                                    const previewId = 'route-preview-coach-' + groupId;
+                                    window.__assignmentRouteUrls = window.__assignmentRouteUrls || {};
+                                    if (stravaUrl) window.__assignmentRouteUrls[previewId] = stravaUrl;
+                                    if (route.stravaEmbedCode) {
+                                        window.__assignmentRouteEmbeds[previewId] = route.stravaEmbedCode;
+                                    }
+                                    const routeName = escapeHtml(route.name || 'Unnamed Route');
+                                    const clickableTitle = route.stravaEmbedCode
+                                        ? `<button type="button" class="assignment-route-title-toggle" style="font-weight: 600; margin-bottom: 4px; background: none; border: none; padding: 0; font-size: inherit; text-align: left;" onclick="toggleAssignmentRoutePreview('${previewId}')" title="Show Strava map">${routeName} ▸</button>`
+                                        : `<div style="font-weight: 600; margin-bottom: 4px;">${routeName}</div>`;
                                     return `
                                         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
                                             <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">Route:</strong>
                                             <div style="font-size: 14px; color: #333;">
-                                                <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(route.name || 'Unnamed Route')}</div>
+                                                ${clickableTitle}
                                                 ${route.distance || route.elevation ? `
                                                     <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                                         ${route.distance ? `<span>${escapeHtml(route.distance)}</span>` : ''}
@@ -665,15 +704,14 @@
                                                         ${route.elevation ? `<span>${escapeHtml(route.elevation)}</span>` : ''}
                                                     </div>
                                                 ` : ''}
+                                                <div id="${previewId}" class="assignment-route-preview" style="display: none;"></div>
                                                 ${stravaUrl ? `
                                                     <a href="${escapeHtml(stravaUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; margin-top: 6px; font-size: 12px; color: #FC4C02; text-decoration: none; font-weight: 500;">
                                                         View Full Map on Strava →
                                                     </a>
-                                                ` : route.stravaEmbedCode ? `
-                                                    <div style="font-size: 11px; color: #999; margin-top: 4px; font-style: italic;">
-                                                        (Strava link not available - route may need to be re-saved)
-                                                    </div>
-                                                ` : ''}
+                                                ` : route.stravaEmbedCode ? '' : `
+                                                    <div style="font-size: 11px; color: #999; margin-top: 4px; font-style: italic;">(No Strava map)</div>
+                                                `}
                                             </div>
                                         </div>
                                     `;

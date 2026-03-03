@@ -595,7 +595,7 @@
                 updateInputMaxAttributes();
                 saveData();
 
-                if (typeof updateSeasonSettings === 'function') {
+                if (!window.isDeveloperMode && typeof updateSeasonSettings === 'function') {
                     try {
                         await updateSeasonSettings({
                             id: 'current',
