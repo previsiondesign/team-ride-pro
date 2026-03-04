@@ -535,10 +535,6 @@ function buildRideDbData(rideData) {
     }
     if (Object.keys(extra).length > 0) dbData.settings = extra;
 
-    // 🔵 DIAG: log what colorNames are being saved
-    const _cnKeys = extra._groupColorNames ? Object.keys(extra._groupColorNames).length : 0;
-    console.log('🔵 buildRideDbData rideId=' + rideData.id + ' | _groupColorNames keys=' + _cnKeys + ' | groups with colorName=' + (Array.isArray(rideData.groups) ? rideData.groups.filter(g => g && g.colorName).length : '-') + '/' + (Array.isArray(rideData.groups) ? rideData.groups.length : '-') + ' | sample=' + JSON.stringify(extra._groupColorNames).slice(0, 80));
-
     return dbData;
 }
 
@@ -596,10 +592,6 @@ function mapRideDbToApp(row) {
             if (byId) g.colorName = byId;
             else if (byIdx) g.colorName = byIdx;
         });
-        // 🔵 DIAG: log what came back from Supabase
-        const _cnInSettings = colorMap ? Object.keys(colorMap).length : 0;
-        const _cnOnGroups = result.groups.filter(g => g && g.colorName).length;
-        console.log('🔵 mapRideDbToApp rideId=' + row.id + ' | settings._groupColorNames keys=' + _cnInSettings + ' | groups with colorName after restore=' + _cnOnGroups + '/' + result.groups.length + ' | sample=' + JSON.stringify(colorMap).slice(0, 80));
     }
     return result;
 }

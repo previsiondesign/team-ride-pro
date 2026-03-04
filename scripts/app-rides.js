@@ -6766,10 +6766,8 @@
                 if (wasOn) {
                     ride.groups.forEach(g => { delete g.colorName; });
                 } else {
-                    console.log('🔵 toggleON: before ensureGroupColorNames | groups=' + ride.groups.length + ' | with colorName=' + ride.groups.filter(g => g.colorName).length);
                     await ensureGroupColorNames(ride);
                     const missing = (ride.groups || []).filter(g => !g.colorName).length;
-                    console.log('🔵 toggleON: after ensureGroupColorNames | missing=' + missing + ' | names:', ride.groups.map(g => g && g.colorName).join(','));
                     if (missing > 0) {
                         alert('Not enough color names in the list. Add more in Supabase (color_names table) or use fewer groups.');
                         data.seasonSettings.useGroupColorNames = false;
@@ -8483,7 +8481,6 @@
                 Array.isArray(ride.groups) && ride.groups.length > 0 &&
                 ride.groups.some(g => !g.colorName) &&
                 typeof getColorNames === 'function') {
-                console.log('🔵 Fix2 triggered for rideId=' + ride.id + ' | groups missing colorName=' + ride.groups.filter(g => !g.colorName).length + '/' + ride.groups.length + ' | existing:', ride.groups.map(g => g && g.colorName).join(','));
                 const _cnNames = await getColorNames();
                 const _cnList = _cnNames.map(n => n.name).filter(Boolean).sort();
                 if (_cnList.length > 0) {

@@ -2031,6 +2031,8 @@
                     fitnessTag: legacyFitnessTag,
                     routeId: group.routeId !== undefined ? group.routeId : null
                 };
+                // Preserve colorName so it survives the normalization pass after data load
+                if (group.colorName !== undefined) normalized.colorName = group.colorName;
 
                 if (!normalized.coaches.leader && normalized.coaches.sweep) {
                     const sweepCoach = getCoachById(normalized.coaches.sweep);
