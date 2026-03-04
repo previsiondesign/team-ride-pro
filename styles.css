@@ -866,7 +866,8 @@
         .roster-grid {
             display: grid;
             gap: 2px;
-            overflow-x: clip;
+            overflow-x: auto;
+            overflow-y: clip;
             padding-bottom: 4px;
         }
 
@@ -890,10 +891,18 @@
 
         .roster-header > div:first-child {
             justify-self: start;
+            position: sticky;
+            left: 0;
+            z-index: 9;
+            background: #eceff1;
         }
 
         .roster-header > div:last-child {
             justify-self: end;
+            position: sticky;
+            right: 0;
+            z-index: 9;
+            background: #eceff1;
         }
 
         .roster-header-sortable {
@@ -1052,6 +1061,10 @@
             color: #222;
             justify-content: flex-start;
             text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background: inherit;
         }
 
             .pace-controls {
@@ -1124,6 +1137,10 @@
             align-items: flex-end;
             justify-content: center;
             padding: 1px 6px;
+            position: sticky;
+            right: 0;
+            z-index: 2;
+            background: inherit;
         }
 
         .roster-row select {
@@ -3602,6 +3619,7 @@
                 display: flex;
                 align-items: center;
                 gap: 8px;
+                position: static;
             }
 
             .roster-name::before {
@@ -3667,6 +3685,7 @@
             .roster-actions {
                 flex-shrink: 0;
                 margin: 0;
+                position: static;
             }
 
             .roster-actions .btn-small {
