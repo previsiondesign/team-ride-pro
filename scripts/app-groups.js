@@ -663,20 +663,21 @@
             const circleBaseNoMargin = circleBase.replace('margin-left:4px;', '');
             const activeCircleStyle = circleBase.replace('border:1px solid #000', 'border:2px solid #2196F3');
             const activeCircleStyleNoMargin = activeCircleStyle.replace('margin-left:4px;', '');
-            const ebikeSymbolNudge = '<span style="position:relative;top:-1px;display:inline-block;">';
-            const ebikeSymbolNudgeClose = '</span>';
+            // SVG icons: render identically on all browsers/OS (avoids macOS emoji font issues)
+            // Lightning bolt for e-bike; acoustic guitar silhouette for manual — both use
+            // fill="currentColor" so they inherit the orange/green/grey from the parent span.
+            const ebikeIcon = `<svg viewBox="0 0 12 20" width="0.65em" height="1em" fill="currentColor" aria-hidden="true" style="display:inline-block;vertical-align:middle;"><polygon points="8,0 1,11 7,11 4,20 11,9 5,9"/></svg>`;
+            const manualBikeIcon = `<svg viewBox="0 0 14 26" width="0.5em" height="0.85em" fill="currentColor" aria-hidden="true" style="display:inline-block;vertical-align:middle;"><rect x="5.5" y="0" width="3" height="9" rx="1.5"/><path fill-rule="evenodd" d="M7,9 C10.5,9 11,11 11,13.5 C11,15 9,15.5 9,16.5 C9,17.5 12,19 12,21 C12,23.5 10,25 7,25 C4,25 2,23.5 2,21 C2,19 5,17.5 5,16.5 C5,15.5 3,15 3,13.5 C3,11 3.5,9 7,9Z M7,18 A1.8,1.8 0 1,0 7,21.6 A1.8,1.8 0 1,0 7,18Z"/></svg>`;
             let bikeBadgeHtml = '';
             const titleManual = 'Manual bike';
             const titleEbike = 'E-bike';
             if (bikeManual && bikeElectric) {
                 const typicalIsElectric = (coach.bikePrimary || 'manual') === 'electric';
-                const leftIcon = typicalIsElectric ? '\u{1F5F2}' : '\u{1F3B8}\uFE0E';
-                const rightIcon = typicalIsElectric ? '\u{1F3B8}\uFE0E' : '\u{1F5F2}';
+                const leftIcon = typicalIsElectric ? ebikeIcon : manualBikeIcon;
+                const rightIcon = typicalIsElectric ? manualBikeIcon : ebikeIcon;
                 const leftIsActive = (currentMode === 'electric') === typicalIsElectric;
                 const leftCircleStyle = leftIsActive ? (activeCircleStyleNoMargin + (typicalIsElectric ? 'color:#e65100;' : 'color:#2e7d32;')) : (circleBaseNoMargin + (typicalIsElectric ? 'color:#e65100;' : 'color:#2e7d32;') + 'opacity:0.8;transform:scale(0.9);');
                 const rightStyle = leftIsActive ? (circleBaseNoMargin + 'color:#9e9e9e;border-color:#9e9e9e;opacity:0.8;transform:scale(0.9);') : (activeCircleStyleNoMargin + (typicalIsElectric ? 'color:#2e7d32;' : 'color:#e65100;'));
-                const leftContent = typicalIsElectric ? (ebikeSymbolNudge + leftIcon + ebikeSymbolNudgeClose) : leftIcon;
-                const rightContent = typicalIsElectric ? rightIcon : (ebikeSymbolNudge + rightIcon + ebikeSymbolNudgeClose);
                 const rideId = ride && ride.id ? ride.id : 'null';
                 const switchTitle = typicalIsElectric ? 'Switch to manual bike' : 'Switch to e-bike';
                 const toggleOnclick = `event.stopPropagation();typeof toggleCoachBikeMode==='function'&&toggleCoachBikeMode(${coach.id},${rideId})`;
@@ -687,11 +688,11 @@
                 const leftOnclick = !leftIsActive ? ` onclick="${toggleOnclick}"` : '';
                 const rightOnclick = leftIsActive ? ` onclick="${toggleOnclick}"` : '';
                 bikeBadgeHtml = `<span class="coach-bike-badges" style="display:inline-flex;align-items:center;gap:0;margin-left:10px;">` +
-                    `<span class="coach-bike-badge" style="${leftStyle}" title="${leftTitle}"${leftOnclick}>${leftContent}</span>` +
-                    `<span class="coach-bike-badge coach-bike-badge-switch" style="${rightStyleClick}" title="${rightTitle}"${rightOnclick}>${rightContent}</span>` +
+                    `<span class="coach-bike-badge" style="${leftStyle}" title="${leftTitle}"${leftOnclick}>${leftIcon}</span>` +
+                    `<span class="coach-bike-badge coach-bike-badge-switch" style="${rightStyleClick}" title="${rightTitle}"${rightOnclick}>${rightIcon}</span>` +
                     `</span>`;
             } else if (bikeElectric) {
-                bikeBadgeHtml = `<span class="coach-bike-badge" style="${activeCircleStyle}color:#e65100;" title="${titleEbike}">${ebikeSymbolNudge}\u{1F5F2}${ebikeSymbolNudgeClose}</span>`;
+                bikeBadgeHtml = `<span class="coach-bike-badge" style="${activeCircleStyle}color:#e65100;" title="${titleEbike}">${ebikeIcon}</span>`;
             }
             // Manual-only coaches: no bike icon (per user request)
 
