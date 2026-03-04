@@ -1,12 +1,15 @@
 # Update Live Site Workflow
 
-Quick reference guide for deploying changes to `teamridepro_v2.html` (and other files) to the live GitHub Pages site.
+Quick reference guide for deploying changes to the live GitHub Pages site.
+
+**Live app:** `teamridepro_v3.html` on **main**. Push to **main** to update. The v3-dev branch is not used for deployment (see `docs/README_V3_BRANCH.md`).
 
 ## Live Site Information
 
 - **Repository**: `previsiondesign/team-ride-pro`
-- **Live Site URL**: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html`
-- **GitHub Pages**: Automatically deploys from `main` branch
+- **Live Site URL**: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v3.html`
+- **Redirect (bookmark-friendly):** `https://previsiondesign.github.io/team-ride-pro/v3/teamridepro_v3.html` → redirects to live URL above
+- **GitHub Pages**: Serves from `main` branch only
 
 ---
 
@@ -14,9 +17,9 @@ Quick reference guide for deploying changes to `teamridepro_v2.html` (and other 
 
 ### Step 1: Make Your Changes
 
-1. Edit `teamridepro_v2.html` (or other files) locally
+1. Edit `teamridepro_v3.html` (or other files) locally
 2. Test changes locally if possible:
-   - Open `teamridepro_v2.html` in a browser
+   - Open `teamridepro_v3.html` in a browser
    - Test functionality in browser console
    - Check for any obvious errors
 
@@ -36,9 +39,9 @@ This shows:
 
 **Option A: Stage specific files (recommended)**
 ```bash
-git add teamridepro_v2.html
+git add teamridepro_v3.html
 # Or add multiple files:
-git add teamridepro_v2.html styles.css scripts/database.js
+git add teamridepro_v3.html styles.css scripts/database.js
 ```
 
 **Option B: Stage all changes**
@@ -82,7 +85,7 @@ This uploads your commits to GitHub. GitHub Pages will automatically detect the 
 
 ### Step 7: Test on Live Site
 
-1. Visit: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html`
+1. Visit: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v3.html`
 2. **Hard refresh** to clear cache:
    - **Windows/Linux**: `Ctrl + Shift + R` or `Ctrl + F5`
    - **Mac**: `Cmd + Shift + R`
@@ -102,7 +105,7 @@ cd "D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\Team Practice
 git status
 
 # Stage changes
-git add teamridepro_v2.html
+git add teamridepro_v3.html
 
 # Commit
 git commit -m "Your descriptive commit message"
@@ -123,7 +126,7 @@ git reset --soft HEAD~1
 
 ### Discard local changes (careful!):
 ```bash
-git restore teamridepro_v2.html
+git restore teamridepro_v3.html
 ```
 
 ---
@@ -150,7 +153,7 @@ If you've changed multiple files:
 
 ```bash
 # Stage specific files
-git add teamridepro_v2.html scripts/database.js sql/NEW_MIGRATION.sql
+git add teamridepro_v3.html scripts/database.js sql/NEW_MIGRATION.sql
 
 # Or stage all changes
 git add .

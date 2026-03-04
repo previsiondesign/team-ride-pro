@@ -79,32 +79,30 @@
             if (_truncateScheduled) return;
             _truncateScheduled = true;
             requestAnimationFrame(() => {
-                _truncateScheduled = false;
                 const elements = document.querySelectorAll('[data-short-name]');
-                if (!elements.length) return;
-                if (!_truncateCanvas) _truncateCanvas = document.createElement('canvas');
-                const ctx = _truncateCanvas.getContext('2d');
-
-                // Phase 1: batch-read all measurements (avoids layout thrashing)
-                const items = [];
+                if (!elements.length) {
+                    _truncateScheduled = false;
+                    return;
+                }
+                const fullByEl = new Map();
                 elements.forEach(el => {
                     const full = el.getAttribute('data-full-name') || '';
                     const short = el.getAttribute('data-short-name') || '';
-                    if (!short || short === full) {
-                        items.push({ el, full, useShort: false });
-                        return;
+                    fullByEl.set(el, { full, short });
+                    if (short && short !== full) {
+                        el.textContent = full;
                     }
-                    const style = getComputedStyle(el);
-                    ctx.font = style.font;
-                    const fullTextWidth = ctx.measureText(full).width;
-                    const pad = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
-                    const available = el.clientWidth - pad;
-                    items.push({ el, full, short, useShort: available > 0 && fullTextWidth > available });
                 });
-
-                // Phase 2: batch-write all text changes
-                items.forEach(({ el, full, short, useShort }) => {
-                    el.textContent = useShort ? short : full;
+                requestAnimationFrame(() => {
+                    _truncateScheduled = false;
+                    fullByEl.forEach(({ full, short }, el) => {
+                        if (!short || short === full) return;
+                        if (el.scrollWidth > el.clientWidth) {
+                            el.textContent = short;
+                        } else {
+                            el.textContent = full;
+                        }
+                    });
                 });
             });
         }

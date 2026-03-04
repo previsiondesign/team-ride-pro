@@ -118,10 +118,23 @@
                 // Try to load from Supabase (works for both authenticated and simplified login users)
                 try {
                     await loadDataFromSupabase();
-                    // In developer mode, snapshot the fresh Supabase data to localStorage
-                    // so local edits persist across the session without writing back to Supabase
+                    // In developer mode, prefer season settings (and other local-only fields) from localStorage
+                    // so settings like useGroupColorNames persist (Supabase writes are no-op in dev mode)
                     if (isDeveloperMode) {
-                        console.log('Developer mode: loaded fresh data from Supabase (read-only). Snapshotting to localStorage.');
+                        try {
+                            const stored = localStorage.getItem(STORAGE_KEY);
+                            if (stored) {
+                                const parsed = JSON.parse(stored);
+                                if (parsed.seasonSettings && typeof parsed.seasonSettings === 'object') {
+                                    data.seasonSettings = { ...data.seasonSettings, ...parsed.seasonSettings };
+                                }
+                                if (parsed.autoAssignSettings) {
+                                    data.autoAssignSettings = parsed.autoAssignSettings;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Developer mode: could not merge localStorage snapshot:', e);
+                        }
                         try {
                             const dataToSave = {
                                 riders: data.riders,
@@ -136,6 +149,7 @@
                                 riderRoles: data.riderRoles || []
                             };
                             localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+                            console.log('Developer mode: data snapshot saved to localStorage (season settings from localStorage preferred).');
                         } catch (e) {
                             console.warn('Developer mode: could not snapshot data to localStorage:', e);
                         }
@@ -161,7 +175,7 @@
             upgradeData();
             
             // Load season settings (needed for settings tab to display correctly on refresh)
-            loadSeasonSettings();
+            if (typeof loadSeasonSettings === 'function') loadSeasonSettings();
 
             // Load per-user UI preferences from cloud (cross-device sync).
             await loadUserUiPreferencesFromCloud();
@@ -650,6 +664,7 @@
                                 coachRoles: Array.isArray(data.coachRoles) ? data.coachRoles : [],
                                 riderRoles: Array.isArray(data.riderRoles) ? data.riderRoles : [],
                                 teamName: data.seasonSettings.teamName || '',
+                                useGroupColorNames: data.seasonSettings.useGroupColorNames === true,
                                 timeEstimationSettings: data.timeEstimationSettings || {
                                     fastSpeedBase: 12.5,
                                     slowSpeedBase: 10,
@@ -919,7 +934,8 @@
                         paceScaleOrder: seasonSettings.paceScaleOrder || 'fastest_to_slowest',
                         groupPaceOrder: seasonSettings.groupPaceOrder || 'fastest_to_slowest',
                         csvFieldMappings: seasonSettings.csvFieldMappings || seasonSettings.csv_field_mappings || {},
-                        teamName: seasonSettings.teamName || ''
+                        teamName: seasonSettings.teamName || '',
+                        useGroupColorNames: seasonSettings.useGroupColorNames === true
                     };
                     if (seasonSettings.lastOpenedRideId !== undefined && seasonSettings.lastOpenedRideId !== null) {
                         data.seasonSettings.lastOpenedRideId = seasonSettings.lastOpenedRideId;
@@ -1015,7 +1031,7 @@
                 updateScaleInputsFromData();
                 
                 // Update season settings UI (including date range button) after data loads
-                loadSeasonSettings();
+                if (typeof loadSeasonSettings === 'function') loadSeasonSettings();
                 
                 // Apply team name from settings to header (Supabase → localStorage → HTML default)
                 {
@@ -1543,10 +1559,10 @@
                     hideSidebars();
                 }
             } else if (tabName === 'settings') {
-                loadSeasonSettings();
+                if (typeof loadSeasonSettings === 'function') loadSeasonSettings();
                 renderSeasonCalendarForSettings();
             } else if (tabName === 'site-settings') {
-                loadSeasonSettings();
+                if (typeof loadSeasonSettings === 'function') loadSeasonSettings();
                 updateRoleDropdowns();
                 loadTeamName();
                 loadWelcomeScreenPreferenceControl();
@@ -3539,18 +3555,9 @@
                     toggleRiderAvailability(riderId, isAvailable);
                 });
                 
-                // Allow clicking rider names to toggle their attendance checkbox
+                // Name click no longer toggles attendance - only the checkbox does
                 ridersContent.addEventListener('click', function handleRiderNameClick(e) {
-                    const nameTarget = e.target.closest('.attendance-name');
-                    if (!nameTarget) return;
-                    
-                    const card = nameTarget.closest('.rider-card');
-                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
-                    if (!checkbox) return;
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                    checkbox.click();
+                    if (e.target.closest('.attendance-name')) return;
                 });
                 
                 // Restore scroll position after re-rendering
@@ -3609,7 +3616,7 @@
                     isAvailable,
                     assignedGroupId,
                     assignedGroupLabel,
-                    fitness: getCoachFitnessValue(coach),
+                    fitness: getCoachFitnessValue(coach, ride),
                     level: (() => {
                         const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                         if (levelRaw === 'N/A' || levelRaw === 'N/a' || levelRaw === 'n/a') return 0;
@@ -3725,6 +3732,7 @@
                     const assignmentLabel = assignedGroupLabel 
                         ? `(Group ${assignedGroupLabel.replace('Group ', '')})` 
                         : (assignedGroupId === null ? '(Unassigned)' : '');
+                    const ride = data.currentRide ? data.rides.find(r => r.id === data.currentRide) : null;
                     return renderCoachCardHtml(coach, null, 'unassigned', {
                         draggable: isAvailable,
                         showAttendance: true,
@@ -3733,7 +3741,8 @@
                         checkboxHandler: null, // Using event delegation instead
                         compact: true,
                         sortBy: coachesSort,
-                        noPhoto: true // Remove headshots from practice attendance list
+                        noPhoto: true, // Remove headshots from practice attendance list
+                        ride
                     });
                 }).join('');
                 
@@ -3804,18 +3813,9 @@
                     toggleCoachAvailability(coachId, isAvailable);
                 });
                 
-                // Allow clicking coach names to toggle their attendance checkbox
+                // Name click no longer toggles attendance - only the checkbox does
                 coachesContent.addEventListener('click', function handleCoachNameClick(e) {
-                    const nameTarget = e.target.closest('.attendance-name');
-                    if (!nameTarget) return;
-                    
-                    const card = nameTarget.closest('.coach-card');
-                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
-                    if (!checkbox) return;
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                    checkbox.click();
+                    if (e.target.closest('.attendance-name')) return;
                 });
                 
                 // Restore scroll position after re-rendering
@@ -4010,6 +4010,21 @@
             
             saveRideToDB(ride);
             renderAssignments(ride);
+        }
+
+        function toggleCoachBikeMode(coachId, rideId) {
+            const rid = rideId != null ? (typeof rideId === 'number' ? rideId : parseInt(rideId, 10)) : data.currentRide;
+            const ride = rid != null ? data.rides.find(r => r.id === rid) : null;
+            if (!ride) return;
+            const coach = typeof getCoachById === 'function' ? getCoachById(coachId) : null;
+            if (!coach) return;
+            const cur = typeof getCurrentCoachBikeMode === 'function' ? getCurrentCoachBikeMode(coach, ride) : 'manual';
+            const next = cur === 'electric' ? 'manual' : 'electric';
+            if (!ride.coachBikeMode || typeof ride.coachBikeMode !== 'object') ride.coachBikeMode = {};
+            ride.coachBikeMode[coachId] = next;
+            saveRideToDB(ride);
+            renderAssignments(ride);
+            if (typeof renderSidebarContent === 'function') renderSidebarContent();
         }
         
         function changePracticeRidersSort(sortBy) {
@@ -4375,7 +4390,7 @@
             }
         }
 
-        /** Returns array of { value, label, disabled } for custom route dropdown (same order/logic as renderRouteOptions). */
+        /** Returns array of { value, label, disabled, html? } for custom route dropdown. Route options use html: [Route Name, bold] | [Distance] | ◢ [Elevation]. */
         function getRouteOptionList(selectedRouteId, group, ride) {
             const routes = data.routes || [];
             const list = [];
@@ -4384,19 +4399,15 @@
                 return list;
             }
 
-            function routeOptionLabel(route, suffix) {
-                const dist = route.distance ? escapeHtml(route.distance) : '';
-                const elev = route.elevation ? escapeHtml(route.elevation) : '';
-                const name = toBoldUnicode(escapeHtml(route.name || 'Unnamed Route'));
-                let prefix = '';
-                if (dist && elev) prefix = `${dist}/${elev} – `;
-                else if (dist) prefix = `${dist} – `;
-                else if (elev) prefix = `${elev} – `;
-                return prefix + name + (suffix || '');
+            function routeOptionHtml(route, nameSuffix) {
+                const name = escapeHtml(route.name || 'Unnamed Route') + (nameSuffix || '');
+                const dist = route.distance ? escapeHtml(route.distance) : '–';
+                const elev = route.elevation ? escapeHtml(route.elevation) : '–';
+                return { value: String(route.id), html: `<strong>${name}</strong><br>${dist} | ◢ ${elev}`, disabled: false };
             }
 
             if (!group || !ride) {
-                routes.forEach(route => { list.push({ value: String(route.id), label: routeOptionLabel(route, ''), disabled: false }); });
+                routes.forEach(route => { list.push(routeOptionHtml(route, '')); });
                 list.push({ value: 'leader-choice', label: "Ride Leader's Choice", disabled: false });
                 return list;
             }
@@ -4422,11 +4433,11 @@
                 localRoutes = routes.slice();
             }
 
-            localRoutes.forEach(route => { list.push({ value: String(route.id), label: routeOptionLabel(route, ''), disabled: false }); });
+            localRoutes.forEach(route => { list.push(routeOptionHtml(route, '')); });
             if (otherLocationRoutes.length > 0) {
                 list.push({ value: '', label: '── Other Locations ──', disabled: true });
                 otherLocationRoutes.forEach(route => {
-                    list.push({ value: String(route.id), label: routeOptionLabel(route, ` [${escapeHtml(route.startLocation || '')}]`), disabled: false });
+                    list.push(routeOptionHtml(route, ` [${escapeHtml(route.startLocation || '')}]`));
                 });
             }
             list.push({ value: 'leader-choice', label: "Ride Leader's Choice", disabled: false });
@@ -4765,7 +4776,7 @@
             });
         }
 
-        function addGroup() {
+        async function addGroup() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
@@ -4782,6 +4793,7 @@
             }
             const group = createGroup(`Group ${nextNumber}`);
             ride.groups.push(group);
+            if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
             // Save immediately to localStorage
             saveRideToDB(ride);
             renderAssignments(ride);
@@ -5159,7 +5171,8 @@
             menuHtml += `<div class="group-menu-item" onclick="redoAssignmentChange(); closePracticeMenu();">Redo</div>`;
             menuHtml += `<div class="group-menu-separator"></div>`;
             menuHtml += `<div class="group-menu-item" onclick="addGroup(); closePracticeMenu();">Add Group</div>`;
-            menuHtml += `<div class="group-menu-item" onclick="toggleGroupColorNames(); closePracticeMenu();">Color Names</div>`;
+            const useColorNames = !!(data.seasonSettings && data.seasonSettings.useGroupColorNames);
+            menuHtml += `<div class="group-menu-item" onclick="toggleGroupColorNames(); closePracticeMenu();">Color Names${useColorNames ? ' ✓' : ''}</div>`;
             menuHtml += `<div class="group-menu-separator"></div>`;
             menuHtml += `<div class="group-menu-item" onclick="unassignAllRiders(); closePracticeMenu();">Unassign All Riders</div>`;
             menuHtml += `<div class="group-menu-item" onclick="unassignAllCoaches(); closePracticeMenu();">Unassign All Coaches</div>`;

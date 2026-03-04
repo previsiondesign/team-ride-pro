@@ -947,7 +947,7 @@
             return (ride.meetLocation || (getPracticeForRide(ride) && getPracticeForRide(ride).meetLocation) || '').trim();
         }
 
-        function executeCopyFromPrior() {
+        async function executeCopyFromPrior() {
             if (!_selectedPriorRideId) {
                 alert('Please select a practice to copy from first.');
                 return;
@@ -1009,6 +1009,7 @@
 
             ride.groups = sourceRide.groups.map(srcGroup => {
                 const newGroup = createGroup(srcGroup.label);
+                if (srcGroup.colorName) newGroup.colorName = srcGroup.colorName;
                 newGroup.riders = (srcGroup.riders || [])
                     .map(id => norm(id))
                     .filter(id => currentAvailableRiders.has(id) && !isRiderAbsent(id));
@@ -1029,6 +1030,7 @@
             });
 
             ride.planningStarted = true;
+            if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
             saveRideToDB(ride);
 
             // Warn about unassigned attending riders/coaches (exclude scheduled-absent)
@@ -5232,7 +5234,7 @@
                 debugLines.push('Eligible Available Coaches Details:');
                 availableCoaches.forEach((coach, idx) => {
                     const level = coach.coachingLicenseLevel || coach.level || 'N/A';
-                    const fitness = getCoachFitnessValue(coach);
+                    const fitness = getCoachFitnessValue(coach, ride);
                     debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}, ID: ${coach.id}`);
                 });
                 debugLines.push('');
@@ -5714,6 +5716,7 @@
                     const group = createGroup(`Group ${i + 1}`);
                     ride.groups.push(group);
                 }
+                if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
 
                 // Fill each group sequentially using the riderDistribution calculated earlier
                 // Group 1 gets first N riders, Group 2 gets next N, etc.
@@ -5905,14 +5908,14 @@
                 // Step 4A: Rank L2/3 coaches by fitness
                 debugLines.push('Step 4A: Ranking L2/3 coaches by fitness:');
                 const sortedLeaders = coachesForAssignment.length > 0 ? [...eligibleLeaders].sort((a, b) => {
-                    const aFitness = getCoachFitnessValue(a);
-                    const bFitness = getCoachFitnessValue(b);
+                    const aFitness = getCoachFitnessValue(a, ride);
+                    const bFitness = getCoachFitnessValue(b, ride);
                     return bFitness - aFitness; // Highest fitness first
                 }) : [];
 
                 if (sortedLeaders.length > 0) {
                     sortedLeaders.forEach((coach, idx) => {
-                        const fitness = getCoachFitnessValue(coach);
+                        const fitness = getCoachFitnessValue(coach, ride);
                         const level = coach.coachingLicenseLevel || coach.level || '1';
                         debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}`);
                     });
@@ -5952,14 +5955,14 @@
                             return !groupInfo.some(info => info.group.coaches.leader === coach.id);
                         })
                         .sort((a, b) => {
-                            const aFitness = getCoachFitnessValue(a);
-                            const bFitness = getCoachFitnessValue(b);
+                            const aFitness = getCoachFitnessValue(a, ride);
+                            const bFitness = getCoachFitnessValue(b, ride);
                             return bFitness - aFitness; // Highest fitness first
                         }) : [];
 
                     if (remainingCoaches.length > 0) {
                         remainingCoaches.forEach((coach, idx) => {
-                            const fitness = getCoachFitnessValue(coach);
+                            const fitness = getCoachFitnessValue(coach, ride);
                             const level = coach.coachingLicenseLevel || coach.level || '1';
                             debugLines.push(`  ${idx + 1}. ${coach.name || 'Coach'} - Level ${level}, End ${fitness}`);
                         });
@@ -6175,7 +6178,7 @@
             }
         }
 
-        function copyGroupsFromPriorPractice(sourceRideId) {
+        async function copyGroupsFromPriorPractice(sourceRideId) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             // Convert sourceRideId to number if it's a string (from onclick attribute)
             const sourceId = typeof sourceRideId === 'string' ? parseInt(sourceRideId, 10) : sourceRideId;
@@ -6228,7 +6231,7 @@
             // Copy groups from source practice (use normalized IDs so assignment/unassigned logic matches)
             ride.groups = sourceRide.groups.map(sourceGroup => {
                 const newGroup = createGroup(sourceGroup.label);
-                
+                if (sourceGroup.colorName) newGroup.colorName = sourceGroup.colorName;
                 // Copy riders (only those available in current practice and not scheduled absent); store normalized ids
                 newGroup.riders = (sourceGroup.riders || [])
                     .map(riderId => norm(riderId))
@@ -6337,6 +6340,7 @@
             ride.availableRiders = Array.from(currentAvailableRiders);
             ride.availableCoaches = Array.from(currentAvailableCoaches);
 
+            if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
             // Save and render
             saveRideToDB(ride);
             renderAssignments(ride);
@@ -6410,12 +6414,12 @@
             const leaders = coachObjs.filter(c => {
                 const level = parseInt(c.coachingLicenseLevel || c.level || '1', 10);
                 return Number.isFinite(level) && level >= minLeaderLevel;
-            }).sort((a, b) => getCoachFitnessValue(b) - getCoachFitnessValue(a));
+            }).sort((a, b) => getCoachFitnessValue(b, ride) - getCoachFitnessValue(a, ride));
 
             const nonLeaders = coachObjs.filter(c => {
                 const level = parseInt(c.coachingLicenseLevel || c.level || '1', 10);
                 return !(Number.isFinite(level) && level >= minLeaderLevel);
-            }).sort((a, b) => getCoachFitnessValue(b) - getCoachFitnessValue(a));
+            }).sort((a, b) => getCoachFitnessValue(b, ride) - getCoachFitnessValue(a, ride));
 
             leaders.forEach((coach, i) => {
                 if (i < ride.groups.length) {
@@ -6436,7 +6440,7 @@
 
         // ---- More / Fewer Groups ----
 
-        function tryMoreGroups() {
+        async function tryMoreGroups() {
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride || !ride.groups || ride.groups.length === 0) return;
 
@@ -6489,6 +6493,7 @@
             redistributeCoachesAfterResize(ride);
             ride.groups.forEach((g, i) => g.label = `Group ${i + 1}`);
 
+            if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
             saveRideToDB(ride);
             renderAssignments(ride);
         }
@@ -6674,8 +6679,29 @@
             renderAssignments(ride);
         }
 
+        function useGroupColorNamesEnabled() {
+            return !!(data.seasonSettings && data.seasonSettings.useGroupColorNames);
+        }
+
         function rideUsesGroupColorNames(ride) {
             return ride && Array.isArray(ride.groups) && ride.groups.length > 0 && ride.groups.every(g => g.colorName);
+        }
+
+        /** Ensure every group on the ride has a colorName when setting is on; preserve existing, assign only to groups missing one. */
+        async function ensureGroupColorNames(ride) {
+            if (!ride || !Array.isArray(ride.groups) || ride.groups.length === 0 || !useGroupColorNamesEnabled()) return;
+            const names = typeof getColorNames === 'function' ? await getColorNames() : [];
+            const colorNames = (names.length > 0 ? names.map(n => n.name) : []).filter(Boolean);
+            if (colorNames.length === 0) return;
+            const used = new Set((ride.groups || []).map(g => g.colorName).filter(Boolean));
+            const available = colorNames.filter(n => !used.has(n));
+            let ai = 0;
+            ride.groups.forEach(g => {
+                if (g.colorName) return;
+                if (ai < available.length) {
+                    g.colorName = available[ai++];
+                }
+            });
         }
 
         function getSortedGroupsForPrintOrPublish(ride) {
@@ -6688,6 +6714,7 @@
             });
         }
 
+        /** Group title for print/export/roster: color name only when setting is on; no (N) — (N) is planner-only. */
         function getGroupDisplayTitleForPrint(group, index, useColorNames) {
             if (useColorNames && group.colorName) return `${group.colorName} Group`;
             const baseLabel = group.label || `Group ${index + 1}`;
@@ -6711,32 +6738,38 @@
         }
 
         async function toggleGroupColorNames() {
+            if (!data.seasonSettings) data.seasonSettings = typeof buildDefaultSeasonSettings === 'function' ? buildDefaultSeasonSettings() : {};
+            const wasOn = !!(data.seasonSettings.useGroupColorNames);
+            data.seasonSettings.useGroupColorNames = !wasOn;
+
             const ride = data.rides.find(r => r.id === data.currentRide);
-            if (!ride || !Array.isArray(ride.groups) || ride.groups.length === 0) {
-                alert('Please add at least one group first.');
-                return;
-            }
-            if (rideUsesGroupColorNames(ride)) {
-                ride.groups.forEach(g => { delete g.colorName; });
-            } else {
-                const names = typeof getColorNames === 'function' ? await getColorNames() : [];
-                const colorNames = (names.length > 0 ? names.map(n => n.name) : []).filter(Boolean);
-                if (colorNames.length < ride.groups.length) {
-                    alert('Not enough color names in the list. Add more in Supabase (color_names table) or use fewer groups.');
-                    return;
+            if (ride && Array.isArray(ride.groups) && ride.groups.length > 0) {
+                if (wasOn) {
+                    ride.groups.forEach(g => { delete g.colorName; });
+                } else {
+                    await ensureGroupColorNames(ride);
+                    const missing = (ride.groups || []).filter(g => !g.colorName).length;
+                    if (missing > 0) {
+                        alert('Not enough color names in the list. Add more in Supabase (color_names table) or use fewer groups.');
+                        data.seasonSettings.useGroupColorNames = false;
+                        if (typeof saveDataToSupabase === 'function') { try { await saveDataToSupabase(); } catch (e) { console.warn(e); } }
+                    }
                 }
-                const shuffled = colorNames.slice().sort(() => Math.random() - 0.5);
-                ride.groups.forEach((g, i) => { g.colorName = shuffled[i]; });
+                await saveRideToDB(ride);
+                renderAssignments(ride);
             }
-            await saveRideToDB(ride);
-            renderAssignments(ride);
+
+            if (typeof saveDataToSupabase === 'function') {
+                try { await saveDataToSupabase(); } catch (e) { console.warn('Could not persist color-names setting', e); }
+            }
             updateGroupColorNamesButton(ride);
         }
 
         function updateGroupColorNamesButton(ride) {
             const btn = document.getElementById('group-color-names-btn');
             if (!btn) return;
-            btn.textContent = rideUsesGroupColorNames(ride) ? 'Remove Color Names' : 'Color Names!';
+            // Single control is the practice menu "Color Names" toggle; hide standalone button
+            btn.style.display = 'none';
         }
 
         function clearAssignments() {
@@ -7303,9 +7336,9 @@
                 }
 
                 // Generate both PDFs (mobile + desktop) with staggered saves
-                // to avoid browser multi-download permission prompts
+                // to avoid browser "download multiple files" permission prompts
                 generateMobileFriendlyPDF(ride);
-                setTimeout(() => { generateDesktopPrintFriendlyPDF(ride); }, 800);
+                setTimeout(() => { generateDesktopPrintFriendlyPDF(ride); }, 2200);
                 
             } catch (error) {
                 console.error('Error generating exports:', error);
@@ -7342,7 +7375,7 @@
                 }
 
                 // Sort groups (alphabetically by color name when using color names, else by number)
-                const useColorNamesForExport = rideUsesGroupColorNames(ride);
+                const useColorNamesForExport = typeof useGroupColorNamesEnabled === 'function' && useGroupColorNamesEnabled();
                 const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 // Generate groups HTML with collapsible functionality matching the tab
@@ -7609,7 +7642,7 @@
                 const margin = 8;
                 const maxWidth = mobileWidth - (margin * 2);
 
-                const useColorNamesMobile = rideUsesGroupColorNames(ride);
+                const useColorNamesMobile = typeof useGroupColorNamesEnabled === 'function' && useGroupColorNamesEnabled();
                 const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 // --- Precise height measurement pass ---
@@ -7928,7 +7961,7 @@
                 const margin = 10;
                 const maxWidth = pageWidth - (margin * 2);
 
-                const useColorNamesDesktop = rideUsesGroupColorNames(ride);
+                const useColorNamesDesktop = typeof useGroupColorNamesEnabled === 'function' && useGroupColorNamesEnabled();
                 const sortedGroups = getSortedGroupsForPrintOrPublish(ride);
 
                 const numColumns = 3;
@@ -8499,7 +8532,7 @@
                 .filter(coach => !coachAssignmentMap[coach.id])
                 .map(coach => {
                 const isAvailable = ride.availableCoaches.includes(coach.id);
-                const fitness = getCoachFitnessValue(coach);
+                const fitness = getCoachFitnessValue(coach, ride);
                 const level = parseInt(coach.level || '1', 10);
                 return {
                     coach,
@@ -8549,7 +8582,8 @@
                     checkboxHandler: `toggleCoachAvailability(${coach.id}, event.target.checked)`,
                     compact: true,
                     sortBy: unassignedCoachesSort,
-                    noPhoto: true
+                    noPhoto: true,
+                    ride
                 }))
                 .join('');
 
@@ -8732,7 +8766,7 @@
                 return `
                     <div class="coach-group" data-group-id="${group.id}" style="border: ${groupBorderWidth} solid ${groupBorderColor}; border-radius: 8px; background: #b8b8b8; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 0; margin: 0; overflow: hidden; display: flex; flex-direction: column;">
                         <div class="coach-group-header" style="background-color: ${headerColor}; color: white; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; border: none !important;">
-                            <span style="font-weight: 600; font-size: 16px; color: white;">${group.label}${group.customName ? ` (${escapeHtml(group.customName)})` : ''}${group.colorName && !group.customName ? ` (${group.colorName})` : ''}${!isCompliant ? ' <span class="group-warning-icon" onclick="showGroupWarningPopup(event, ' + group.id + ')" title="Click to see warnings" style="opacity: 0.8;">⚠</span>' : ''}</span>
+                            <span style="font-weight: 600; font-size: 16px; color: white;">${(function(){ const useColor = typeof useGroupColorNamesEnabled === 'function' && useGroupColorNamesEnabled() && group.colorName && !group.customName; const num = parseInt((group.label || '').replace(/\D/g, ''), 10); return useColor ? (group.colorName + ' Group' + (Number.isFinite(num) ? ' (' + num + ')' : '')) : (group.label + (group.customName ? ' (' + escapeHtml(group.customName) + ')' : '')); })()}${!isCompliant ? ' <span class="group-warning-icon" onclick="showGroupWarningPopup(event, ' + group.id + ')" title="Click to see warnings" style="opacity: 0.8;">⚠</span>' : ''}</span>
                             <div style="display: flex; align-items: center; gap: 8px; position: relative;">
                                 <button class="group-menu-btn" onclick="showGroupMenu(event, ${group.id})" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 16px; font-weight: 700; line-height: 1;" title="Group options">⋯</button>
                             </div>
@@ -8774,14 +8808,14 @@
                         
                         <!-- Route Section: single custom dropdown (no redundant select) -->
                         <div class="route-selector-wrap" style="margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0; position: relative;">
-                            <div class="route-selector-trigger" onclick="toggleRouteDropdown(event, this)" role="button" tabindex="0" style="cursor: pointer; padding: 4px 8px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; font-weight: 600; font-size: 13px; color: #333;">
+                            <div class="route-selector-trigger" onclick="toggleRouteDropdown(event, this)" role="button" tabindex="0" style="cursor: pointer; padding: 4px 8px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; font-weight: 600; font-size: 15px; color: #333;">
                                 <span class="route-selector-label">Route: ${escapeHtml(routeName || (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : '-- Select Route --'))}</span>
                                 <span class="route-selector-arrow" style="font-size: 12px; color: #666;">▼</span>
                             </div>
                             <div class="route-dropdown-panel" style="display: none; position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 2px; background: #fff; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 280px; overflow-y: auto; z-index: 100;">
                                 ${(typeof getRouteOptionList === 'function' ? getRouteOptionList(group.routeId, group, ride) : []).map(item => item.disabled
                                     ? `<div class="route-dropdown-option route-dropdown-sep">${escapeHtml(item.label)}</div>`
-                                    : `<div class="route-dropdown-option" data-value="${escapeHtml(String(item.value))}" data-group-id="${group.id}" data-ride-id="${ride.id}" onclick="chooseRouteOption(event)">${escapeHtml(item.label)}</div>`
+                                    : `<div class="route-dropdown-option" data-value="${escapeHtml(String(item.value))}" data-group-id="${group.id}" data-ride-id="${ride.id}" onclick="chooseRouteOption(event)">${item.html != null ? item.html : escapeHtml(item.label)}</div>`
                                 ).join('')}
                             </div>
                         </div>
@@ -8997,16 +9031,7 @@
                 }
                 
                 const attendanceNameHandler = function handleAssignmentNameClick(e) {
-                    const nameTarget = e.target.closest('.attendance-name');
-                    if (!nameTarget) return;
-                    
-                    const card = nameTarget.closest('.rider-card, .coach-card');
-                    const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
-                    if (!checkbox) return;
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                    checkbox.click();
+                    if (e.target.closest('.attendance-name')) return;
                 };
                 
                 assignmentsContainer._attendanceNameHandler = attendanceNameHandler;

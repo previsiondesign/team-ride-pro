@@ -276,6 +276,7 @@
                 });
             }
 
+            const currentRide = data.currentRide ? (data.rides || []).find(r => r.id === data.currentRide) : null;
             let htmlContent = header;
             let isFirstNonRoleCoach = true;
             let hasRoleCoaches = sortedCoachesWithRoles.length > 0;
@@ -354,22 +355,30 @@
                                 return `<div class="roster-cell" data-label="Bike">
                                     ${escapeHtml(bikeLabel)}
                                 </div>`;
-                            case 'pace':
-                                return `<div class="roster-cell" data-label="Endurance Rating">
-                                    ${buildPaceControlsHtml('coach', coach.id, 'pace', fitnessValue, fitnessScale)}
-                                </div>`;
+                            case 'pace': {
+                                const coachInEbike = currentRide && typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, currentRide) === 'electric';
+                                const displayPace = coachInEbike && typeof getEffectiveCoachFitness === 'function' ? getEffectiveCoachFitness(coach, currentRide) : (coachInEbike ? fitnessScale : fitnessValue);
+                                const paceCell = coachInEbike
+                                    ? `<span class="pace-value" title="e-Bike (fastest)">${displayPace}</span>`
+                                    : buildPaceControlsHtml('coach', coach.id, 'pace', fitnessValue, fitnessScale);
+                                return `<div class="roster-cell" data-label="Endurance Rating">${paceCell}</div>`;
+                            }
                             case 'skills':
                                 const coachSkillsScale = getSkillsScale();
                                 const coachSkillsValue = Math.max(1, Math.min(coachSkillsScale, parseInt(coach.skills || Math.ceil(coachSkillsScale / 2), 10)));
                                 return `<div class="roster-cell" data-label="Descending Rating">
                                     ${buildPaceControlsHtml('coach', coach.id, 'skills', coachSkillsValue, coachSkillsScale)}
                                 </div>`;
-                            case 'climbing':
+                            case 'climbing': {
                                 const coachClimbingScale = getClimbingScale();
                                 const coachClimbingValue = Math.max(1, Math.min(coachClimbingScale, parseInt(coach.climbing || '3', 10)));
-                                return `<div class="roster-cell" data-label="Climbing Rating">
-                                    ${buildPaceControlsHtml('coach', coach.id, 'climbing', coachClimbingValue, coachClimbingScale)}
-                                </div>`;
+                                const coachInEbikeClimb = currentRide && typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, currentRide) === 'electric';
+                                const displayClimbing = coachInEbikeClimb && typeof getEffectiveCoachClimbing === 'function' ? getEffectiveCoachClimbing(coach, currentRide) : (coachInEbikeClimb ? coachClimbingScale : coachClimbingValue);
+                                const climbingCell = coachInEbikeClimb
+                                    ? `<span class="pace-value" title="e-Bike (fastest)">${displayClimbing}</span>`
+                                    : buildPaceControlsHtml('coach', coach.id, 'climbing', coachClimbingValue, coachClimbingScale);
+                                return `<div class="roster-cell" data-label="Climbing Rating">${climbingCell}</div>`;
+                            }
                             case 'notes':
                                 return `<div class="roster-cell" data-label="Notes">
                                     ${notesIcon}

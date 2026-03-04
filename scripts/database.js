@@ -511,6 +511,9 @@ function buildRideDbData(rideData) {
         rideData.groups.forEach(g => { if (g && g.id && g.colorName) colorMap[g.id] = g.colorName; });
         if (Object.keys(colorMap).length > 0) extra._groupColorNames = colorMap;
     }
+    if (rideData.coachBikeMode != null && typeof rideData.coachBikeMode === 'object') {
+        extra.coachBikeMode = rideData.coachBikeMode;
+    }
     if (Object.keys(extra).length > 0) dbData.settings = extra;
 
     return dbData;

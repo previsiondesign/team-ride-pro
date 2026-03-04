@@ -776,7 +776,7 @@
                     absenceRecord: absenceStatus.absence || null,
                     fitness: type === 'riders'
                         ? Math.max(1, Math.min(fitnessScale, parseInt(item.fitness || Math.ceil(fitnessScale / 2), 10)))
-                        : getCoachFitnessValue(item),
+                        : getCoachFitnessValue(item, ride),
                     skills: type === 'riders'
                         ? Math.max(1, Math.min(skillsScale, parseInt(item.skills || Math.ceil(skillsScale / 2), 10)))
                         : 0,
@@ -903,7 +903,8 @@
                             absenceReasonText: entry.absenceReason || '',
                             absenceRecord: entry.absenceRecord || null,
                             visibleSkills: sidebarVisibleSkills,
-                            sidebarCard: true
+                            sidebarCard: true,
+                            ride
                         });
                     }
                     return prefix + cardHtml;
@@ -1082,16 +1083,9 @@
                 }, 0);
             });
 
-            // Name click to toggle checkbox
+            // Name click no longer toggles attendance - only the checkbox does
             newList.addEventListener('click', function(e) {
-                const nameTarget = e.target.closest('.attendance-name');
-                if (!nameTarget) return;
-                const card = nameTarget.closest('.rider-card, .coach-card');
-                const checkbox = card ? card.querySelector('.attendance-checkbox-input') : null;
-                if (!checkbox) return;
-                e.preventDefault();
-                e.stopPropagation();
-                checkbox.click();
+                if (e.target.closest('.attendance-name')) return;
             });
         }
 

@@ -380,7 +380,8 @@
                 skillsScale: 6,
                 climbingScale: 6,
                 paceScaleOrder: 'fastest_to_slowest',
-                groupPaceOrder: 'fastest_to_slowest'
+                groupPaceOrder: 'fastest_to_slowest',
+                useGroupColorNames: false
             };
         }
         
