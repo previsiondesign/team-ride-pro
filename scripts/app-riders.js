@@ -2443,7 +2443,7 @@
                 });
             }
 
-            let htmlContent = header;
+            let htmlContent = '';
             groupedRiders.forEach(item => {
                 if (item.type === 'header') {
                     // Convert gender values to display labels
@@ -2554,7 +2554,7 @@
                                 </div>`;
                             case 'actions':
                                 return `<div class="roster-actions">
-                                    <button class="btn-small" onclick="openEditRiderModal(${rider.id})">View/Edit Full Record</button>
+                                    <button class="btn-small" onclick="openEditRiderModal(${rider.id})">Full Record…</button>
                                 </div>`;
                             default:
                                 const additionalVal = rider[key] || '';
@@ -2606,7 +2606,7 @@
                                 </div>`;
                             case 'actions':
                                 return `<div class="roster-actions">
-                                    <button class="btn-small" onclick="openEditRiderModal(${rider.id})">View/Edit Full Record</button>
+                                    <button class="btn-small" onclick="openEditRiderModal(${rider.id})">Full Record…</button>
                                 </div>`;
                             default:
                                 const additionalVal = rider[key] || '';
@@ -2630,7 +2630,45 @@
 
             list.innerHTML = htmlContent;
 
-            requestAnimationFrame(() => { if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap(); });
+            // Place the column header into the separate sticky container
+            const ridersHeaderContainer = document.getElementById('riders-header-container');
+            if (ridersHeaderContainer) {
+                ridersHeaderContainer.innerHTML = header;
+            }
+
+            // Sync horizontal scroll: list ↔ header-container ↔ proxy scrollbar
+            const ridersProxy = document.getElementById('riders-scrollbar-proxy');
+            const ridersProxyInner = document.getElementById('riders-scrollbar-inner');
+            let ridersSyncingScroll = false;
+
+            const syncRidersFromList = () => {
+                if (ridersSyncingScroll) return;
+                ridersSyncingScroll = true;
+                if (ridersHeaderContainer) ridersHeaderContainer.scrollLeft = list.scrollLeft;
+                if (ridersProxy) ridersProxy.scrollLeft = list.scrollLeft;
+                ridersSyncingScroll = false;
+            };
+            const syncRidersFromProxy = () => {
+                if (ridersSyncingScroll) return;
+                ridersSyncingScroll = true;
+                list.scrollLeft = ridersProxy.scrollLeft;
+                if (ridersHeaderContainer) ridersHeaderContainer.scrollLeft = ridersProxy.scrollLeft;
+                ridersSyncingScroll = false;
+            };
+
+            if (list._rosterScrollHandler) list.removeEventListener('scroll', list._rosterScrollHandler);
+            if (ridersProxy && ridersProxy._rosterScrollHandler) ridersProxy.removeEventListener('scroll', ridersProxy._rosterScrollHandler);
+            list._rosterScrollHandler = syncRidersFromList;
+            list.addEventListener('scroll', syncRidersFromList);
+            if (ridersProxy) {
+                ridersProxy._rosterScrollHandler = syncRidersFromProxy;
+                ridersProxy.addEventListener('scroll', syncRidersFromProxy);
+            }
+
+            requestAnimationFrame(() => {
+                if (ridersProxyInner) ridersProxyInner.style.width = list.scrollWidth + 'px';
+                if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap();
+            });
 
             // Update CSV button label based on roster state
             const csvBtn = document.getElementById('btn-csv-riders');

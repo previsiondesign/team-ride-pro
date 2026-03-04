@@ -300,22 +300,30 @@
                 
                 <!-- RIDERS VIEW -->
                 <div id="roster-riders-view">
+                    <div id="riders-header-container" class="roster-header-container"></div>
                     <div id="riders-list" class="roster-grid"></div>
-                    <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                        <button class="btn-small" onclick="openAddRiderModal()">Add Team Rider</button>
-                        <button id="btn-csv-riders" class="btn-small secondary" onclick="importRidersFromCSV()">Import Riders from CSV</button>
-                    </div>
                     <div id="rider-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
+                    <div class="roster-bottom-bar" id="riders-bottom-bar">
+                        <div class="roster-scrollbar-proxy" id="riders-scrollbar-proxy"><div id="riders-scrollbar-inner" class="roster-scrollbar-inner"></div></div>
+                        <div class="roster-bottom-buttons">
+                            <button class="btn-small" onclick="openAddRiderModal()">Add Team Rider</button>
+                            <button id="btn-csv-riders" class="btn-small secondary" onclick="importRidersFromCSV()">Import Riders from CSV</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- COACHES VIEW -->
                 <div id="roster-coaches-view" style="display: none;">
+                    <div id="coaches-header-container" class="roster-header-container"></div>
                     <div id="coaches-list" class="roster-grid"></div>
-                    <div style="margin-top: 16px; text-align: center; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                        <button class="btn-small" onclick="openAddCoachModal()">Add Coach</button>
-                        <button id="btn-csv-coaches" class="btn-small secondary" onclick="importCoachesFromCSV()">Import Coaches from CSV</button>
-                    </div>
                     <div id="coach-update-debug" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; display: none; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;"></div>
+                    <div class="roster-bottom-bar" id="coaches-bottom-bar">
+                        <div class="roster-scrollbar-proxy" id="coaches-scrollbar-proxy"><div id="coaches-scrollbar-inner" class="roster-scrollbar-inner"></div></div>
+                        <div class="roster-bottom-buttons">
+                            <button class="btn-small" onclick="openAddCoachModal()">Add Coach</button>
+                            <button id="btn-csv-coaches" class="btn-small secondary" onclick="importCoachesFromCSV()">Import Coaches from CSV</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -277,7 +277,7 @@
             }
 
             const currentRide = data.currentRide ? (data.rides || []).find(r => r.id === data.currentRide) : null;
-            let htmlContent = header;
+            let htmlContent = '';
             let isFirstNonRoleCoach = true;
             let hasRoleCoaches = sortedCoachesWithRoles.length > 0;
             let lastItemWasRoleCoach = false;
@@ -411,7 +411,7 @@
                                 </div>`;
                             case 'actions':
                                 return `<div class="roster-actions">
-                                    <button class="btn-small" onclick="openEditCoachModal(${coach.id})">View/Edit Full Record</button>
+                                    <button class="btn-small" onclick="openEditCoachModal(${coach.id})">Full Record…</button>
                                 </div>`;
                             default:
                                 const additionalVal = coach[key] || '';
@@ -460,7 +460,7 @@
                                 </div>`;
                             case 'actions':
                                 return `<div class="roster-actions">
-                                    <button class="btn-small" onclick="openEditCoachModal(${coach.id})">View/Edit Full Record</button>
+                                    <button class="btn-small" onclick="openEditCoachModal(${coach.id})">Full Record…</button>
                                 </div>`;
                             default:
                                 const additionalVal = coach[key] || '';
@@ -484,7 +484,45 @@
 
             list.innerHTML = htmlContent;
 
-            requestAnimationFrame(() => { if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap(); });
+            // Place the column header into the separate sticky container
+            const coachesHeaderContainer = document.getElementById('coaches-header-container');
+            if (coachesHeaderContainer) {
+                coachesHeaderContainer.innerHTML = header;
+            }
+
+            // Sync horizontal scroll: list ↔ header-container ↔ proxy scrollbar
+            const coachesProxy = document.getElementById('coaches-scrollbar-proxy');
+            const coachesProxyInner = document.getElementById('coaches-scrollbar-inner');
+            let coachesSyncingScroll = false;
+
+            const syncCoachesFromList = () => {
+                if (coachesSyncingScroll) return;
+                coachesSyncingScroll = true;
+                if (coachesHeaderContainer) coachesHeaderContainer.scrollLeft = list.scrollLeft;
+                if (coachesProxy) coachesProxy.scrollLeft = list.scrollLeft;
+                coachesSyncingScroll = false;
+            };
+            const syncCoachesFromProxy = () => {
+                if (coachesSyncingScroll) return;
+                coachesSyncingScroll = true;
+                list.scrollLeft = coachesProxy.scrollLeft;
+                if (coachesHeaderContainer) coachesHeaderContainer.scrollLeft = coachesProxy.scrollLeft;
+                coachesSyncingScroll = false;
+            };
+
+            if (list._rosterScrollHandler) list.removeEventListener('scroll', list._rosterScrollHandler);
+            if (coachesProxy && coachesProxy._rosterScrollHandler) coachesProxy.removeEventListener('scroll', coachesProxy._rosterScrollHandler);
+            list._rosterScrollHandler = syncCoachesFromList;
+            list.addEventListener('scroll', syncCoachesFromList);
+            if (coachesProxy) {
+                coachesProxy._rosterScrollHandler = syncCoachesFromProxy;
+                coachesProxy.addEventListener('scroll', syncCoachesFromProxy);
+            }
+
+            requestAnimationFrame(() => {
+                if (coachesProxyInner) coachesProxyInner.style.width = list.scrollWidth + 'px';
+                if (typeof syncSkillHeaderWrap === 'function') syncSkillHeaderWrap();
+            });
 
             // Update CSV button label based on roster state
             const csvBtn = document.getElementById('btn-csv-coaches');

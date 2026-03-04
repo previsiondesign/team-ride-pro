@@ -871,6 +871,13 @@
             padding-bottom: 4px;
         }
 
+        .roster-header-container {
+            position: sticky;
+            top: calc(var(--sticky-top-height, 80px) + 52px);
+            z-index: 8;
+            overflow-x: hidden;
+        }
+
         .roster-header {
             display: grid;
             align-items: center;
@@ -884,9 +891,6 @@
             font-weight: 600;
             color: #546e7a;
             white-space: normal;
-            position: sticky;
-            top: calc(var(--sticky-top-height, 80px) + 52px);
-            z-index: 8;
         }
 
         .roster-header > div:first-child {
@@ -1149,8 +1153,43 @@
 
         .roster-actions .btn-small {
             width: 100%;
-            text-align: center;
             white-space: nowrap;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .roster-bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 15;
+            background: #f0f2f3;
+            border-top: 1px solid #cfd8dc;
+        }
+
+        .roster-scrollbar-proxy {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 14px;
+        }
+
+        .roster-scrollbar-inner {
+            height: 1px;
+        }
+
+        .roster-bottom-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 6px 8px;
+        }
+
+        #roster-riders-view,
+        #roster-coaches-view {
+            padding-bottom: 80px;
         }
 
         .list-phone {
@@ -3691,6 +3730,20 @@
             .roster-actions .btn-small {
                 min-width: auto;
                 white-space: nowrap;
+            }
+
+            .roster-header-container {
+                position: static; /* Disable sticky on mobile — header is hidden anyway */
+                overflow-x: visible;
+            }
+
+            .roster-scrollbar-proxy {
+                display: none; /* No horizontal scroll on mobile */
+            }
+
+            #roster-riders-view,
+            #roster-coaches-view {
+                padding-bottom: 56px; /* shorter bottom bar on mobile (no scrollbar proxy) */
             }
 
             .roster-controls {
