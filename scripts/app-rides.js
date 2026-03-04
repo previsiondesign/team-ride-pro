@@ -8499,6 +8499,47 @@
                 }
             }
 
+            // Auto-remove scheduled-absent riders/coaches from groups at render time
+            if (Array.isArray(ride.groups) && ride.groups.length > 0 && ride.date &&
+                typeof isScheduledAbsent === 'function' &&
+                Array.isArray(data.scheduledAbsences) && data.scheduledAbsences.length > 0) {
+                const rideDate = ride.date;
+                const normId = id => { const n = typeof id === 'string' ? parseInt(id, 10) : id; return Number.isFinite(n) ? n : id; };
+                let absenceRemoved = false;
+                ride.groups.forEach(group => {
+                    const beforeCount = (group.riders || []).length;
+                    group.riders = (group.riders || []).filter(id => !isScheduledAbsent('rider', normId(id), rideDate).absent);
+                    if (group.riders.length !== beforeCount) absenceRemoved = true;
+                    if (group.coaches) {
+                        ['leader', 'sweep', 'roam'].forEach(role => {
+                            if (group.coaches[role] != null && isScheduledAbsent('coach', normId(group.coaches[role]), rideDate).absent) {
+                                group.coaches[role] = null;
+                                absenceRemoved = true;
+                            }
+                        });
+                        if (Array.isArray(group.coaches.extraRoam)) {
+                            const beforeExtra = group.coaches.extraRoam.length;
+                            group.coaches.extraRoam = group.coaches.extraRoam.filter(id => !isScheduledAbsent('coach', normId(id), rideDate).absent);
+                            if (group.coaches.extraRoam.length !== beforeExtra) absenceRemoved = true;
+                        }
+                    }
+                });
+                // Also remove absent people from availableRiders/availableCoaches
+                if (Array.isArray(ride.availableRiders)) {
+                    const beforeAvail = ride.availableRiders.length;
+                    ride.availableRiders = ride.availableRiders.filter(id => !isScheduledAbsent('rider', normId(id), rideDate).absent);
+                    if (ride.availableRiders.length !== beforeAvail) absenceRemoved = true;
+                }
+                if (Array.isArray(ride.availableCoaches)) {
+                    const beforeAvail = ride.availableCoaches.length;
+                    ride.availableCoaches = ride.availableCoaches.filter(id => !isScheduledAbsent('coach', normId(id), rideDate).absent);
+                    if (ride.availableCoaches.length !== beforeAvail) absenceRemoved = true;
+                }
+                if (absenceRemoved && typeof saveRideToDB === 'function') {
+                    await saveRideToDB(ride);
+                }
+            }
+
             // Note: updatePublishButtons() is called after container.innerHTML is set
 
             const groupPaceOrder = getGroupPaceOrderForRide(ride);
