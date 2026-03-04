@@ -3232,34 +3232,14 @@
                 return;
             }
             
-            console.log('🔵 renderPracticeAttendanceLists: Starting for ride ID:', ride.id);
-            console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders BEFORE initialization:', {
-                isArray: Array.isArray(ride.availableRiders),
-                length: ride.availableRiders?.length,
-                value: ride.availableRiders,
-                first10: ride.availableRiders?.slice(0, 10)
-            });
-            
             // Ensure default attendance is set (all riders for regular practices, filtered for refined)
             const isRefined = isRideRefined(ride);
             ensureRideAttendanceDefaults(ride);
-            
-            console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders BEFORE normalization:', {
-                length: ride.availableRiders.length,
-                first10: ride.availableRiders.slice(0, 10),
-                types: ride.availableRiders.slice(0, 10).map(id => typeof id)
-            });
-            
+
             // Normalize availableRiders IDs for consistency
             ride.availableRiders = ride.availableRiders.map(id => {
                 const normalized = typeof id === 'string' ? parseInt(id, 10) : id;
                 return Number.isFinite(normalized) ? normalized : id;
-            });
-            
-            console.log('🔵 renderPracticeAttendanceLists: ride.availableRiders AFTER normalization:', {
-                length: ride.availableRiders.length,
-                first10: ride.availableRiders.slice(0, 10),
-                types: ride.availableRiders.slice(0, 10).map(id => typeof id)
             });
             if (!Array.isArray(ride.availableCoaches)) {
                 ride.availableCoaches = []; // No coaches available by default

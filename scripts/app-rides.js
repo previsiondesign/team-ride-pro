@@ -6339,8 +6339,9 @@
             };
 
             // Keep availableRiders/availableCoaches normalized (numbers) so sidebar/assignment logic matches
-            ride.availableRiders = Array.from(currentAvailableRiders);
-            ride.availableCoaches = Array.from(currentAvailableCoaches);
+            // Also filter out any scheduled-absent riders/coaches so they don't appear on the roster/print sheet
+            ride.availableRiders = Array.from(currentAvailableRiders).filter(id => !isRiderAbsent(id));
+            ride.availableCoaches = Array.from(currentAvailableCoaches).filter(id => !isCoachAbsent(id));
 
             if (typeof ensureGroupColorNames === 'function') await ensureGroupColorNames(ride);
             // Save and render
