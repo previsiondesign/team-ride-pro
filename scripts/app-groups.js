@@ -1147,6 +1147,7 @@
                 alert('You do not have permission to adjust assignments');
                 return false;
             }
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return false;
 
             const group = findGroupById(ride, groupId);
             if (!group) return false;
@@ -1498,6 +1499,7 @@
                 item.onclick = () => {
                     menu.remove();
                     if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                    if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {
@@ -1535,6 +1537,7 @@
             unassignItem.onclick = () => {
                 menu.remove();
                 if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                 if (type === 'rider') {
                     removeRiderFromGroups(ride, id);
                 } else {
@@ -1591,6 +1594,7 @@
                 item.onclick = () => {
                     menu.remove();
                     if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                    if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {
@@ -1654,6 +1658,7 @@
                             item.onclick = () => {
                                 menu.remove();
                                 if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                                 // Swap: put current coach in the target role, put target coach in current role
                                 if (myRole && myRole !== 'extraRoam') {
                                     currentGroup.coaches[myRole] = otherCoachId;
@@ -1684,6 +1689,7 @@
             unassignItem.onclick = () => {
                 menu.remove();
                 if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                 if (type === 'rider') {
                     removeRiderFromGroups(ride, id);
                 } else {
@@ -1751,6 +1757,7 @@
                 item.onclick = () => {
                     menu.remove();
                     if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                    if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                     if (type === 'rider') {
                         removeRiderFromGroups(ride, id);
                         if (!group.riders.includes(id)) {

@@ -3840,6 +3840,7 @@
                     return;
                 }
                 if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
                 // Save state before change
                 saveAssignmentState(ride);
@@ -3939,6 +3940,7 @@
                 return;
             }
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             ride.attendanceInitialized = true;
             
@@ -3968,6 +3970,7 @@
                     ride.availableCoaches.push(normalizedCoachId);
                 }
             } else {
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                 // Coach unchecked - remove from available coaches and from all groups
                 // This is allowed even if it makes groups non-compliant (groups will show red with warning)
                 ride.availableCoaches = ride.availableCoaches.filter(id => id !== normalizedCoachId);
@@ -4016,6 +4019,7 @@
             const rid = rideId != null ? (typeof rideId === 'number' ? rideId : parseInt(rideId, 10)) : data.currentRide;
             const ride = rid != null ? data.rides.find(r => r.id === rid) : null;
             if (!ride) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             const coach = typeof getCoachById === 'function' ? getCoachById(coachId) : null;
             if (!coach) return;
             const cur = typeof getCurrentCoachBikeMode === 'function' ? getCurrentCoachBikeMode(coach, ride) : 'manual';
@@ -4344,7 +4348,8 @@
         function updateGroupRoute(groupId, routeId) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
-            
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
+
             const group = ride.groups.find(g => String(g.id) === String(groupId));
             if (!group) return;
             
@@ -4780,6 +4785,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             if (typeof clearGroupResizeMemory === 'function') clearGroupResizeMemory(ride.id);
             // Save state before change
@@ -4932,6 +4938,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             const numericId = parseInt(groupId, 10);
             if (!Number.isFinite(numericId)) return;
 
@@ -5140,6 +5147,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             const group = findGroupById(ride, groupId);
             if (!group) return;
 
@@ -5371,6 +5379,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             // Relabel groups with their new positions
             ride.groups.forEach((g, i) => { g.label = `Group ${i + 1}`; });
             const overlay = document.getElementById('reorder-groups-dialog-overlay');
@@ -5384,6 +5393,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             const sourceGroup = findGroupById(ride, sourceGroupId);
             const targetGroup = findGroupById(ride, targetGroupId);
             if (!sourceGroup || !targetGroup) return;
@@ -5449,6 +5459,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             const numericId = parseInt(groupId, 10);
             const group = findGroupById(ride, numericId);
             if (!group) return;
@@ -5577,6 +5588,7 @@
         function moveGroupBefore(groupId, beforeGroupId) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             saveAssignmentState(ride);
 
@@ -5606,6 +5618,7 @@
         function moveGroupToEnd(groupId) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             saveAssignmentState(ride);
 
@@ -6141,6 +6154,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             if (payload.type === 'rider') {
                 handleRiderDrop(ride, payload, ev.currentTarget);
@@ -6496,9 +6510,10 @@
         }
         
         function moveCoachToRole(ride, coachId, groupId, targetRole) {
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             // Save state before change
             saveAssignmentState(ride);
-            
+
             const group = findGroupById(ride, groupId);
             if (!group) return;
             
@@ -6570,9 +6585,10 @@
         }
         
         function moveCoachToGroup(ride, coachId, sourceGroupId, targetGroupId) {
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             // Save state before change
             saveAssignmentState(ride);
-            
+
             const sourceGroup = findGroupById(ride, sourceGroupId);
             const targetGroup = findGroupById(ride, targetGroupId);
             if (!sourceGroup || !targetGroup) return;
@@ -7282,6 +7298,7 @@
         function moveRiderBetweenGroups(currentGroupId, riderId, direction) {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             const currentGroup = findGroupById(ride, currentGroupId);
             if (!currentGroup) return;

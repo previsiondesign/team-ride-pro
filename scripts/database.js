@@ -508,8 +508,17 @@ function buildRideDbData(rideData) {
     // Persist group color names in settings as fallback (groups JSONB column may lose them on some RLS configs)
     if (Array.isArray(rideData.groups)) {
         const colorMap = {};
-        rideData.groups.forEach(g => { if (g && g.id && g.colorName) colorMap[g.id] = g.colorName; });
+        const colorByIndex = [];
+        rideData.groups.forEach((g, i) => {
+            if (g && g.colorName) {
+                colorMap[g.id] = g.colorName;
+                colorByIndex[i] = g.colorName;
+            } else {
+                colorByIndex[i] = null;
+            }
+        });
         if (Object.keys(colorMap).length > 0) extra._groupColorNames = colorMap;
+        if (colorByIndex.some(Boolean)) extra._groupColorNamesByIndex = colorByIndex;
     }
     if (rideData.coachBikeMode != null && typeof rideData.coachBikeMode === 'object') {
         extra.coachBikeMode = rideData.coachBikeMode;
@@ -559,12 +568,19 @@ function mapRideDbToApp(row) {
         result.availableRiders = row.settings.availableRiders;
     }
     // Restore group color names from settings fallback if the groups column lost them
-    if (row.settings && row.settings._groupColorNames && Array.isArray(result.groups)) {
-        const colorMap = row.settings._groupColorNames;
-        result.groups.forEach(g => {
-            if (g && g.id && !g.colorName && colorMap[g.id]) {
-                g.colorName = colorMap[g.id];
-            }
+    if (Array.isArray(result.groups)) {
+        const colorMap = row.settings && row.settings._groupColorNames && typeof row.settings._groupColorNames === 'object'
+            ? row.settings._groupColorNames
+            : null;
+        const colorByIndex = row.settings && Array.isArray(row.settings._groupColorNamesByIndex)
+            ? row.settings._groupColorNamesByIndex
+            : null;
+        result.groups.forEach((g, i) => {
+            if (!g || g.colorName) return;
+            const byId = colorMap && g.id != null && colorMap[g.id];
+            const byIdx = colorByIndex && i < colorByIndex.length && colorByIndex[i];
+            if (byId) g.colorName = byId;
+            else if (byIdx) g.colorName = byIdx;
         });
     }
     return result;

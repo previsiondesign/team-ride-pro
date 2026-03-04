@@ -356,7 +356,20 @@
                                     ${escapeHtml(bikeLabel)}
                                 </div>`;
                             case 'pace': {
+                                const bikeManual = coach.bikeManual !== false;
+                                const bikeElectric = !!coach.bikeElectric;
+                                const eOnly = bikeElectric && !bikeManual;
+                                const hasBothTypicallyEbike = bikeManual && bikeElectric && (coach.bikePrimary || 'manual') === 'electric';
                                 const coachInEbike = currentRide && typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, currentRide) === 'electric';
+                                if (eOnly) {
+                                    const order = typeof getPaceScaleOrder === 'function' ? getPaceScaleOrder() : 'fastest_to_slowest';
+                                    const displayPace = order === 'fastest_to_slowest' ? 1 : fitnessScale;
+                                    const paceCell = `<span class="pace-value" title="e-Bike only (fastest)">(e-bike) ${displayPace}</span>`;
+                                    return `<div class="roster-cell" data-label="Endurance Rating">${paceCell}</div>`;
+                                }
+                                if (hasBothTypicallyEbike) {
+                                    return `<div class="roster-cell" data-label="Endurance Rating">${buildPaceControlsHtml('coach', coach.id, 'pace', fitnessValue, fitnessScale)}</div>`;
+                                }
                                 const displayPace = coachInEbike && typeof getEffectiveCoachFitness === 'function' ? getEffectiveCoachFitness(coach, currentRide) : (coachInEbike ? fitnessScale : fitnessValue);
                                 const paceCell = coachInEbike
                                     ? `<span class="pace-value" title="e-Bike (fastest)">${displayPace}</span>`
@@ -372,7 +385,20 @@
                             case 'climbing': {
                                 const coachClimbingScale = getClimbingScale();
                                 const coachClimbingValue = Math.max(1, Math.min(coachClimbingScale, parseInt(coach.climbing || '3', 10)));
+                                const bikeManualClimb = coach.bikeManual !== false;
+                                const bikeElectricClimb = !!coach.bikeElectric;
+                                const eOnlyClimb = bikeElectricClimb && !bikeManualClimb;
+                                const hasBothTypicallyEbikeClimb = bikeManualClimb && bikeElectricClimb && (coach.bikePrimary || 'manual') === 'electric';
                                 const coachInEbikeClimb = currentRide && typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, currentRide) === 'electric';
+                                if (eOnlyClimb) {
+                                    const order = typeof getPaceScaleOrder === 'function' ? getPaceScaleOrder() : 'fastest_to_slowest';
+                                    const displayClimbing = order === 'fastest_to_slowest' ? 1 : coachClimbingScale;
+                                    const climbingCell = `<span class="pace-value" title="e-Bike only (fastest)">(e-bike) ${displayClimbing}</span>`;
+                                    return `<div class="roster-cell" data-label="Climbing Rating">${climbingCell}</div>`;
+                                }
+                                if (hasBothTypicallyEbikeClimb) {
+                                    return `<div class="roster-cell" data-label="Climbing Rating">${buildPaceControlsHtml('coach', coach.id, 'climbing', coachClimbingValue, coachClimbingScale)}</div>`;
+                                }
                                 const displayClimbing = coachInEbikeClimb && typeof getEffectiveCoachClimbing === 'function' ? getEffectiveCoachClimbing(coach, currentRide) : (coachInEbikeClimb ? coachClimbingScale : coachClimbingValue);
                                 const climbingCell = coachInEbikeClimb
                                     ? `<span class="pace-value" title="e-Bike (fastest)">${displayClimbing}</span>`

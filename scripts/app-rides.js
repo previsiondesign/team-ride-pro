@@ -5044,6 +5044,7 @@
                     return;
                 }
                 if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
                 if (ride.cancelled) {
                     alert('Cannot assign riders and coaches to a cancelled practice.');
                     return;
@@ -6192,7 +6193,8 @@
                 return;
             }
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
-            
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
+
             if (!sourceRide) {
                 console.error('Source ride not found. Looking for ID:', sourceRideId, 'Available ride IDs:', data.rides.map(r => ({ id: r.id, type: typeof r.id })));
                 alert(`Error: Prior practice not found (ID: ${sourceRideId}).`);
@@ -6443,6 +6445,7 @@
         async function tryMoreGroups() {
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride || !ride.groups || ride.groups.length === 0) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             const currentNumGroups = ride.groups.length;
             const totalRiders = ride.groups.reduce((sum, g) => sum + g.riders.length, 0);
@@ -6501,6 +6504,7 @@
         function tryFewerGroups() {
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride || !ride.groups || ride.groups.length <= 1) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             const currentNumGroups = ride.groups.length;
             const targetCount = currentNumGroups - 1;
@@ -6637,6 +6641,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
 
             if (!confirm('Unassign all coaches from groups? Coaches will be moved to the unassigned palette.')) return;
             
@@ -6687,7 +6692,16 @@
             return ride && Array.isArray(ride.groups) && ride.groups.length > 0 && ride.groups.every(g => g.colorName);
         }
 
-        /** Ensure every group on the ride has a colorName when setting is on; preserve existing, assign only to groups missing one. */
+        /** Shuffle array in place (Fisher-Yates). Used so each practice gets a random order of color names from Supabase. */
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        /** Ensure every group on the ride has a colorName when setting is on; preserve existing, assign only to groups missing one. Randomly assigns from Supabase list per practice. */
         async function ensureGroupColorNames(ride) {
             if (!ride || !Array.isArray(ride.groups) || ride.groups.length === 0 || !useGroupColorNamesEnabled()) return;
             const names = typeof getColorNames === 'function' ? await getColorNames() : [];
@@ -6695,6 +6709,7 @@
             if (colorNames.length === 0) return;
             const used = new Set((ride.groups || []).map(g => g.colorName).filter(Boolean));
             const available = colorNames.filter(n => !used.has(n));
+            shuffleArray(available);
             let ai = 0;
             ride.groups.forEach(g => {
                 if (g.colorName) return;
@@ -6743,6 +6758,10 @@
             data.seasonSettings.useGroupColorNames = !wasOn;
 
             const ride = data.rides.find(r => r.id === data.currentRide);
+            if (ride && typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) {
+                data.seasonSettings.useGroupColorNames = wasOn;
+                return;
+            }
             if (ride && Array.isArray(ride.groups) && ride.groups.length > 0) {
                 if (wasOn) {
                     ride.groups.forEach(g => { delete g.colorName; });
@@ -6773,10 +6792,10 @@
         }
 
         function clearAssignments() {
-            if (!confirm('Clear all assignments? This will delete all groups and remove all rider and coach assignments.')) return;
-            
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
+            if (!confirm('Clear all assignments? This will delete all groups and remove all rider and coach assignments.')) return;
             
             clearGroupResizeMemory(ride.id);
             
@@ -6806,6 +6825,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             if (typeof confirmEditPastPractice === 'function' && !confirmEditPastPractice(ride)) return;
+            if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(ride)) return;
             if (!confirm('Clear all groups, attendance, and restart planning from scratch? This cannot be undone.')) return;
 
             clearGroupResizeMemory(ride.id);
@@ -7121,6 +7141,21 @@
             }
         }
 
+        /**
+         * If groups are published, prompt to unpublish before editing. OK = unpublish and return true; Cancel = return false.
+         * Call before any edit that changes assignments/groups; if it returns false, abort the edit.
+         */
+        function confirmUnpublishForEdit(ride) {
+            if (!ride || !ride.publishedGroups) return true;
+            if (!confirm('Current groups have been published, do you want to unpublish them for editing?')) return false;
+            ride.publishedGroups = false;
+            saveRideToDB(ride);
+            if (typeof updateRide === 'function') {
+                updateRide(ride.id, { publishedGroups: false, groups: ride.groups }).catch(() => {});
+            }
+            return true;
+        }
+
         async function unpublishGroupAssignments() {
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) {
@@ -7336,7 +7371,7 @@
                 }
 
                 // Generate both PDFs (mobile + desktop) with staggered saves
-                // to avoid browser "download multiple files" permission prompts
+                // May trigger browser "download multiple files" prompt; user can allow
                 generateMobileFriendlyPDF(ride);
                 setTimeout(() => { generateDesktopPrintFriendlyPDF(ride); }, 2200);
                 
@@ -7440,7 +7475,8 @@
                                         <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #666; text-transform: uppercase;">Ride Leaders</h3>
                                         <div style="display: flex; flex-direction: column; gap: 2px;">
                                             ${coachesWithRoles.map(({ coach, role }) => {
-                                                const name = coach.name || 'Coach';
+                                                const onEbike = typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, ride) === 'electric';
+                                                const name = (coach.name || 'Coach') + (onEbike ? ' (e-bike)' : '');
                                                 const safeName = escapeHtml(name);
                                                 const initial = escapeHtml((name.trim().charAt(0) || '?').toUpperCase());
                                                 // Only use photos if they're data URLs (base64 embedded), otherwise omit to avoid broken links
@@ -7786,11 +7822,12 @@
 
                     doc.setFont(undefined, 'normal');
                     doc.setFontSize(11);
+                    const ebikeSuffix = (c) => (typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(c, ride) === 'electric' ? ' (e-bike)' : '');
                     const coachesList = [];
-                    if (leader) coachesList.push(`${leader.name || 'Coach'} (Leader)`);
-                    if (sweep) coachesList.push(`${sweep.name || 'Coach'} (Sweep)`);
-                    if (roam) coachesList.push(`${roam.name || 'Coach'} (Roam)`);
-                    extraRoam.forEach(coach => coachesList.push(`${coach.name || 'Coach'} (Roam+)`));
+                    if (leader) coachesList.push(`${leader.name || 'Coach'}${ebikeSuffix(leader)} (Leader)`);
+                    if (sweep) coachesList.push(`${sweep.name || 'Coach'}${ebikeSuffix(sweep)} (Sweep)`);
+                    if (roam) coachesList.push(`${roam.name || 'Coach'}${ebikeSuffix(roam)} (Roam)`);
+                    extraRoam.forEach(coach => coachesList.push(`${coach.name || 'Coach'}${ebikeSuffix(coach)} (Roam+)`));
 
                     if (coachesList.length > 0) {
                         coachesList.forEach(coachText => {
@@ -8015,11 +8052,12 @@
                         const riders = (group.riders || []).map(id => getRiderById(id)).filter(Boolean);
                         const routeDisplay = getRouteDisplayForGroup(group);
 
+                        const ebikeSuffixDesktop = (c) => (typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(c, ride) === 'electric' ? ' (e-bike)' : '');
                         const coachesList = [];
-                        if (leader) coachesList.push(`${leader.name || 'Coach'} (Leader)`);
-                        if (sweep) coachesList.push(`${sweep.name || 'Coach'} (Sweep)`);
-                        if (roam) coachesList.push(`${roam.name || 'Coach'} (Roam)`);
-                        extraRoam.forEach(c => coachesList.push(`${c.name || 'Coach'} (Roam+)`));
+                        if (leader) coachesList.push(`${leader.name || 'Coach'}${ebikeSuffixDesktop(leader)} (Leader)`);
+                        if (sweep) coachesList.push(`${sweep.name || 'Coach'}${ebikeSuffixDesktop(sweep)} (Sweep)`);
+                        if (roam) coachesList.push(`${roam.name || 'Coach'}${ebikeSuffixDesktop(roam)} (Roam)`);
+                        extraRoam.forEach(c => coachesList.push(`${c.name || 'Coach'}${ebikeSuffixDesktop(c)} (Roam+)`));
 
                         const lh = scaled(BASE.bodyLineLead, s);
                         let height = scaled(BASE.titleTopPad, s);
@@ -8429,7 +8467,7 @@
         async function renderAssignments(ride) {
             const container = document.getElementById('assignments');
             if (!container) return;
-            
+
             // Check and auto-unpublish if 12 hours have passed
             if (ride) {
                 await checkAndAutoUnpublish(ride);
@@ -8806,17 +8844,20 @@
                             </div>
                         </div>
                         
-                        <!-- Route Section: single custom dropdown (no redundant select) -->
+                        <!-- Route Section: blue area with white text; selected route highlighted in dropdown -->
                         <div class="route-selector-wrap" style="margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0; position: relative;">
-                            <div class="route-selector-trigger" onclick="toggleRouteDropdown(event, this)" role="button" tabindex="0" style="cursor: pointer; padding: 4px 8px; background: #f5f5f5; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; font-weight: 600; font-size: 15px; color: #333;">
+                            <div class="route-selector-trigger" onclick="toggleRouteDropdown(event, this)" role="button" tabindex="0" style="cursor: pointer; padding: 6px 10px; background: #1976d2; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; user-select: none; font-weight: 600; font-size: 15px; color: #fff;">
                                 <span class="route-selector-label">Route: ${escapeHtml(routeName || (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : '-- Select Route --'))}</span>
-                                <span class="route-selector-arrow" style="font-size: 12px; color: #666;">▼</span>
+                                <span class="route-selector-arrow" style="font-size: 12px; color: rgba(255,255,255,0.9);">▼</span>
                             </div>
                             <div class="route-dropdown-panel" style="display: none; position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 2px; background: #fff; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 280px; overflow-y: auto; z-index: 100;">
-                                ${(typeof getRouteOptionList === 'function' ? getRouteOptionList(group.routeId, group, ride) : []).map(item => item.disabled
-                                    ? `<div class="route-dropdown-option route-dropdown-sep">${escapeHtml(item.label)}</div>`
-                                    : `<div class="route-dropdown-option" data-value="${escapeHtml(String(item.value))}" data-group-id="${group.id}" data-ride-id="${ride.id}" onclick="chooseRouteOption(event)">${item.html != null ? item.html : escapeHtml(item.label)}</div>`
-                                ).join('')}
+                                ${(typeof getRouteOptionList === 'function' ? getRouteOptionList(group.routeId, group, ride) : []).map(item => {
+                                    const isSelected = !item.disabled && String(item.value) === String(group.routeId);
+                                    const selectedClass = isSelected ? ' route-option-selected' : '';
+                                    return item.disabled
+                                        ? `<div class="route-dropdown-option route-dropdown-sep">${escapeHtml(item.label)}</div>`
+                                        : `<div class="route-dropdown-option${selectedClass}" data-value="${escapeHtml(String(item.value))}" data-group-id="${group.id}" data-ride-id="${ride.id}" onclick="chooseRouteOption(event)">${item.html != null ? item.html : escapeHtml(item.label)}</div>`;
+                                }).join('')}
                             </div>
                         </div>
                         ${warningsHtml}

@@ -1534,6 +1534,7 @@
             document.body.appendChild(overlay);
 
             document.getElementById('route-assign-confirm-btn').onclick = () => {
+                if (typeof confirmUnpublishForEdit === 'function' && !confirmUnpublishForEdit(targetRide)) return;
                 const checkboxes = dialog.querySelectorAll('input[type="checkbox"]');
                 checkboxes.forEach(cb => {
                     const groupId = cb.value;
