@@ -6766,8 +6766,10 @@
                 if (wasOn) {
                     ride.groups.forEach(g => { delete g.colorName; });
                 } else {
+                    console.log('🔵 toggleON: before ensureGroupColorNames | groups=' + ride.groups.length + ' | with colorName=' + ride.groups.filter(g => g.colorName).length);
                     await ensureGroupColorNames(ride);
                     const missing = (ride.groups || []).filter(g => !g.colorName).length;
+                    console.log('🔵 toggleON: after ensureGroupColorNames | missing=' + missing + ' | names:', ride.groups.map(g => g && g.colorName).join(','));
                     if (missing > 0) {
                         alert('Not enough color names in the list. Add more in Supabase (color_names table) or use fewer groups.');
                         data.seasonSettings.useGroupColorNames = false;
@@ -8472,7 +8474,33 @@
             if (ride) {
                 await checkAndAutoUnpublish(ride);
             }
-            
+
+            // If color names are enabled but this ride has groups missing a colorName, assign now.
+            // Uses sorted (deterministic) order so re-runs always assign the same names.
+            // Awaits save so Supabase has the data before any concurrent reload can fetch
+            // stale data and re-trigger this block.
+            if (typeof useGroupColorNamesEnabled === 'function' && useGroupColorNamesEnabled() &&
+                Array.isArray(ride.groups) && ride.groups.length > 0 &&
+                ride.groups.some(g => !g.colorName) &&
+                typeof getColorNames === 'function') {
+                console.log('🔵 Fix2 triggered for rideId=' + ride.id + ' | groups missing colorName=' + ride.groups.filter(g => !g.colorName).length + '/' + ride.groups.length + ' | existing:', ride.groups.map(g => g && g.colorName).join(','));
+                const _cnNames = await getColorNames();
+                const _cnList = _cnNames.map(n => n.name).filter(Boolean).sort();
+                if (_cnList.length > 0) {
+                    const _cnUsed = new Set(ride.groups.map(g => g.colorName).filter(Boolean));
+                    const _cnAvail = _cnList.filter(n => !_cnUsed.has(n));
+                    let _cnIdx = 0, _cnAssigned = 0;
+                    ride.groups.forEach(g => {
+                        if (g.colorName || _cnIdx >= _cnAvail.length) return;
+                        g.colorName = _cnAvail[_cnIdx++];
+                        _cnAssigned++;
+                    });
+                    if (_cnAssigned > 0 && typeof saveRideToDB === 'function') {
+                        await saveRideToDB(ride); // await so Supabase write completes before any reload
+                    }
+                }
+            }
+
             // Note: updatePublishButtons() is called after container.innerHTML is set
 
             const groupPaceOrder = getGroupPaceOrderForRide(ride);
