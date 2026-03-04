@@ -1,37 +1,22 @@
 # Update Live Site Workflow
 
-Quick reference guide for deploying changes to the live site.
-
----
-
-## ⚠️ Which site are we updating? (March 2026)
-
-| Site | Branch | Status | Action |
-|------|--------|--------|--------|
-| **v3 (active)** | `v3-dev` | **Current development** — all new work goes here | Edit in **TeamRide Pro v3** worktree (or checkout `v3-dev`), commit, **push `origin v3-dev`**. When v3 is promoted to production, merge `v3-dev` → `main` and point `index.html` to `teamridepro_v3.html`. |
-| **v2 (frozen)** | `main` | No longer developed. Kept for legacy/reference. | Do **not** push feature fixes to `main`. Only critical hotfixes if v2 is still in use before v3 cutover. |
-
-**To update the live v3 site:** Work in the **v3-dev** branch, then push `git push origin v3-dev`. If your live URL is already serving v3 (e.g. via `index.html` → `teamridepro_v3.html` after a merge to `main`), then promoting v3 to live = merge `v3-dev` into `main` and push.
-
----
+Quick reference guide for deploying changes to `teamridepro_v2.html` (and other files) to the live GitHub Pages site.
 
 ## Live Site Information
 
 - **Repository**: `previsiondesign/team-ride-pro`
-- **v3 (active development)**: Develop on branch **`v3-dev`**. Entry: `teamridepro_v3.html`.
-- **v2 (frozen)**: `main` branch. Entry: `teamridepro_v2.html`. URL: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html`
-- **GitHub Pages**: Serves from the `main` branch (so “live” is whatever `index.html` points to)
+- **Live Site URL**: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html`
+- **GitHub Pages**: Automatically deploys from `main` branch
 
 ---
 
-## Standard Update Workflow (v3 — use this for normal development)
+## Standard Update Workflow
 
 ### Step 1: Make Your Changes
 
-1. Work in the **v3 worktree** (`TeamRide Pro v3\`) or checkout `v3-dev` in the main folder.
-2. Edit `teamridepro_v3.html` (or other files) locally.
-3. Test locally:
-   - Open `teamridepro_v3.html` in a browser
+1. Edit `teamridepro_v2.html` (or other files) locally
+2. Test changes locally if possible:
+   - Open `teamridepro_v2.html` in a browser
    - Test functionality in browser console
    - Check for any obvious errors
 
@@ -81,17 +66,11 @@ git commit -m "Description of what you changed"
 
 ### Step 5: Push to GitHub
 
-**For v3 (active development):**
-```bash
-git push origin v3-dev
-```
-
-**Only if you are deliberately updating v2 (frozen):**
 ```bash
 git push origin main
 ```
 
-Pushing to `v3-dev` updates the v3 branch. GitHub Pages rebuilds when `main` changes; to make v3 “live”, merge `v3-dev` into `main` and ensure `index.html` points to `teamridepro_v3.html`.
+This uploads your commits to GitHub. GitHub Pages will automatically detect the push and start rebuilding the site.
 
 ### Step 6: Wait for GitHub Pages to Rebuild
 
@@ -103,7 +82,7 @@ Pushing to `v3-dev` updates the v3 branch. GitHub Pages rebuilds when `main` cha
 
 ### Step 7: Test on Live Site
 
-1. Visit: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v3.html` (or v2 if still in use: `teamridepro_v2.html`)
+1. Visit: `https://previsiondesign.github.io/team-ride-pro/teamridepro_v2.html`
 2. **Hard refresh** to clear cache:
    - **Windows/Linux**: `Ctrl + Shift + R` or `Ctrl + F5`
    - **Mac**: `Cmd + Shift + R`
@@ -114,23 +93,22 @@ Pushing to `v3-dev` updates the v3 branch. GitHub Pages rebuilds when `main` cha
 
 ## Quick Reference Commands
 
-### Complete workflow in one go (v3):
+### Complete workflow in one go:
 ```bash
-# Navigate to project directory (v3 worktree or main folder with v3-dev checked out)
-cd "D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\TeamRide Pro v3"
-# Or: cd "D:\...\TeamRide Pro" then git checkout v3-dev
+# Navigate to project directory
+cd "D:\PREVISION DESIGN Dropbox\Adam Phillips\05 Personal\MTB Team\Team Practice Pro"
 
 # Check what changed
 git status
 
 # Stage changes
-git add teamridepro_v3.html scripts/app-groups.js styles.css
+git add teamridepro_v2.html
 
 # Commit
 git commit -m "Your descriptive commit message"
 
-# Push v3 (active development)
-git push origin v3-dev
+# Push to GitHub
+git push origin main
 ```
 
 ### View recent commits:
@@ -273,5 +251,5 @@ git add path/to/file
 
 ---
 
-**Last Updated**: 2026-03-03 (v3 = active; v2 frozen)  
-**Quick Command (v3)**: `git add . && git commit -m "Your message" && git push origin v3-dev`
+**Last Updated**: 2024-12-27  
+**Quick Command**: `git add . && git commit -m "Your message" && git push origin main`
