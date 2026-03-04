@@ -269,6 +269,16 @@
             margin-bottom: 3px;
         }
 
+        .sidebar-list .coach-card.compact .card-body {
+            justify-content: space-between;
+            align-items: center;
+        }
+        /* Match rider card: name block grows so badge-single and assignment note stay right-aligned (avoids center when 3 flex children) */
+        .sidebar-list .coach-card.compact .coach-name-with-bike {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
         .sidebar-list .card-body {
             overflow: hidden;
             min-width: 0;
@@ -2674,21 +2684,29 @@
         .route-selector-trigger:hover {
             background: #ebebeb !important;
         }
+        .route-selector-label {
+            font-size: 15px;
+        }
+        .route-dropdown-panel {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
         .route-dropdown-panel .route-dropdown-option {
-            padding: 6px 10px;
+            padding: 8px 10px;
+            font-family: inherit;
             font-weight: 600;
             font-size: 13px;
             color: #333;
             cursor: pointer;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: normal;
+            line-height: 1.4;
+            word-break: break-word;
         }
         .route-dropdown-panel .route-dropdown-option:not(.route-dropdown-sep):hover {
             background: #f5f5f5;
         }
         .route-dropdown-panel .route-dropdown-sep {
             padding: 4px 10px;
+            font-family: inherit;
             font-weight: normal;
             font-size: 11px;
             color: #999;
@@ -2887,6 +2905,16 @@
             min-width: 0;
             flex: 1;
         }
+        .coach-card.compact .coach-name-with-bike {
+            flex: 0 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            max-width: 100%;
+        }
+        .coach-card.compact .coach-name-with-bike strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
         .rider-card.compact .badge-row,
         .coach-card.compact .coach-meta {
@@ -3025,6 +3053,17 @@
             color: #2c3e50;
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .coach-name-with-bike {
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            min-width: 0;
+        }
+        .coach-name-with-bike strong {
+            display: inline;
             white-space: nowrap;
         }
 
