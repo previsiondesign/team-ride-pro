@@ -667,7 +667,7 @@
             // Lightning bolt for e-bike; acoustic guitar silhouette for manual — both use
             // fill="currentColor" so they inherit the orange/green/grey from the parent span.
             const ebikeIcon = `<svg viewBox="0 0 12 20" width="0.65em" height="1em" fill="currentColor" aria-hidden="true" style="display:inline-block;vertical-align:middle;"><polygon points="8,0 1,11 7,11 4,20 11,9 5,9"/></svg>`;
-            const manualBikeIcon = `<svg viewBox="0 0 14 26" width="0.5em" height="0.85em" fill="currentColor" aria-hidden="true" style="display:inline-block;vertical-align:middle;"><rect x="5.5" y="0" width="3" height="9" rx="1.5"/><path fill-rule="evenodd" d="M7,9 C10.5,9 11,11 11,13.5 C11,15 9,15.5 9,16.5 C9,17.5 12,19 12,21 C12,23.5 10,25 7,25 C4,25 2,23.5 2,21 C2,19 5,17.5 5,16.5 C5,15.5 3,15 3,13.5 C3,11 3.5,9 7,9Z M7,18 A1.8,1.8 0 1,0 7,21.6 A1.8,1.8 0 1,0 7,18Z"/></svg>`;
+            const manualBikeIcon = `<svg viewBox="-6 0 26 26" width="0.75em" height="0.75em" fill="currentColor" aria-hidden="true" style="display:inline-block;vertical-align:middle;"><g transform="rotate(45, 7, 13)"><rect x="5.5" y="0" width="3" height="9" rx="1.5"/><path fill-rule="evenodd" d="M7,9 C10.5,9 11,11 11,13.5 C11,15 9,15.5 9,16.5 C9,17.5 12,19 12,21 C12,23.5 10,25 7,25 C4,25 2,23.5 2,21 C2,19 5,17.5 5,16.5 C5,15.5 3,15 3,13.5 C3,11 3.5,9 7,9Z M7,18 A1.8,1.8 0 1,0 7,21.6 A1.8,1.8 0 1,0 7,18Z"/></g></svg>`;
             let bikeBadgeHtml = '';
             const titleManual = 'Manual bike';
             const titleEbike = 'E-bike';
