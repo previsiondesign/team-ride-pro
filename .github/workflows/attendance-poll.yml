@@ -1,0 +1,70 @@
+# .github/workflows/attendance-poll.yml
+# Automated Slack attendance polls for Tam High MTB TeamRide Pro
+#
+# Two scheduled triggers:
+#   1. 10 PM UTC (~3 PM Pacific) — post poll IF next practice is tomorrow
+#   2.  3 PM UTC (~8 AM Pacific) — DM reminders to non-responders on practice day
+#
+# Manual trigger available via workflow_dispatch (Actions tab → Run workflow).
+#
+# Requires these GitHub repo secrets:
+#   SUPABASE_FUNCTION_URL — e.g. https://kweharxfvvjwrnswrooo.supabase.co/functions/v1/slack-attendance
+#   CRON_SECRET           — must match the CRON_SECRET in Supabase edge function secrets
+
+name: Attendance Poll
+
+on:
+  schedule:
+    - cron: '0 22 * * *'   # 10 PM UTC ≈ 3 PM Pacific → post poll day before practice
+    - cron: '0 15 * * *'   # 3 PM UTC  ≈ 8 AM Pacific → send reminders morning of practice
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to run'
+        required: true
+        default: 'post_poll_if_tomorrow'
+        type: choice
+        options:
+          - post_poll_if_tomorrow
+          - post_poll
+          - send_reminders
+
+jobs:
+  attendance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine action
+        id: action
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
+          else
+            # Scheduled run — pick action based on current UTC hour
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "22" ]; then
+              echo "action=post_poll_if_tomorrow" >> $GITHUB_OUTPUT
+            elif [ "$HOUR" = "15" ]; then
+              echo "action=send_reminders" >> $GITHUB_OUTPUT
+            else
+              echo "action=post_poll_if_tomorrow" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo "Selected action: $(cat $GITHUB_OUTPUT)"
+
+      - name: Run ${{ steps.action.outputs.action }}
+        run: |
+          ACTION="${{ steps.action.outputs.action }}"
+          echo "Calling edge function with action: $ACTION"
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -d "{\"action\": \"$ACTION\"}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::error::Request failed with HTTP $HTTP_CODE"
+            exit 1
+          fi

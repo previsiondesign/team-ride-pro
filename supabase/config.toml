@@ -13,3 +13,8 @@ verify_jwt = false
 # Allow unauthenticated GET for "Approve from email" link (one-time token in URL)
 [functions.approve-admin-request]
 verify_jwt = false
+
+# Slack attendance: slash commands, button interactions, and cron triggers
+# Auth is handled via Slack signing secret / cron secret, not JWT
+[functions.slack-attendance]
+verify_jwt = false
