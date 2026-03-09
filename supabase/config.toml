@@ -1,3 +1,10 @@
+project_id = "kweharxfvvjwrnswrooo"
+
+# Allow unauthenticated access to send-verification-code
+# (called from login page before user is authenticated)
+[functions.send-verification-code]
+verify_jwt = false
+
 # Allow unauthenticated access to send-admin-access-request
 # (used from the login page by users who don't have an account yet)
 [functions.send-admin-access-request]
