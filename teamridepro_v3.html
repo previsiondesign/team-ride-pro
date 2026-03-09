@@ -78,7 +78,7 @@
     <div class="sticky-top">
         <div class="header-bar">
             <div class="header-title-container">
-                <h1 id="header-team-name" style="font-family: 'Rubik Dirt', cursive; font-weight: normal; visibility: hidden;">Tam High Mountain Bike Racing Team</h1>
+                <h1 id="header-team-name" style="font-family: 'Rubik Dirt', cursive; font-weight: normal; visibility: hidden; margin-left: 10px;">Tam High Mountain Bike Racing Team</h1>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
                 <div class="user-menu" id="user-menu">
@@ -762,7 +762,7 @@
     <!-- Login/Auth Modal -->
     <div id="auth-overlay" class="auth-overlay hidden">
         <div class="login-container">
-            <p class="login-brand" style="font-family:'Rubik Burned', cursive; font-size: 28px; margin: 0 0 4px 0; text-align: center; color: #1e293b;">teamride pro</p>
+            <p class="login-brand" style="font-family:'Rubik Burned', cursive; font-size: 28px; margin: 0 0 25px 0; text-align: center; color: #b7bdc7;">teamride pro</p>
             <h2 class="login-title">Tam High MTB Team</h2>
             <p id="login-subtitle" class="login-subtitle">Sign in to access the practice manager</p>
             <div id="login-logout-notice" style="display: none; margin: 8px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 6px; font-size: 13px; color: #856404;"></div>
@@ -794,7 +794,13 @@
                         <input type="text" id="verification-code-input" class="modal-field-input" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: bold;" onkeypress="if(event.key === 'Enter') handleVerifyCode()">
                     </div>
                     <button type="button" class="btn-small" style="width: 100%; margin-top: 8px;" id="verify-code-button" onclick="handleVerifyCode()">Verify Code</button>
-                    <div style="text-align: center; margin-top: 12px;">
+                    <div style="text-align: center; margin-top: 10px;">
+                        <label style="font-size: 13px; color: #64748b; cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="remember-device-checkbox" style="margin-right: 5px; cursor: pointer;">
+                            Remember this device for 30 days
+                        </label>
+                    </div>
+                    <div style="text-align: center; margin-top: 8px;">
                         <a href="#" class="auth-link" id="resend-code-link" onclick="event.preventDefault(); handleResendVerificationCode();">Resend Code</a>
                         <span style="margin: 0 8px;">|</span>
                         <a href="#" class="auth-link" onclick="event.preventDefault(); showSimplifiedLogin();">Change Phone/Email</a>

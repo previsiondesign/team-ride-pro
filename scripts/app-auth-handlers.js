@@ -337,12 +337,21 @@
                 }
                 
                 // Verification successful - store login info and redirect
-                window.sessionStorage.setItem('simplifiedLogin', JSON.stringify({
+                const rememberDevice = document.getElementById('remember-device-checkbox')?.checked;
+                const loginPayload = JSON.stringify({
                     type: pendingVerification.userType,
                     id: pendingVerification.userId,
                     name: pendingVerification.userName,
-                    timestamp: Date.now()
-                }));
+                    timestamp: Date.now(),
+                    rememberDevice: !!rememberDevice
+                });
+                if (rememberDevice) {
+                    window.localStorage.setItem('simplifiedLogin', loginPayload);
+                    window.sessionStorage.removeItem('simplifiedLogin');
+                } else {
+                    window.sessionStorage.setItem('simplifiedLogin', loginPayload);
+                    window.localStorage.removeItem('simplifiedLogin');
+                }
                 
                 // Route to assignments view
                 window.location.href = 'teamridepro_v3.html?view=assignments';
@@ -516,8 +525,9 @@
             try {
                 // Check if this is simplified login mode
                 if (simplifiedLoginInfo) {
-                // Clear simplified login info
+                // Clear simplified login info from both storages
                 window.sessionStorage.removeItem('simplifiedLogin');
+                window.localStorage.removeItem('simplifiedLogin');
                 simplifiedLoginInfo = null;
                 simplifiedLoginMode = null;
                 
@@ -1605,18 +1615,23 @@
             const viewParam = urlParams.get('view');
             const isSimplifiedView = viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach'; // Support old URLs too
             
-            // Check for existing simplified login in sessionStorage
+            // Check for existing simplified login in sessionStorage or localStorage (remember-device)
             try {
-                const stored = window.sessionStorage.getItem('simplifiedLogin');
+                const sessionStored = window.sessionStorage.getItem('simplifiedLogin');
+                const localStored = window.localStorage.getItem('simplifiedLogin');
+                const stored = sessionStored || localStored;
                 if (stored) {
                     simplifiedLoginInfo = JSON.parse(stored);
-                    // Check if stored info is still valid (within 24 hours)
                     const age = Date.now() - (simplifiedLoginInfo.timestamp || 0);
-                    if (age < 24 * 60 * 60 * 1000) {
+                    const maxAge = simplifiedLoginInfo.rememberDevice
+                        ? 30 * 24 * 60 * 60 * 1000   // 30 days for remembered devices
+                        : 24 * 60 * 60 * 1000;         // 24 hours for session-only
+                    if (age < maxAge) {
                         simplifiedLoginMode = simplifiedLoginInfo.type;
                     } else {
-                        // Expired, clear it
+                        // Expired, clear from both
                         window.sessionStorage.removeItem('simplifiedLogin');
+                        window.localStorage.removeItem('simplifiedLogin');
                         simplifiedLoginInfo = null;
                     }
                 }
