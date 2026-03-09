@@ -315,8 +315,19 @@ async function trackPollResponse(
   else console.log(`Poll response tracked: ride=${rideId}, user=${slackUserId}, attending=${attending}`);
 }
 
-/** Count active (non-archived) riders + coaches */
-async function getActiveRosterCount(supabase: ReturnType<typeof createClient>): Promise<number> {
+/** Count active (non-archived) riders, coaches, or both */
+async function getActiveRosterCount(
+  supabase: ReturnType<typeof createClient>,
+  role?: "rider" | "coach"
+): Promise<number> {
+  if (role === "rider") {
+    const { count } = await supabase.from("riders").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false");
+    return count ?? 0;
+  }
+  if (role === "coach") {
+    const { count } = await supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false");
+    return count ?? 0;
+  }
   const [{ count: riderCount }, { count: coachCount }] = await Promise.all([
     supabase.from("riders").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false"),
     supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false"),
@@ -324,7 +335,12 @@ async function getActiveRosterCount(supabase: ReturnType<typeof createClient>): 
   return (riderCount ?? 0) + (coachCount ?? 0);
 }
 
-/** Update every posted poll message for this ride with a live response tally */
+/** Determine role for a channel: coach channel → "coach", everything else → "rider" */
+function channelRole(channelId: string): "rider" | "coach" {
+  return channelId === SLACK_COACH_CHANNEL_ID ? "coach" : "rider";
+}
+
+/** Update every posted poll message for this ride with a role-filtered live tally */
 async function updatePollTally(
   supabase: ReturnType<typeof createClient>,
   rideId: number
@@ -340,27 +356,31 @@ async function updatePollTally(
     return;
   }
 
-  // Count responses
-  const { data: responses } = await supabase
-    .from("slack_poll_responses")
-    .select("attending")
-    .eq("ride_id", rideId);
-
-  const attendingCount = responses?.filter((r) => r.attending).length ?? 0;
-  const notAttendingCount = responses?.filter((r) => !r.attending).length ?? 0;
-  const totalRoster = await getActiveRosterCount(supabase);
-  const noResponseCount = Math.max(0, totalRoster - attendingCount - notAttendingCount);
-
   // Get ride info to rebuild the message blocks
   const ride = await getRideById(supabase, rideId);
   if (!ride) return;
-
   const timeStr = await getPracticeTime(supabase, ride.date);
-  const tally = { attending: attendingCount, notAttending: notAttendingCount, noResponse: noResponseCount };
-  const updatedPoll = buildPollMessage(rideId, ride.date, timeStr, tally);
 
-  // Update each posted poll message with the new tally
+  // Update each channel's poll with its own role-filtered tally
   for (const poll of polls) {
+    const role = channelRole(poll.channel_id);
+    const roleColumn = role === "coach" ? "coach_id" : "rider_id";
+
+    // Count only responses for this role (rider_id NOT NULL or coach_id NOT NULL)
+    const { data: responses } = await supabase
+      .from("slack_poll_responses")
+      .select("attending")
+      .eq("ride_id", rideId)
+      .not(roleColumn, "is", null);
+
+    const attendingCount = responses?.filter((r) => r.attending).length ?? 0;
+    const notAttendingCount = responses?.filter((r) => !r.attending).length ?? 0;
+    const totalRoster = await getActiveRosterCount(supabase, role);
+    const noResponseCount = Math.max(0, totalRoster - attendingCount - notAttendingCount);
+
+    const tally = { attending: attendingCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    const updatedPoll = buildPollMessage(rideId, ride.date, timeStr, tally);
+
     const res = await fetch("https://slack.com/api/chat.update", {
       method: "POST",
       headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
@@ -373,7 +393,7 @@ async function updatePollTally(
     });
     const data = await res.json();
     if (!data.ok) console.error(`chat.update error for ${poll.channel_id}:`, data.error);
-    else console.log(`Tally updated: ${attendingCount} yes, ${notAttendingCount} no, ${noResponseCount} pending`);
+    else console.log(`Tally updated (${role}): ${attendingCount} yes, ${notAttendingCount} no, ${noResponseCount} pending`);
   }
 }
 
@@ -644,12 +664,17 @@ serve(async (req) => {
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ skipped: true, reason: "No upcoming practice found" });
 
-      // Get all who HAVE responded for this ride
+      // Get responses for this ride, separated by role
       const { data: responses } = await supabase
         .from("slack_poll_responses")
-        .select("slack_user_id")
+        .select("rider_id, coach_id")
         .eq("ride_id", ride.id);
-      const respondedUsers = new Set(responses?.map((r) => r.slack_user_id) ?? []);
+      const respondedRiderIds = new Set<number>();
+      const respondedCoachIds = new Set<number>();
+      for (const r of responses ?? []) {
+        if (r.rider_id) respondedRiderIds.add(r.rider_id);
+        if (r.coach_id) respondedCoachIds.add(r.coach_id);
+      }
 
       // Build person → slack_user_id map from ALL historical responses
       const { data: pastResponses } = await supabase
@@ -668,15 +693,19 @@ serve(async (req) => {
         supabase.from("coaches").select("id").or("archived.is.null,archived.eq.false"),
       ]);
 
-      // Find non-responders who have a known Slack user ID
+      // Find non-responders who have a known Slack user ID (by role)
       const reminderTargets: string[] = [];
       for (const rider of riders ?? []) {
-        const slackId = riderSlackMap.get(rider.id);
-        if (slackId && !respondedUsers.has(slackId)) reminderTargets.push(slackId);
+        if (!respondedRiderIds.has(rider.id)) {
+          const slackId = riderSlackMap.get(rider.id);
+          if (slackId) reminderTargets.push(slackId);
+        }
       }
       for (const coach of coaches ?? []) {
-        const slackId = coachSlackMap.get(coach.id);
-        if (slackId && !respondedUsers.has(slackId)) reminderTargets.push(slackId);
+        if (!respondedCoachIds.has(coach.id)) {
+          const slackId = coachSlackMap.get(coach.id);
+          if (slackId) reminderTargets.push(slackId);
+        }
       }
 
       if (reminderTargets.length === 0) {
