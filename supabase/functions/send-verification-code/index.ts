@@ -68,6 +68,15 @@ serve(async (req) => {
         } }
       )
     } else {
+      // Normalize phone to E.164 for Twilio (assumes US numbers)
+      const toE164 = (phone: string): string => {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length === 10) return `+1${digits}`;
+        if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+        return `+${digits}`;
+      };
+      const toPhone = toE164(phoneOrEmail);
+
       // Send SMS via Twilio
       console.log('🔍 Checking Twilio credentials:', {
         hasAccountSID: !!TWILIO_ACCOUNT_SID,
@@ -115,7 +124,7 @@ serve(async (req) => {
           },
           body: new URLSearchParams({
             From: TWILIO_PHONE_NUMBER,
-            To: phoneOrEmail,
+            To: toPhone,
             Body: message
           })
         }
