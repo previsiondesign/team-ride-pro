@@ -773,8 +773,8 @@
             <div id="simplified-login-form" style="display: none;">
                 <form onsubmit="event.preventDefault(); handleSimplifiedLogin(); return false;" style="display: flex; flex-direction: column; gap: 12px;">
                     <div>
-                        <label class="field-label" for="simplified-login-input">Phone Number</label>
-                        <input type="tel" id="simplified-login-input" class="modal-field-input" placeholder="Enter your phone number" autocomplete="tel" required>
+                        <label class="field-label" for="simplified-login-input">Phone or Email</label>
+                        <input type="text" id="simplified-login-input" class="modal-field-input" placeholder="Enter phone number or email address" autocomplete="tel email" required>
                     </div>
                     <button type="submit" class="btn-small" style="width: 100%; margin-top: 8px;" id="simplified-login-button">Send Verification Code</button>
                 </form>

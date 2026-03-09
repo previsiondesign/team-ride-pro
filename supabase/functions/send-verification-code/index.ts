@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID')
 const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')
 const TWILIO_PHONE_NUMBER = Deno.env.get('TWILIO_PHONE_NUMBER')
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -47,25 +48,44 @@ serve(async (req) => {
     }
     
     if (isEmail) {
-      // Send email via Supabase's built-in email service
-      // For now, we'll use a simple console log (you can integrate with SendGrid, Resend, etc.)
-      console.log(`Email verification code for ${phoneOrEmail}: ${code}`)
-      
-      // TODO: Implement email sending
-      // Option 1: Use Supabase's email service (if configured)
-      // Option 2: Use a service like SendGrid, Resend, or AWS SES
-      // Option 3: Use Supabase's built-in auth email templates
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          method: 'email',
-          message: 'Code sent via email (check console for development)' 
-        }),
-        { headers: { 
+      // Send email via Resend
+      if (!RESEND_API_KEY) {
+        console.log(`[DEV MODE] Email verification code for ${phoneOrEmail}: ${code}`)
+        return new Response(
+          JSON.stringify({ success: true, method: 'email', devMode: true }),
+          { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        )
+      }
+
+      console.log('📧 Sending email via Resend to:', phoneOrEmail.substring(0, 5) + '***')
+
+      const emailResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
           'Content-Type': 'application/json',
-          ...corsHeaders
-        } }
+        },
+        body: JSON.stringify({
+          from: 'Tam High MTB Team <onboarding@resend.dev>',
+          to: [phoneOrEmail],
+          subject: 'Your Tam High MTB Team verification code',
+          text: `Your Tam High MTB Team verification code is: ${code}\n\nThis code is valid for 10 minutes.\n\nIf you didn't request this, you can ignore this email.`
+        })
+      })
+
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text()
+        console.error('❌ Resend API error:', errorText)
+        return new Response(
+          JSON.stringify({ error: `Failed to send email: ${errorText}` }),
+          { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        )
+      }
+
+      console.log('✅ Email sent successfully via Resend')
+      return new Response(
+        JSON.stringify({ success: true, method: 'email' }),
+        { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       )
     } else {
       // Normalize phone to E.164 for Twilio (assumes US numbers)
