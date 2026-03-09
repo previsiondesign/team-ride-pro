@@ -193,7 +193,12 @@
 
             const phoneOrEmail = input.value.trim();
             const isEmail = phoneOrEmail.includes('@');
-            
+
+            if (isEmail) {
+                showAuthError('Email login is not yet available. Please enter your phone number to receive a verification code.');
+                return;
+            }
+
             // Disable button and show loading
             if (button) {
                 button.disabled = true;
