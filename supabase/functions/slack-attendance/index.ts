@@ -1220,46 +1220,98 @@ async function postPollToChannel(
     else console.log(`Poll reference saved: ride=${rideId}, channel=${channelId}, ts=${data.ts}`);
   }
 
-  // --- Send ephemeral confirmations to riders who were auto-marked as attending ---
-  if (defaultAttendingSlackIds.length > 0) {
+  // --- Send ephemeral confirmations to people with pre-populated responses ---
+  // Riders: default-attending (collected above). Coaches: any pre-response (future marking, CSV import, absences).
+  const ephTargets: Array<{ slackId: string; status: string; source: string }> = [];
+
+  // Rider default-attending ephemerals
+  for (const slackId of defaultAttendingSlackIds) {
+    ephTargets.push({ slackId, status: "attending", source: "default" });
+  }
+
+  // Coach pre-response ephemerals — query all pre-populated responses for this ride
+  if (role === "coach") {
+    try {
+      const { data: coachPreResponses } = await supabase
+        .from("slack_poll_responses")
+        .select("slack_user_id, attendance_status")
+        .eq("ride_id", rideId)
+        .not("coach_id", "is", null);
+      for (const r of coachPreResponses ?? []) {
+        ephTargets.push({ slackId: r.slack_user_id, status: r.attendance_status, source: "pre-set" });
+      }
+    } catch (e) {
+      console.error("[postPoll] Error fetching coach pre-responses for ephemerals:", e);
+    }
+  }
+
+  if (ephTargets.length > 0) {
     const friendlyDate = formatDate(dateStr);
-    const ephBlocks = [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `:white_check_mark: *Your status: Attending (default)*\n*Practice:* ${friendlyDate}\nAll riders are marked attending by default. If you can't make it, please change your response below.`,
-        },
-      },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: { type: "plain_text", text: "Change Response", emoji: true },
-            action_id: "update_response",
-            value: `update_${rideId}`,
-          },
-        ],
-      },
-    ];
+    const statusDisplay = (status: string, source: string) => {
+      switch (status) {
+        case "attending":
+          return {
+            emoji: ":white_check_mark:",
+            label: source === "default" ? "Attending (default)" : "Attending",
+            note: source === "default"
+              ? "All riders are marked attending by default. If you can't make it, please change your response below."
+              : "This was pre-set from your earlier response. You can change it below if needed.",
+          };
+        case "absent":
+          return {
+            emoji: ":x:",
+            label: "Not attending",
+            note: "This was pre-set from your earlier response or a scheduled absence. You can change it below if needed.",
+          };
+        case "if_needed":
+          return {
+            emoji: ":raised_hand:",
+            label: "Can attend if needed",
+            note: "This was pre-set from your earlier response. You can change it below if needed.",
+          };
+        default:
+          return { emoji: ":grey_question:", label: status, note: "You can change your response below." };
+      }
+    };
+
     // Fire-and-forget — don't block poll posting on ephemeral delivery
-    for (const slackId of defaultAttendingSlackIds) {
+    for (const target of ephTargets) {
+      const display = statusDisplay(target.status, target.source);
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `${display.emoji} *Your status: ${display.label}*\n*Practice:* ${friendlyDate}\n${display.note}`,
+          },
+        },
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: "Change Response", emoji: true },
+              action_id: "update_response",
+              value: `update_${rideId}`,
+            },
+          ],
+        },
+      ];
       fetch("https://slack.com/api/chat.postEphemeral", {
         method: "POST",
         headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           channel: channelId,
-          user: slackId,
-          text: `Your status for ${friendlyDate}: Attending (default). Change your response if needed.`,
-          blocks: ephBlocks,
+          user: target.slackId,
+          text: `Your status for ${friendlyDate}: ${display.label}. Change your response if needed.`,
+          blocks,
         }),
       }).then(async (r) => {
         const d = await r.json();
-        if (!d.ok) console.error(`Ephemeral to ${slackId} failed:`, d.error);
-      }).catch((e) => console.error(`Ephemeral to ${slackId} error:`, e));
+        if (!d.ok) console.error(`Ephemeral to ${target.slackId} failed:`, d.error);
+      }).catch((e) => console.error(`Ephemeral to ${target.slackId} error:`, e));
     }
-    console.log(`[postPoll] Sent ephemeral confirmations to ${defaultAttendingSlackIds.length} default-attending rider(s)`);
+    console.log(`[postPoll] Sent ${ephTargets.length} ephemeral confirmation(s) for ride ${rideId} (${role} channel)`);
   }
 
   console.log(`Poll posted to ${channelId} for ride ${rideId}`);
