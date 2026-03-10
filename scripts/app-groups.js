@@ -448,14 +448,14 @@
             const assignmentNote = showAttendance && assignmentLabel
                 ? `<span class="attendance-note">${assignmentLabel}</span>`
                 : '';
-            const nameHtml = showAttendance
-                ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`
-                : `<strong class="truncate-name" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
-            // Rider Slack status tag — only ❌ shown for riders who changed to absent
+            // Rider Slack status tag — only ❌ shown for riders who changed to absent (placed inside name element)
             let riderSlackStatusTagHtml = '';
             if (slackPollStatus === 'absent') {
                 riderSlackStatusTagHtml = `<span class="slack-status-tag" title="Confirmed Absent" data-slack-status="absent" onclick="event.stopPropagation();showSlackStatusTooltip(this,'Confirmed Absent');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">\u274C</span>`;
             }
+            const nameHtml = showAttendance
+                ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${riderSlackStatusTagHtml}`
+                : `<strong class="truncate-name" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${riderSlackStatusTagHtml}`;
             const moveControlsHtml = showMoveControls && groupId !== null
                 ? `<div class="rider-move-controls">
                     <button class="rider-move-btn" onclick="moveRiderBetweenGroups(${groupId}, ${rider.id}, -1)" ${!canMoveUp ? 'disabled' : ''} title="Move to previous group (higher fitness)">▲</button>
@@ -529,7 +529,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        ${nameHtml}${riderSlackStatusTagHtml}
+                        ${nameHtml}
                         ${badgeHtml ? `<span class="badge-single">${badgeHtml}</span>` : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
@@ -661,28 +661,28 @@
                 : '';
             const showAssignment = !scheduledAbsent;
             const nameStyle = inGroupCoach ? ' style="color: #fff;"' : '';
-            let nameHtml;
-            if (isIfNeeded && showAttendance) {
-                // Italic, unbolded for "can attend if needed" coaches
-                nameHtml = `<em class="attendance-name truncate-name" data-attendance-toggle="true" style="font-weight:normal;font-style:italic;${inGroupCoach ? 'color:#fff;' : ''}" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</em>`;
-            } else if (showAttendance) {
-                nameHtml = `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
-            } else {
-                nameHtml = `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
-            }
-
             // Note icon for coaches with Slack comments (shown to the left of name)
             const noteIconHtml = slackNote
                 ? `<span class="coach-slack-note-icon" title="${escapeHtml(slackNote)}" onclick="event.stopPropagation();showSlackNotePopover(this,'${escapeHtml(slackNote).replace(/'/g, "\\'")}');" style="cursor:pointer;margin-right:3px;font-size:0.85em;flex-shrink:0;">📝</span>`
                 : '';
 
-            // Slack poll status tag (✅❌✋) — shown after the name
+            // Slack poll status tag (✅❌✋) — placed INSIDE the name element so it stays adjacent
             const _statusEmojiMap = { attending: '\u2705', absent: '\u274C', if_needed: '\u270B' };
             const _statusTooltipMap = { attending: 'Confirmed Attending', absent: 'Confirmed Absent', if_needed: 'Available if Needed' };
             let slackStatusTagHtml = '';
             if (slackPollStatus && _statusEmojiMap[slackPollStatus]) {
                 const safeTooltip = _statusTooltipMap[slackPollStatus];
                 slackStatusTagHtml = `<span class="slack-status-tag" title="${safeTooltip}" data-slack-status="${slackPollStatus}" onclick="event.stopPropagation();showSlackStatusTooltip(this,'${safeTooltip}');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">${_statusEmojiMap[slackPollStatus]}</span>`;
+            }
+
+            let nameHtml;
+            if (isIfNeeded && showAttendance) {
+                // Italic, unbolded for "can attend if needed" coaches
+                nameHtml = `<em class="attendance-name truncate-name" data-attendance-toggle="true" style="font-weight:normal;font-style:italic;${inGroupCoach ? 'color:#fff;' : ''}" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</em>${slackStatusTagHtml}`;
+            } else if (showAttendance) {
+                nameHtml = `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${slackStatusTagHtml}`;
+            } else {
+                nameHtml = `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${slackStatusTagHtml}`;
             }
 
             const bikeManual = coach.bikeManual !== false;
@@ -783,7 +783,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        <span class="coach-name-with-bike">${noteIconHtml}${nameHtml}${slackStatusTagHtml}${levelBadgeHtml}${bikeBadgeHtml}</span>
+                        <span class="coach-name-with-bike">${noteIconHtml}${nameHtml}${levelBadgeHtml}${bikeBadgeHtml}</span>
                         ${badgeHtml ? (compact ? `<span class="badge-single">${badgeHtml}</span>` : badgeHtml) : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
