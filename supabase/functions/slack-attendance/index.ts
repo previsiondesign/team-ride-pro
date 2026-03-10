@@ -200,11 +200,11 @@ async function getNextRide(supabase: ReturnType<typeof createClient>) {
   const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
 
   // Fetch the next several upcoming rides (we may need to skip non-practice rides)
-  // Filter out both cancelled and deleted rides
+  // Filter out both cancelled and deleted rides (handle null values — many rides have null instead of false)
   const { data: rides, error } = await supabase
     .from("rides")
     .select("id, date, available_riders, available_coaches, cancelled, deleted")
-    .eq("cancelled", false)
+    .or("cancelled.is.null,cancelled.eq.false")
     .or("deleted.is.null,deleted.eq.false")
     .gte("date", today)
     .order("date", { ascending: true })
@@ -241,11 +241,11 @@ async function getUpcomingPlannedRides(
     .single();
   const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
 
-  // Filter out both cancelled and deleted rides
+  // Filter out both cancelled and deleted rides (handle null values — many rides have null instead of false)
   const { data: rides, error } = await supabase
     .from("rides")
     .select("id, date")
-    .eq("cancelled", false)
+    .or("cancelled.is.null,cancelled.eq.false")
     .or("deleted.is.null,deleted.eq.false")
     .gte("date", today)
     .order("date", { ascending: true })
@@ -1294,11 +1294,11 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const today = new Date().toISOString().slice(0, 10);
 
-      // Fetch all future, non-deleted, non-cancelled rides
+      // Fetch all future, non-deleted, non-cancelled rides (handle null values)
       const { data: rides, error } = await supabase
         .from("rides")
         .select("id, date, created_at")
-        .eq("cancelled", false)
+        .or("cancelled.is.null,cancelled.eq.false")
         .or("deleted.is.null,deleted.eq.false")
         .gte("date", today)
         .order("date", { ascending: true })
@@ -1714,7 +1714,9 @@ serve(async (req) => {
         const [futProfile, settingsResult, ridesResult] = await Promise.all([
           getSlackProfile(slackUserId),
           supabase.from("season_settings").select("practices").eq("id", "current").single(),
-          supabase.from("rides").select("id, date").eq("cancelled", false)
+          supabase.from("rides").select("id, date")
+            .or("cancelled.is.null,cancelled.eq.false")
+            .or("deleted.is.null,deleted.eq.false")
             .gte("date", today).order("date", { ascending: true }).limit(50),
         ]);
 
@@ -1722,7 +1724,14 @@ serve(async (req) => {
         const practices: any[] = Array.isArray(settingsResult.data?.practices) ? settingsResult.data.practices : [];
         const allRides = ridesResult.data ?? [];
         const planned = practices.length > 0 ? allRides.filter(r => isPlannedPractice(r.date, practices)) : allRides;
-        const upcomingRides = planned.slice(1, 26); // Skip first (current practice), cap at 25
+        // Deduplicate: keep only the first ride per date
+        const seenDates2 = new Set<string>();
+        const dedupedPlanned = planned.filter(r => {
+          if (seenDates2.has(r.date)) return false;
+          seenDates2.add(r.date);
+          return true;
+        });
+        const upcomingRides = dedupedPlanned.slice(1, 26); // Skip first (current practice), cap at 25
 
         // Determine coach/rider
         let isCoach = false;
