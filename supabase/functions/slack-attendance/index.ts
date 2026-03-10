@@ -1240,31 +1240,48 @@ async function postPollToChannel(
   }
 
   // --- Step 4: Pre-populate ALL riders as "attending" by default (coaches are not defaulted) ---
-  // Adds ALL active riders to available_riders regardless of whether they have a Slack ID.
+  // Adds ALL active riders to available_riders in a SINGLE batch DB write (not one per rider).
   // Only creates slack_poll_responses entries for riders with known Slack IDs.
   const defaultAttendingSlackIds: string[] = [];
   if (role === "rider") {
     try {
       const { data: activeRiders } = await supabase.from("riders").select("id").or("archived.is.null,archived.eq.false");
 
-      let addedCount = 0;
+      // Build the complete list of rider IDs to add in one pass
+      const riderIdsToAdd: number[] = [];
       for (const rider of activeRiders ?? []) {
         if (absentPersonIds.has(rider.id)) continue; // scheduled absence — stay absent
         if (alreadyRespondedPersonIds.has(rider.id)) continue; // already has a response (future marking, etc.)
-
-        // ALWAYS add to available_riders — this is the key fix
-        await updateAttendance(supabase, rideId, rider.id, null, "add");
-        addedCount++;
-
-        // Create poll response entry only if we know their Slack ID
-        const slackUserId = personSlackMap.get(rider.id);
-        if (slackUserId) {
-          await trackPollResponse(supabase, rideId, slackUserId, rider.id, null, "attending");
-          defaultAttendingSlackIds.push(slackUserId);
-        }
+        riderIdsToAdd.push(rider.id);
       }
-      if (addedCount > 0) {
-        console.log(`[postPoll] Default-attending: ${addedCount} rider(s) added to available_riders (${defaultAttendingSlackIds.length} with poll responses) for ride ${rideId}`);
+
+      if (riderIdsToAdd.length > 0) {
+        // Single batch write: read ride once, add all riders, write once
+        const rideForBatch = await getRideById(supabase, rideId);
+        if (rideForBatch) {
+          const currentRiders: number[] = Array.isArray(rideForBatch.available_riders) ? [...rideForBatch.available_riders] : [];
+          const existingSet = new Set(currentRiders);
+          for (const id of riderIdsToAdd) {
+            if (!existingSet.has(id)) { currentRiders.push(id); existingSet.add(id); }
+          }
+          const { error } = await supabase.from("rides").update({ available_riders: currentRiders }).eq("id", rideId);
+          if (error) console.error("[postPoll] Batch rider update error:", error);
+          else console.log(`[postPoll] Default-attending: batch-added ${riderIdsToAdd.length} rider(s) to available_riders for ride ${rideId}`);
+        }
+
+        // Track poll responses for riders with known Slack IDs (can run in parallel)
+        const pollPromises: Promise<void>[] = [];
+        for (const riderId of riderIdsToAdd) {
+          const slackUserId = personSlackMap.get(riderId);
+          if (slackUserId) {
+            pollPromises.push(trackPollResponse(supabase, rideId, slackUserId, riderId, null, "attending"));
+            defaultAttendingSlackIds.push(slackUserId);
+          }
+        }
+        if (pollPromises.length > 0) {
+          await Promise.all(pollPromises);
+          console.log(`[postPoll] Tracked ${pollPromises.length} poll response(s) for default-attending riders`);
+        }
       }
     } catch (e) {
       console.error("[postPoll] Error pre-populating default rider attendance:", e);

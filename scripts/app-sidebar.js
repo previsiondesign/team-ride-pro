@@ -368,6 +368,9 @@
             _slackPollResponseMap = {};
         };
 
+        /** Expose poll response cache for cross-module access (wizard conflict checks) */
+        Object.defineProperty(window, '_slackPollResponseMap', { get: function() { return _slackPollResponseMap; } });
+
         /** Load Slack poll responses for a ride and cache them. Triggers re-render on first load.
          *  Also infers status from ride record arrays for coaches/riders without explicit poll responses
          *  (e.g. coaches imported via CSV, riders without Slack IDs). */

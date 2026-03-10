@@ -765,7 +765,29 @@
             renderRides();
         }
 
+        /** Check if a bulk attendance change would conflict with Slack poll responses */
+        function _hasSlackConflict(type, action) {
+            // type: 'riders' or 'coaches', action: 'attending' or 'absent'
+            if (typeof window.getSlackPollStatusForCoach !== 'function') return false;
+            const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
+            if (!ride) return false;
+            const people = type === 'riders' ? (data.riders || []).filter(r => !r.archived) : (data.coaches || []).filter(c => !c.archived);
+            const pollCache = window._slackPollResponseMap || {};
+            for (const p of people) {
+                const key = (type === 'riders' ? 'rider_' : 'coach_') + p.id;
+                const slackStatus = pollCache[key];
+                if (!slackStatus) continue;
+                // Conflict: marking attending but Slack says absent, or vice versa
+                if (action === 'attending' && slackStatus === 'absent') return true;
+                if (action === 'absent' && (slackStatus === 'attending' || slackStatus === 'if_needed')) return true;
+            }
+            return false;
+        }
+
         function markAllRidersAttending() {
+            if (_hasSlackConflict('riders', 'attending')) {
+                if (!confirm('This will alter attendance from what has been marked in Slack. Is this what you want?')) return;
+            }
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableRiders = (data.riders || []).filter(r => !r.archived).map(r => r.id);
@@ -774,6 +796,9 @@
         }
 
         function markAllCoachesAttending() {
+            if (_hasSlackConflict('coaches', 'attending')) {
+                if (!confirm('This will alter attendance from what has been marked in Slack. Is this what you want?')) return;
+            }
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableCoaches = (data.coaches || []).filter(c => !c.archived).map(c => c.id);
@@ -782,6 +807,9 @@
         }
 
         function markAllRidersAbsent() {
+            if (_hasSlackConflict('riders', 'absent')) {
+                if (!confirm('This will alter attendance from what has been marked in Slack. Is this what you want?')) return;
+            }
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableRiders = [];
@@ -790,6 +818,9 @@
         }
 
         function markAllCoachesAbsent() {
+            if (_hasSlackConflict('coaches', 'absent')) {
+                if (!confirm('This will alter attendance from what has been marked in Slack. Is this what you want?')) return;
+            }
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableCoaches = [];
