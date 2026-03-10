@@ -453,9 +453,10 @@
             if (slackPollStatus === 'absent') {
                 riderSlackStatusTagHtml = `<span class="slack-status-tag" title="Confirmed Absent" data-slack-status="absent" onclick="event.stopPropagation();showSlackStatusTooltip(this,'Confirmed Absent');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">\u274C</span>`;
             }
-            const nameHtml = showAttendance
-                ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${riderSlackStatusTagHtml}`
-                : `<strong class="truncate-name" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${riderSlackStatusTagHtml}`;
+            const riderNameInner = showAttendance
+                ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`
+                : `<strong class="truncate-name" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
+            const nameHtml = `<span class="name-status-wrap">${riderNameInner}${riderSlackStatusTagHtml}</span>`;
             const moveControlsHtml = showMoveControls && groupId !== null
                 ? `<div class="rider-move-controls">
                     <button class="rider-move-btn" onclick="moveRiderBetweenGroups(${groupId}, ${rider.id}, -1)" ${!canMoveUp ? 'disabled' : ''} title="Move to previous group (higher fitness)">▲</button>
@@ -675,15 +676,17 @@
                 slackStatusTagHtml = `<span class="slack-status-tag" title="${safeTooltip}" data-slack-status="${slackPollStatus}" onclick="event.stopPropagation();showSlackStatusTooltip(this,'${safeTooltip}');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">${_statusEmojiMap[slackPollStatus]}</span>`;
             }
 
-            let nameHtml;
+            // Wrap name + status tag in a container: the container gets flex:1 (pushes bike icons right),
+            // while internally name text and tag flow inline and stay adjacent.
+            let nameInner;
             if (isIfNeeded && showAttendance) {
-                // Italic, unbolded for "can attend if needed" coaches
-                nameHtml = `<em class="attendance-name truncate-name" data-attendance-toggle="true" style="font-weight:normal;font-style:italic;${inGroupCoach ? 'color:#fff;' : ''}" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</em>${slackStatusTagHtml}`;
+                nameInner = `<em class="attendance-name truncate-name" data-attendance-toggle="true" style="font-weight:normal;font-style:italic;${inGroupCoach ? 'color:#fff;' : ''}" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</em>`;
             } else if (showAttendance) {
-                nameHtml = `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${slackStatusTagHtml}`;
+                nameInner = `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
             } else {
-                nameHtml = `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>${slackStatusTagHtml}`;
+                nameInner = `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
             }
+            const nameHtml = `<span class="name-status-wrap">${nameInner}${slackStatusTagHtml}</span>`;
 
             const bikeManual = coach.bikeManual !== false;
             const bikeElectric = !!coach.bikeElectric;
