@@ -3132,9 +3132,11 @@
             white-space: nowrap;
         }
 
-        /* Slack status tag (✅❌✋) stays adjacent to the name, not pushed to the right */
-        .sidebar-list .card-body strong:has(+ .slack-status-tag),
-        .sidebar-list .card-body em:has(+ .slack-status-tag) {
+        /* Slack status tag (✅❌✋) stays adjacent to the name, not pushed to the right.
+           Only target direct children of card-body (rider cards). Coach cards use
+           .coach-name-with-bike wrapper which handles flex layout separately. */
+        .sidebar-list .card-body > strong:has(+ .slack-status-tag),
+        .sidebar-list .card-body > em:has(+ .slack-status-tag) {
             flex: 0 1 auto;
         }
         .slack-status-tag {
