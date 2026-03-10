@@ -1145,7 +1145,44 @@ async function postPollToChannel(
     console.error("[postPoll] Error pre-populating absences:", e);
   }
 
-  // Check for pre-responses (from future marking, CSV import, or absences above) for tally
+  // --- Pre-populate ALL riders as "attending" by default (coaches are not defaulted) ---
+  // Runs after absence pre-population so riders with scheduled absences stay "absent".
+  // Only creates entries for riders who don't already have a response for this ride.
+  if (role === "rider") {
+    try {
+      // Fetch active riders + their Slack IDs from past responses + who already responded
+      const [{ data: activeRiders }, { data: riderPastResponses }, { data: riderExisting }] = await Promise.all([
+        supabase.from("riders").select("id").or("archived.is.null,archived.eq.false"),
+        supabase.from("slack_poll_responses").select("rider_id, slack_user_id").not("rider_id", "is", null),
+        supabase.from("slack_poll_responses").select("slack_user_id, rider_id").eq("ride_id", rideId),
+      ]);
+      const riderSlackLookup = new Map<number, string>();
+      for (const r of riderPastResponses ?? []) {
+        if (r.rider_id) riderSlackLookup.set(r.rider_id, r.slack_user_id);
+      }
+      const alreadyRespondedRiders = new Set<number>();
+      for (const r of riderExisting ?? []) {
+        if (r.rider_id) alreadyRespondedRiders.add(r.rider_id);
+      }
+
+      let defaultAttending = 0;
+      for (const rider of activeRiders ?? []) {
+        if (alreadyRespondedRiders.has(rider.id)) continue; // already has a response (absence, future marking, etc.)
+        const slackUserId = riderSlackLookup.get(rider.id);
+        if (!slackUserId) continue; // no known Slack ID — can't create a poll response
+        await trackPollResponse(supabase, rideId, slackUserId, rider.id, null, "attending");
+        await updateAttendance(supabase, rideId, rider.id, null, "add");
+        defaultAttending++;
+      }
+      if (defaultAttending > 0) {
+        console.log(`[postPoll] Default-attending: ${defaultAttending} rider(s) for ride ${rideId}`);
+      }
+    } catch (e) {
+      console.error("[postPoll] Error pre-populating default rider attendance:", e);
+    }
+  }
+
+  // Check for pre-responses (from future marking, CSV import, absences, or rider defaults above) for tally
   const { data: preResponses } = await supabase
     .from("slack_poll_responses")
     .select("attendance_status")
