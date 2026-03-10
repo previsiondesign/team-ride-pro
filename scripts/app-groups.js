@@ -345,7 +345,8 @@
                 scheduledAbsent = false,
                 absenceReasonText = '',
                 absenceRecord = null,
-                sidebarCard = false
+                sidebarCard = false,
+                slackPollStatus = ''
             } = options;
 
             const riderFieldMapping = data.seasonSettings?.csvFieldMappings?.riders?.enabledFields || {};
@@ -450,6 +451,11 @@
             const nameHtml = showAttendance
                 ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`
                 : `<strong class="truncate-name" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
+            // Rider Slack status tag — only ❌ shown for riders who changed to absent
+            let riderSlackStatusTagHtml = '';
+            if (slackPollStatus === 'absent') {
+                riderSlackStatusTagHtml = `<span class="slack-status-tag" title="Confirmed Absent" data-slack-status="absent" onclick="event.stopPropagation();showSlackStatusTooltip(this,'Confirmed Absent');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">\u274C</span>`;
+            }
             const moveControlsHtml = showMoveControls && groupId !== null
                 ? `<div class="rider-move-controls">
                     <button class="rider-move-btn" onclick="moveRiderBetweenGroups(${groupId}, ${rider.id}, -1)" ${!canMoveUp ? 'disabled' : ''} title="Move to previous group (higher fitness)">▲</button>
@@ -523,7 +529,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        ${nameHtml}
+                        ${nameHtml}${riderSlackStatusTagHtml}
                         ${badgeHtml ? `<span class="badge-single">${badgeHtml}</span>` : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
@@ -551,7 +557,10 @@
                 sidebarCard = false,
                 inGroupCoach = false,
                 levelBadgeHtml = '',
-                ride = null
+                ride = null,
+                isIfNeeded = false,
+                slackNote = '',
+                slackPollStatus = ''
             } = options;
 
             const coachFieldMapping = data.seasonSettings?.csvFieldMappings?.coaches?.enabledFields || {};
@@ -652,9 +661,29 @@
                 : '';
             const showAssignment = !scheduledAbsent;
             const nameStyle = inGroupCoach ? ' style="color: #fff;"' : '';
-            const nameHtml = showAttendance
-                ? `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`
-                : `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
+            let nameHtml;
+            if (isIfNeeded && showAttendance) {
+                // Italic, unbolded for "can attend if needed" coaches
+                nameHtml = `<em class="attendance-name truncate-name" data-attendance-toggle="true" style="font-weight:normal;font-style:italic;${inGroupCoach ? 'color:#fff;' : ''}" title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</em>`;
+            } else if (showAttendance) {
+                nameHtml = `<strong class="attendance-name truncate-name" data-attendance-toggle="true"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
+            } else {
+                nameHtml = `<strong class="truncate-name"${nameStyle} title="${safeFullName}" data-full-name="${safeName}" data-short-name="${safeShortName}">${safeName}</strong>`;
+            }
+
+            // Note icon for coaches with Slack comments (shown to the left of name)
+            const noteIconHtml = slackNote
+                ? `<span class="coach-slack-note-icon" title="${escapeHtml(slackNote)}" onclick="event.stopPropagation();showSlackNotePopover(this,'${escapeHtml(slackNote).replace(/'/g, "\\'")}');" style="cursor:pointer;margin-right:3px;font-size:0.85em;flex-shrink:0;">📝</span>`
+                : '';
+
+            // Slack poll status tag (✅❌✋) — shown after the name
+            const _statusEmojiMap = { attending: '\u2705', absent: '\u274C', if_needed: '\u270B' };
+            const _statusTooltipMap = { attending: 'Confirmed Attending', absent: 'Confirmed Absent', if_needed: 'Available if Needed' };
+            let slackStatusTagHtml = '';
+            if (slackPollStatus && _statusEmojiMap[slackPollStatus]) {
+                const safeTooltip = _statusTooltipMap[slackPollStatus];
+                slackStatusTagHtml = `<span class="slack-status-tag" title="${safeTooltip}" data-slack-status="${slackPollStatus}" onclick="event.stopPropagation();showSlackStatusTooltip(this,'${safeTooltip}');" style="cursor:pointer;margin-left:3px;font-size:0.85em;flex-shrink:0;">${_statusEmojiMap[slackPollStatus]}</span>`;
+            }
 
             const bikeManual = coach.bikeManual !== false;
             const bikeElectric = !!coach.bikeElectric;
@@ -754,7 +783,7 @@
                     </div>` : ''}
                     ${checkboxHtml}
                     <div class="card-body">
-                        <span class="coach-name-with-bike">${nameHtml}${levelBadgeHtml}${bikeBadgeHtml}</span>
+                        <span class="coach-name-with-bike">${noteIconHtml}${nameHtml}${slackStatusTagHtml}${levelBadgeHtml}${bikeBadgeHtml}</span>
                         ${badgeHtml ? (compact ? `<span class="badge-single">${badgeHtml}</span>` : badgeHtml) : ''}
                         ${showAssignment ? assignmentNote : ''}
                     </div>
@@ -817,6 +846,10 @@
                 const assignmentLabel = isAvailable ? '' : 'Unavailable';
                 const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
                 const levelDisplay = levelRaw === 'N/A' ? 'N/A' : `L${parseInt(levelRaw || '1', 10)}`;
+                // Look up slack note, if-needed status, and Slack poll status for this coach
+                const slackNote = typeof window.getSlackNoteForCoach === 'function' ? window.getSlackNoteForCoach(coach.id) : '';
+                const isIfNeeded = ride.coachIfNeeded && ride.coachIfNeeded[coach.id] === true;
+                const slackPollStatus = typeof window.getSlackPollStatusForCoach === 'function' ? window.getSlackPollStatusForCoach(coach.id) : '';
                 const coachCard = renderCoachCardHtml(coach, group.id, role, {
                     showAttendance: true,
                     isAvailable,
@@ -829,6 +862,9 @@
                     visibleSkills: ride.visibleSkills || null,
                     inGroupCoach: true,
                     ride,
+                    slackNote,
+                    isIfNeeded,
+                    slackPollStatus,
                     levelBadgeHtml: (() => {
                         const lvl = parseInt(levelRaw || '1', 10);
                         let bg = '#777', fg = '#fff';
@@ -1569,6 +1605,59 @@
                     }
                 });
             }, 0);
+        }
+
+        // Show a small popover with a Slack note/comment (click to dismiss)
+        function showSlackNotePopover(iconEl, noteText) {
+            // Remove any existing popover
+            const existing = document.querySelector('.slack-note-popover');
+            if (existing) existing.remove();
+
+            const popover = document.createElement('div');
+            popover.className = 'slack-note-popover';
+            popover.textContent = noteText;
+            popover.style.cssText = 'position:absolute;z-index:9999;background:#fff8e1;border:1px solid #f9a825;border-radius:6px;padding:6px 10px;font-size:12px;max-width:220px;box-shadow:0 2px 8px rgba(0,0,0,0.15);word-wrap:break-word;';
+
+            document.body.appendChild(popover);
+
+            // Position near the icon
+            const rect = iconEl.getBoundingClientRect();
+            popover.style.left = (rect.left + window.scrollX) + 'px';
+            popover.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+
+            // Dismiss on click-outside
+            const dismiss = (e) => {
+                if (!popover.contains(e.target) && e.target !== iconEl) {
+                    popover.remove();
+                    document.removeEventListener('click', dismiss, true);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss, true), 10);
+        }
+
+        // Show a tooltip for Slack poll status tags (click to dismiss)
+        function showSlackStatusTooltip(iconEl, tooltipText) {
+            const existing = document.querySelector('.slack-status-tooltip');
+            if (existing) existing.remove();
+
+            const tip = document.createElement('div');
+            tip.className = 'slack-status-tooltip';
+            tip.textContent = tooltipText;
+            tip.style.cssText = 'position:absolute;z-index:9999;background:#e8f5e9;border:1px solid #4caf50;border-radius:6px;padding:6px 10px;font-size:12px;max-width:180px;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+
+            document.body.appendChild(tip);
+
+            const rect = iconEl.getBoundingClientRect();
+            tip.style.left = (rect.left + window.scrollX) + 'px';
+            tip.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+
+            const dismiss = (e) => {
+                if (!tip.contains(e.target) && e.target !== iconEl) {
+                    tip.remove();
+                    document.removeEventListener('click', dismiss, true);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss, true), 10);
         }
 
         // Hamburger menu on rider/coach cards within groups

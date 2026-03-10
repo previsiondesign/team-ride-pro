@@ -802,6 +802,89 @@
             }
         }
 
+        // ===== SUPABASE REALTIME: Live attendance updates from Slack =====
+        let _realtimeChannel = null;
+
+        function setupRealtimeSubscriptions() {
+            const client = getSupabaseClient();
+            if (!client) return;
+
+            // Clean up any existing subscription
+            if (_realtimeChannel) {
+                try { client.removeChannel(_realtimeChannel); } catch (e) { /* ignore */ }
+                _realtimeChannel = null;
+            }
+
+            // Subscribe to rides table changes (attendance arrays, groups) and poll responses
+            _realtimeChannel = client.channel('attendance-live')
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'rides'
+                }, handleRealtimeRideChange)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'slack_poll_responses'
+                }, handleRealtimePollResponseChange)
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[Realtime] Subscribed to attendance changes');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.warn('[Realtime] Subscription error — will retry automatically');
+                    }
+                });
+        }
+
+        function handleRealtimeRideChange(payload) {
+            if (!payload.new) return;
+            const rideId = payload.new.id;
+            // Only process changes for the currently viewed ride
+            if (rideId !== data.currentRide) return;
+
+            const localRide = data.rides ? data.rides.find(r => r.id === rideId) : null;
+            if (!localRide) return;
+
+            const newCoaches = payload.new.available_coaches || [];
+            const newRiders = payload.new.available_riders || [];
+            const newGroups = payload.new.groups;
+
+            // Compare to avoid echo from own saves
+            const coachesChanged = JSON.stringify(localRide.availableCoaches || []) !== JSON.stringify(newCoaches);
+            const ridersChanged = JSON.stringify(localRide.availableRiders || []) !== JSON.stringify(newRiders);
+            const groupsChanged = newGroups !== undefined && JSON.stringify(localRide.groups || []) !== JSON.stringify(newGroups || []);
+
+            if (coachesChanged || ridersChanged || groupsChanged) {
+                console.log(`[Realtime] Ride ${rideId} updated: coaches=${coachesChanged}, riders=${ridersChanged}, groups=${groupsChanged}`);
+                if (coachesChanged) localRide.availableCoaches = newCoaches;
+                if (ridersChanged) localRide.availableRiders = newRiders;
+                if (groupsChanged && newGroups !== undefined) localRide.groups = Array.isArray(newGroups) ? newGroups : [];
+
+                // Re-render the UI
+                if (typeof renderSidebars === 'function') renderSidebars();
+                if (typeof renderAssignments === 'function') renderAssignments(localRide);
+            }
+        }
+
+        function handleRealtimePollResponseChange(payload) {
+            if (!payload.new) return;
+            const rideId = payload.new.ride_id;
+            // Only process changes for the currently viewed ride
+            if (rideId !== data.currentRide) return;
+
+            const coachId = payload.new.coach_id;
+            const riderId = payload.new.rider_id;
+            const status = payload.new.attendance_status;
+
+            // Update the in-memory poll response cache
+            if (typeof window._updateSlackPollCache === 'function') {
+                window._updateSlackPollCache(coachId, riderId, status);
+            }
+
+            // Re-render sidebars to show updated status tags
+            if (typeof renderSidebars === 'function') renderSidebars();
+        }
+
         // Load data from Supabase (authenticated users only - no localStorage fallback)
         async function loadDataFromSupabase() {
             const client = getSupabaseClient();
@@ -1047,6 +1130,9 @@
                         if (hdr) hdr.style.visibility = 'visible';
                     }
                 }
+                // Set up Supabase Realtime subscriptions for live attendance updates from Slack
+                setupRealtimeSubscriptions();
+
             } catch (error) {
                 console.error('Error loading from Supabase:', error);
                 // Do NOT fallback to localStorage - show error instead

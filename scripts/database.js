@@ -864,6 +864,38 @@ async function setRiderAvailability(rideId, riderId, available) {
     return data;
 }
 
+// ============ SLACK NOTES (coach/rider comments from Slack attendance polls) ============
+
+async function getSlackNotesForRide(rideId) {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from('ride_rider_slack_notes')
+        .select('rider_id, coach_id, note')
+        .eq('ride_id', rideId);
+    if (error) {
+        console.error('Error fetching slack notes:', error);
+        return [];
+    }
+    return data || [];
+}
+
+// ============ SLACK POLL RESPONSES (for status tags in planner) ============
+
+async function getSlackPollResponsesForRide(rideId) {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from('slack_poll_responses')
+        .select('rider_id, coach_id, attendance_status')
+        .eq('ride_id', rideId);
+    if (error) {
+        console.error('Error fetching slack poll responses:', error);
+        return [];
+    }
+    return data || [];
+}
+
 // ============ COLOR NAMES (for group color names feature) ============
 
 async function getColorNames() {

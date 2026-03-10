@@ -638,6 +638,8 @@
             data.currentRide = rideId;
             saveData();
             practicePlannerView = 'planner';
+            // Invalidate Slack poll cache so it reloads for the new ride
+            if (typeof window._invalidateSlackPollCache === 'function') window._invalidateSlackPollCache();
             loadCurrentRide();
         }
 
@@ -5162,7 +5164,20 @@
                     }
                     return isValid;
                 });
-                
+
+                // Split coaches into confirmed vs "if needed" pools
+                // "If needed" coaches only get assigned when required for group compliance
+                const coachIfNeeded = ride.coachIfNeeded || {};
+                const confirmedCoaches = availableCoaches.filter(coach => !coachIfNeeded[coach.id]);
+                const ifNeededCoaches = availableCoaches.filter(coach => !!coachIfNeeded[coach.id]);
+                if (ifNeededCoaches.length > 0) {
+                    debugLines.push(`=== COACH "IF NEEDED" SPLIT ===`);
+                    debugLines.push(`Confirmed coaches: ${confirmedCoaches.length} (${confirmedCoaches.map(c => c.name).join(', ')})`);
+                    debugLines.push(`If-needed coaches: ${ifNeededCoaches.length} (${ifNeededCoaches.map(c => c.name).join(', ')})`);
+                    debugLines.push(`If-needed coaches will only be assigned if required for group compliance.`);
+                    debugLines.push('');
+                }
+
                 // Normalize IDs for consistency
                 console.log('🔴 AUTO-ASSIGN: ride.availableRiders BEFORE normalization:', {
                     length: ride.availableRiders.length,
@@ -5313,10 +5328,11 @@
                 debugLines.push('=== STEP 1: VALIDATE REQUIREMENTS ===');
                 
                 // Get Level 2/3 coaches (eligible leaders) - but not required
-                // Use coachesToRedistribute if resizing, otherwise use all availableCoaches
-                const coachesForAssignment = targetNumGroups !== null && ride.groups && ride.groups.length > 0 
-                    ? coachesToRedistribute 
-                    : availableCoaches;
+                // Use coachesToRedistribute if resizing, otherwise use confirmed coaches
+                // "If needed" coaches are excluded from initial assignment — they'll be pulled in only for compliance
+                const coachesForAssignment = targetNumGroups !== null && ride.groups && ride.groups.length > 0
+                    ? coachesToRedistribute.filter(c => !coachIfNeeded[c.id])
+                    : confirmedCoaches;
                     
                 const eligibleLeaders = coachesForAssignment.filter(coach => {
                     const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
@@ -6065,6 +6081,66 @@
                     }
                 });
                 
+                // STEP 5: Pull "if needed" coaches for compliance gaps
+                if (ifNeededCoaches.length > 0) {
+                    debugLines.push('');
+                    debugLines.push('=== STEP 5: CHECK IF "IF NEEDED" COACHES ARE REQUIRED ===');
+                    const remainingIfNeeded = [...ifNeededCoaches];
+                    let pulledCount = 0;
+
+                    for (const info of groupInfo) {
+                        if (remainingIfNeeded.length === 0) break;
+                        const group = info.group;
+                        const coachCount = countGroupCoaches(group);
+
+                        // Check compliance gaps:
+                        // 1. Group has no leader (needs Level 2+)
+                        const hasLeader = !!group.coaches.leader;
+                        if (!hasLeader) {
+                            const ifNeededLeader = remainingIfNeeded.find(c => {
+                                const lvl = parseInt(c.coachingLicenseLevel || c.level || '1', 10);
+                                return Number.isFinite(lvl) && lvl >= minLeaderLevel;
+                            });
+                            if (ifNeededLeader) {
+                                group.coaches.leader = ifNeededLeader.id;
+                                assignedCoachIds.add(ifNeededLeader.id);
+                                remainingIfNeeded.splice(remainingIfNeeded.indexOf(ifNeededLeader), 1);
+                                pulledCount++;
+                                debugLines.push(`  Pulled ${ifNeededLeader.name} as Leader for ${group.label} (no leader)`);
+                                continue;
+                            }
+                        }
+
+                        // 2. Group is below minimum coaches
+                        if (coachCount < 1) {
+                            const ifNeededCoach = remainingIfNeeded[0];
+                            if (ifNeededCoach) {
+                                if (!group.coaches.leader) {
+                                    group.coaches.leader = ifNeededCoach.id;
+                                } else if (!group.coaches.sweep) {
+                                    group.coaches.sweep = ifNeededCoach.id;
+                                } else if (!group.coaches.roam) {
+                                    group.coaches.roam = ifNeededCoach.id;
+                                } else {
+                                    if (!Array.isArray(group.coaches.extraRoam)) group.coaches.extraRoam = [];
+                                    group.coaches.extraRoam.push(ifNeededCoach.id);
+                                }
+                                assignedCoachIds.add(ifNeededCoach.id);
+                                remainingIfNeeded.splice(0, 1);
+                                pulledCount++;
+                                debugLines.push(`  Pulled ${ifNeededCoach.name} for ${group.label} (below minimum coaches)`);
+                            }
+                        }
+                    }
+
+                    if (pulledCount === 0) {
+                        debugLines.push(`  No compliance gaps found — "if needed" coaches remain unassigned.`);
+                    } else {
+                        debugLines.push(`  Pulled ${pulledCount} "if needed" coach(es) for compliance.`);
+                    }
+                    debugLines.push('');
+                }
+
                 // Any coaches that weren't assigned remain in availableCoaches (will show in unassigned palette)
                 const unassignedCoaches = availableCoaches.filter(coach => !assignedCoachIds.has(coach.id));
                 if (unassignedCoaches.length > 0) {

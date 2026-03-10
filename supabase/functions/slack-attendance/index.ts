@@ -291,7 +291,7 @@ function isPlannedPractice(dateStr: string, practices: any[]): boolean {
 async function getRideById(supabase: ReturnType<typeof createClient>, rideId: number) {
   const { data, error } = await supabase
     .from("rides")
-    .select("id, date, available_riders, available_coaches, cancelled")
+    .select("id, date, available_riders, available_coaches, cancelled, groups, published_groups")
     .eq("id", rideId)
     .single();
   if (error) { console.error("Error fetching ride:", error); return null; }
@@ -509,10 +509,47 @@ async function updateAttendance(
     else if (action === "remove" && availableCoaches.includes(coachId)) { availableCoaches.splice(availableCoaches.indexOf(coachId), 1); changed = true; }
   }
   console.log(`[updateAttendance] After: riders=${JSON.stringify(availableRiders)}, coaches=${JSON.stringify(availableCoaches)}, changed=${changed}`);
-  if (changed) {
-    const { error } = await supabase.from("rides").update({ available_riders: availableRiders, available_coaches: availableCoaches }).eq("id", rideId);
+
+  // When removing someone, also remove them from group assignments (mirrors frontend toggleCoachAvailability)
+  // deno-lint-ignore no-explicit-any
+  let groups: any[] = Array.isArray(ride.groups) ? ride.groups.map((g: any) => ({ ...g })) : [];
+  let groupsChanged = false;
+  if (action === "remove") {
+    for (const g of groups) {
+      if (riderId && Array.isArray(g.riders)) {
+        const before = g.riders.length;
+        g.riders = g.riders.filter((id: number) => id !== riderId);
+        if (g.riders.length !== before) groupsChanged = true;
+      }
+      if (coachId && g.coaches) {
+        const c = { ...g.coaches };
+        if (c.leader === coachId) { c.leader = null; groupsChanged = true; }
+        if (c.sweep === coachId) { c.sweep = null; groupsChanged = true; }
+        if (c.roam === coachId) { c.roam = null; groupsChanged = true; }
+        if (Array.isArray(c.extraRoam)) {
+          const before = c.extraRoam.length;
+          c.extraRoam = c.extraRoam.filter((id: number) => id !== coachId);
+          if (c.extraRoam.length !== before) groupsChanged = true;
+        }
+        g.coaches = c;
+      }
+    }
+    if (groupsChanged) {
+      console.log(`[updateAttendance] Removed person from group assignments`);
+    }
+  }
+
+  if (changed || groupsChanged) {
+    const updatePayload: Record<string, unknown> = {
+      available_riders: availableRiders,
+      available_coaches: availableCoaches,
+    };
+    if (groupsChanged) {
+      updatePayload.groups = groups;
+    }
+    const { error } = await supabase.from("rides").update(updatePayload).eq("id", rideId);
     if (error) { console.error("[updateAttendance] DB error:", error); return false; }
-    console.log(`[updateAttendance] DB write successful`);
+    console.log(`[updateAttendance] DB write successful (groupsChanged=${groupsChanged})`);
   } else {
     console.log(`[updateAttendance] No change needed (already in desired state)`);
   }
@@ -1869,6 +1906,18 @@ serve(async (req) => {
                 COMMENT ON COLUMN rides.rider_slack_notes IS 'Per-rider notes from Slack attendance (keyed by slack_user_id).';`,
           check: `SELECT column_name FROM information_schema.columns WHERE table_name = 'rides' AND column_name = 'rider_slack_notes'`,
         },
+        {
+          name: "ENABLE_REALTIME_FOR_ATTENDANCE",
+          sql: `ALTER PUBLICATION supabase_realtime ADD TABLE rides;
+                ALTER PUBLICATION supabase_realtime ADD TABLE slack_poll_responses;`,
+          check: `SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'slack_poll_responses'`,
+        },
+        {
+          name: "RLS_SLACK_POLL_RESPONSES_SELECT",
+          sql: `ALTER TABLE slack_poll_responses ENABLE ROW LEVEL SECURITY;
+                CREATE POLICY "Allow authenticated read on slack_poll_responses" ON slack_poll_responses FOR SELECT TO authenticated USING (true);`,
+          check: `SELECT policyname FROM pg_policies WHERE tablename = 'slack_poll_responses' AND policyname = 'Allow authenticated read on slack_poll_responses'`,
+        },
       ];
 
       // Connect to Postgres directly (SUPABASE_DB_URL is auto-injected in edge functions)
@@ -2410,6 +2459,39 @@ serve(async (req) => {
           } catch (e) {
             console.error("Error posting ephemeral confirmation:", e);
           }
+        }
+
+        // Post-publish change notice: if groups are already published, DM the person
+        if (ride?.published_groups === true) {
+          (async () => {
+            try {
+              const openRes = await fetch("https://slack.com/api/conversations.open", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ users: slackUserId }),
+              });
+              const openData = await openRes.json();
+              if (!openData.ok) { console.error("[POST-PUBLISH] conversations.open error:", openData.error); return; }
+
+              const friendlyDate = formatDate(ride.date);
+              await fetch("https://slack.com/api/chat.postMessage", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  channel: openData.channel.id,
+                  text: "Ride groups for this practice have already been set and distributed, please contact the head coach directly to advise them of this change.",
+                  blocks: [{
+                    type: "section",
+                    text: {
+                      type: "mrkdwn",
+                      text: `:warning: *Ride groups for ${friendlyDate} have already been set and distributed.*\nPlease contact the head coach directly to advise them of this change.`,
+                    },
+                  }],
+                }),
+              });
+              console.log(`[POST-PUBLISH] Sent change notice DM to ${slackUserId} for ride ${rideId}`);
+            } catch (e) { console.error("[POST-PUBLISH] Error sending change notice:", e); }
+          })().catch(e => console.error("[POST-PUBLISH] Unhandled:", e));
         }
 
         return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });

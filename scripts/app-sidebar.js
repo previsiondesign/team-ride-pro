@@ -319,6 +319,74 @@
             renderSidebars();
         }
 
+        // Slack notes cache — loaded per ride for coach note icons
+        let _slackNotesMap = {};   // { "coach_<id>": "note text", "rider_<id>": "note text" }
+        let _slackNotesRideId = null;
+
+        /** Global accessor so app-groups.js can look up notes for in-group coaches */
+        window.getSlackNoteForCoach = function(coachId) {
+            return _slackNotesMap ? (_slackNotesMap['coach_' + coachId] || '') : '';
+        };
+
+        /** Load Slack notes for a ride and cache them. Triggers re-render when loaded. */
+        function loadSlackNotesForRide(rideId) {
+            if (_slackNotesRideId === rideId) return; // already loaded
+            _slackNotesRideId = rideId;
+            _slackNotesMap = {};
+            if (typeof getSlackNotesForRide === 'function') {
+                getSlackNotesForRide(rideId).then(notes => {
+                    const map = {};
+                    for (const n of notes) {
+                        if (n.coach_id) map['coach_' + n.coach_id] = n.note;
+                        if (n.rider_id) map['rider_' + n.rider_id] = n.note;
+                    }
+                    _slackNotesMap = map;
+                    // Re-render sidebars so note icons appear
+                    if (sidebarsVisible) renderSidebars();
+                }).catch(e => console.error('Error loading slack notes:', e));
+            }
+        }
+
+        // Slack poll response cache — loaded per ride for status tag icons (✅❌✋)
+        let _slackPollResponseMap = {};   // { "coach_<id>": "attending"|"absent"|"if_needed", "rider_<id>": ... }
+        let _slackPollResponseRideId = null;
+
+        /** Global accessor so app-groups.js can look up poll response status */
+        window.getSlackPollStatusForCoach = function(coachId) {
+            return _slackPollResponseMap ? (_slackPollResponseMap['coach_' + coachId] || '') : '';
+        };
+
+        /** Global accessor for realtime handler to update the cache without full reload */
+        window._updateSlackPollCache = function(coachId, riderId, status) {
+            if (coachId) _slackPollResponseMap['coach_' + coachId] = status;
+            if (riderId) _slackPollResponseMap['rider_' + riderId] = status;
+        };
+
+        /** Invalidate cache so next renderSidebars() reloads from DB */
+        window._invalidateSlackPollCache = function() {
+            _slackPollResponseRideId = null;
+            _slackPollResponseMap = {};
+        };
+
+        /** Load Slack poll responses for a ride and cache them. Triggers re-render on first load. */
+        function loadSlackPollResponsesForRide(rideId) {
+            if (_slackPollResponseRideId === rideId) return; // already loaded
+            _slackPollResponseRideId = rideId;
+            _slackPollResponseMap = {};
+            if (typeof getSlackPollResponsesForRide === 'function') {
+                getSlackPollResponsesForRide(rideId).then(responses => {
+                    const map = {};
+                    for (const r of responses) {
+                        if (r.coach_id) map['coach_' + r.coach_id] = r.attendance_status;
+                        if (r.rider_id) map['rider_' + r.rider_id] = r.attendance_status;
+                    }
+                    _slackPollResponseMap = map;
+                    // Re-render sidebars so status tags appear
+                    if (sidebarsVisible) renderSidebars();
+                }).catch(e => console.error('Error loading slack poll responses:', e));
+            }
+        }
+
         let _sidebarResizeTimer;
         window.addEventListener('resize', () => {
             clearTimeout(_sidebarResizeTimer);
@@ -638,6 +706,10 @@
             const ride = data.rides ? data.rides.find(r => r.id === data.currentRide) : null;
             if (!ride || !sidebarsVisible) return;
 
+            // Load Slack notes and poll responses for this ride (async, cached — triggers re-render on first load)
+            loadSlackNotesForRide(ride.id);
+            loadSlackPollResponsesForRide(ride.id);
+
             updateSidebarSortOptions();
 
             // Ensure attendance defaults
@@ -765,12 +837,30 @@
                 const rideDate = ride.date || '';
                 const absenceStatus = rideDate ? isScheduledAbsent(personType, normalizedId, rideDate) : { absent: false, reason: '' };
 
+                // Determine "if needed" status and Slack note for coaches
+                const isIfNeeded = type === 'coaches' && ride.coachIfNeeded && ride.coachIfNeeded[normalizedId] === true;
+                const slackNote = (type === 'coaches' && _slackNotesMap)
+                    ? (_slackNotesMap['coach_' + normalizedId] || '')
+                    : '';
+
+                // Slack poll status: coaches get all 3 tags; riders only get ❌ (absent changed from default)
+                let slackPollStatus = '';
+                if (type === 'coaches' && _slackPollResponseMap) {
+                    slackPollStatus = _slackPollResponseMap['coach_' + normalizedId] || '';
+                } else if (type === 'riders' && _slackPollResponseMap) {
+                    const riderStatus = _slackPollResponseMap['rider_' + normalizedId] || '';
+                    if (riderStatus === 'absent') slackPollStatus = 'absent';
+                }
+
                 const entry = {
                     item,
                     isAvailable,
                     isAssigned,
                     assignedGroupLabel,
                     normalizedId,
+                    isIfNeeded,
+                    slackNote,
+                    slackPollStatus,
                     scheduledAbsent: absenceStatus.absent,
                     absenceReason: absenceStatus.reason || '',
                     absenceRecord: absenceStatus.absence || null,
@@ -886,7 +976,8 @@
                             absenceReasonText: entry.absenceReason || '',
                             absenceRecord: entry.absenceRecord || null,
                             visibleSkills: sidebarVisibleSkills,
-                            sidebarCard: true
+                            sidebarCard: true,
+                            slackPollStatus: entry.slackPollStatus || ''
                         });
                     } else {
                         const assignment = coachAssignmentMap[entry.normalizedId];
@@ -904,7 +995,10 @@
                             absenceRecord: entry.absenceRecord || null,
                             visibleSkills: sidebarVisibleSkills,
                             sidebarCard: true,
-                            ride
+                            ride,
+                            isIfNeeded: entry.isIfNeeded || false,
+                            slackNote: entry.slackNote || '',
+                            slackPollStatus: entry.slackPollStatus || ''
                         });
                     }
                     return prefix + cardHtml;
@@ -1001,6 +1095,35 @@
                     const id = parseInt(idStr, 10);
                     const isAvailable = e.target.checked;
                     if (!Number.isFinite(id)) return;
+
+                    // Slack status conflict warning (coaches only, skip "if_needed")
+                    if (type === 'coaches') {
+                        const slackStatus = _slackPollResponseMap ? (_slackPollResponseMap['coach_' + id] || '') : '';
+                        if (slackStatus && slackStatus !== 'if_needed') {
+                            const isConflict = (!isAvailable && slackStatus === 'attending')
+                                            || (isAvailable && slackStatus === 'absent');
+                            if (isConflict) {
+                                const coach = (data.coaches || []).find(c => c.id === id);
+                                let personName = 'This coach';
+                                if (coach) {
+                                    if (coach.nickname && coach.nicknameMode === 'firstName') {
+                                        personName = `${coach.nickname} ${coach.lastName || ''}`.trim();
+                                    } else if (coach.nickname) {
+                                        personName = coach.nickname;
+                                    } else {
+                                        personName = coach.name || 'This coach';
+                                    }
+                                }
+                                const msg = slackStatus === 'attending'
+                                    ? `${personName} has confirmed their attendance in Slack, do you want to mark them absent?`
+                                    : `${personName} has confirmed their absence in Slack, do you want to mark them as attending?`;
+                                if (!confirm(msg)) {
+                                    e.target.checked = !isAvailable; // revert checkbox
+                                    return;
+                                }
+                            }
+                        }
+                    }
 
                     // Check for scheduled absence when trying to mark as attending
                     if (isAvailable) {
