@@ -387,7 +387,7 @@
                     // Coaches NOT in available_coaches and not in poll responses → "absent" (e.g. CSV "N" import)
                     const ride = data.rides ? data.rides.find(r => r.id === rideId) : null;
                     if (ride) {
-                        const availCoaches = Array.isArray(ride.available_coaches) ? ride.available_coaches : [];
+                        const availCoaches = Array.isArray(ride.availableCoaches) ? ride.availableCoaches : [];
                         const availCoachSet = new Set(availCoaches.map(id => Number(id)));
                         // Fill in coaches without poll responses
                         const allCoaches = data.coaches || [];
