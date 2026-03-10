@@ -404,6 +404,88 @@ function formatNowTimestamp(): string {
   return `${get("weekday")} ${get("month")}/${get("day")} @ ${get("hour")}:${get("minute")}${get("dayPeriod").toLowerCase()}`;
 }
 
+/** Get current date, hour, and minute in Pacific time */
+function getCurrentPacificTime(): { date: string; hour: number; minute: number } {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "numeric", minute: "2-digit", hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? "0";
+  const year = get("year");
+  const month = get("month").padStart(2, "0");
+  const day = get("day").padStart(2, "0");
+  let hour = parseInt(get("hour"), 10);
+  if (hour === 24) hour = 0; // Intl can return 24 for midnight in hour12:false
+  return { date: `${year}-${month}-${day}`, hour, minute: parseInt(get("minute"), 10) };
+}
+
+/**
+ * Calculate the ideal reminder time for a practice, counting back `leadHours`
+ * of "notification window" time (9 AM – 8 PM Pacific). If the practice starts
+ * outside the window, the effective start is clamped to the nearest window edge.
+ *
+ * Returns { date: "YYYY-MM-DD", hour: number, minute: number } in Pacific time.
+ * If no practice time is available, falls back to 8 AM on practice day.
+ */
+function calculateReminderTime(
+  practiceDate: string,
+  practiceStartTime: string | null,
+  leadHours: number = 4
+): { date: string; hour: number; minute: number } {
+  const WINDOW_START = 9;  // 9 AM
+  const WINDOW_END = 20;   // 8 PM
+
+  // Fallback: no practice time → 8 AM on practice day (preserves legacy behavior)
+  if (!practiceStartTime) {
+    return { date: practiceDate, hour: 8, minute: 0 };
+  }
+
+  // Parse "HH:MM" → decimal hours (e.g., "15:30" → 15.5)
+  const [hStr, mStr] = practiceStartTime.split(":");
+  const practiceHour = parseInt(hStr, 10);
+  const practiceMinute = parseInt(mStr || "0", 10);
+  const practiceDecimal = practiceHour + practiceMinute / 60;
+
+  // Determine effective start date and hour within the notification window
+  let effectiveDate = practiceDate;
+  let effectiveDecimal: number;
+
+  if (practiceDecimal >= WINDOW_END) {
+    // Practice starts at or after 8 PM → clamp to 8 PM same day
+    effectiveDecimal = WINDOW_END;
+  } else if (practiceDecimal < WINDOW_START) {
+    // Practice starts before 9 AM → clamp to 8 PM previous day
+    const d = new Date(practiceDate + "T12:00:00");
+    d.setDate(d.getDate() - 1);
+    effectiveDate = d.toISOString().slice(0, 10);
+    effectiveDecimal = WINDOW_END;
+  } else {
+    // Practice is within the window
+    effectiveDecimal = practiceDecimal;
+  }
+
+  // Subtract leadHours within notification windows
+  let reminderDecimal = effectiveDecimal - leadHours;
+  let reminderDate = effectiveDate;
+
+  if (reminderDecimal < WINDOW_START) {
+    // Overflows into previous day's notification window
+    const overflow = WINDOW_START - reminderDecimal; // hours that spilled past 9 AM
+    const prevDay = new Date(reminderDate + "T12:00:00");
+    prevDay.setDate(prevDay.getDate() - 1);
+    reminderDate = prevDay.toISOString().slice(0, 10);
+    reminderDecimal = WINDOW_END - overflow;
+  }
+
+  // Convert decimal back to hour:minute
+  const reminderHour = Math.floor(reminderDecimal);
+  const reminderMinute = Math.round((reminderDecimal - reminderHour) * 60);
+
+  return { date: reminderDate, hour: reminderHour, minute: reminderMinute };
+}
+
 async function updateAttendance(
   supabase: ReturnType<typeof createClient>,
   rideId: number,
@@ -1181,10 +1263,60 @@ serve(async (req) => {
     }
 
     // --- send_reminders: DM non-responders for the next practice ---
+    // Smart timing: only sends when current Pacific hour matches the calculated
+    // reminder time (N notification-hours before practice, within 9 AM – 8 PM window).
+    // Called hourly by GitHub Actions cron; self-gates to avoid wrong-hour sends.
     if (body.action === "send_reminders") {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ skipped: true, reason: "No upcoming practice found" });
+
+      // Load configurable lead time from season_settings (default: 4 hours)
+      const { data: settingsRow } = await supabase
+        .from("season_settings")
+        .select("reminder_lead_hours")
+        .eq("id", "current")
+        .single();
+      const leadHours: number = (settingsRow as any)?.reminder_lead_hours ?? 4;
+
+      // Get practice start time for the next ride
+      const practiceTimes = await getPracticeTimes(supabase, ride.date);
+
+      // Calculate ideal reminder time in Pacific
+      const idealTime = calculateReminderTime(ride.date, practiceTimes.startTime, leadHours);
+      const now = getCurrentPacificTime();
+
+      console.log(`[send_reminders] ride=${ride.id} date=${ride.date} practiceStart=${practiceTimes.startTime} leadHours=${leadHours}`);
+      console.log(`[send_reminders] idealTime=${idealTime.date} ${idealTime.hour}:${String(idealTime.minute).padStart(2,"0")} | now=${now.date} ${now.hour}:${String(now.minute).padStart(2,"0")}`);
+
+      // Gate check: only send if current Pacific date+hour matches the calculated reminder date+hour
+      // For manual workflow_dispatch, bypass the timing gate (allow immediate send)
+      const isManualTrigger = !!body.force;
+      if (!isManualTrigger && (now.date !== idealTime.date || now.hour !== idealTime.hour)) {
+        return jsonResponse({
+          skipped: true,
+          reason: "Not reminder time",
+          nextRide: { id: ride.id, date: ride.date, practiceStart: practiceTimes.startTime },
+          idealReminderTime: `${idealTime.date} ${idealTime.hour}:${String(idealTime.minute).padStart(2, "0")} Pacific`,
+          currentTime: `${now.date} ${now.hour}:${String(now.minute).padStart(2, "0")} Pacific`,
+        });
+      }
+
+      // Duplicate check: read ride settings to see if reminders already sent
+      const { data: rideRow } = await supabase
+        .from("rides")
+        .select("settings")
+        .eq("id", ride.id)
+        .single();
+      const rideSettings = (rideRow as any)?.settings ?? {};
+      if (rideSettings.slackReminderSentAt && !isManualTrigger) {
+        return jsonResponse({
+          skipped: true,
+          reason: "Reminders already sent for this ride",
+          rideId: ride.id,
+          sentAt: rideSettings.slackReminderSentAt,
+        });
+      }
 
       // Get responses for this ride, separated by role
       const { data: responses } = await supabase
@@ -1235,9 +1367,8 @@ serve(async (req) => {
       }
 
       // Send DM reminders
-      const reminderTimes = await getPracticeTimes(supabase, ride.date);
       const friendlyDate = formatDate(ride.date);
-      const timeDisplay = formatTimeRange(reminderTimes.startTime, reminderTimes.endTime);
+      const timeDisplay = formatTimeRange(practiceTimes.startTime, practiceTimes.endTime);
       let sent = 0;
 
       for (const userId of reminderTargets) {
@@ -1286,7 +1417,21 @@ serve(async (req) => {
         }
       }
 
-      return jsonResponse({ success: true, rideId: ride.id, reminders_sent: sent, non_responders: reminderTargets.length });
+      // Mark reminders as sent in ride settings to prevent duplicate sends
+      try {
+        const updatedSettings = { ...rideSettings, slackReminderSentAt: new Date().toISOString() };
+        await supabase.from("rides").update({ settings: updatedSettings }).eq("id", ride.id);
+      } catch (e) {
+        console.error("[send_reminders] Error saving reminder-sent flag:", e);
+      }
+
+      return jsonResponse({
+        success: true,
+        rideId: ride.id,
+        reminders_sent: sent,
+        non_responders: reminderTargets.length,
+        reminderTime: `${idealTime.date} ${idealTime.hour}:${String(idealTime.minute).padStart(2, "0")} Pacific`,
+      });
     }
 
     // --- cleanup_duplicate_rides: find and soft-delete duplicate ride rows per date ---
