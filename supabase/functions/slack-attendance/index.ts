@@ -200,10 +200,12 @@ async function getNextRide(supabase: ReturnType<typeof createClient>) {
   const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
 
   // Fetch the next several upcoming rides (we may need to skip non-practice rides)
+  // Filter out both cancelled and deleted rides
   const { data: rides, error } = await supabase
     .from("rides")
-    .select("id, date, available_riders, available_coaches, cancelled")
+    .select("id, date, available_riders, available_coaches, cancelled, deleted")
     .eq("cancelled", false)
+    .or("deleted.is.null,deleted.eq.false")
     .gte("date", today)
     .order("date", { ascending: true })
     .limit(20);
@@ -239,10 +241,12 @@ async function getUpcomingPlannedRides(
     .single();
   const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
 
+  // Filter out both cancelled and deleted rides
   const { data: rides, error } = await supabase
     .from("rides")
     .select("id, date")
     .eq("cancelled", false)
+    .or("deleted.is.null,deleted.eq.false")
     .gte("date", today)
     .order("date", { ascending: true })
     .limit(50);
@@ -253,8 +257,16 @@ async function getUpcomingPlannedRides(
     ? rides.filter(r => isPlannedPractice(r.date, practices))
     : rides;
 
+  // Deduplicate: keep only the first ride per date (prevents duplicate entries in modal)
+  const seenDates = new Set<string>();
+  const deduped = planned.filter(r => {
+    if (seenDates.has(r.date)) return false;
+    seenDates.add(r.date);
+    return true;
+  });
+
   // Skip the first one (it's the current/next practice which has its own poll)
-  return planned.slice(1, 1 + limit);
+  return deduped.slice(1, 1 + limit);
 }
 
 /** Check if a date matches a planned (non-excluded) practice */
@@ -1277,6 +1289,55 @@ serve(async (req) => {
       return jsonResponse({ success: true, rideId: ride.id, reminders_sent: sent, non_responders: reminderTargets.length });
     }
 
+    // --- cleanup_duplicate_rides: find and soft-delete duplicate ride rows per date ---
+    if (body.action === "cleanup_duplicate_rides") {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Fetch all future, non-deleted, non-cancelled rides
+      const { data: rides, error } = await supabase
+        .from("rides")
+        .select("id, date, created_at")
+        .eq("cancelled", false)
+        .or("deleted.is.null,deleted.eq.false")
+        .gte("date", today)
+        .order("date", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      if (!rides || rides.length === 0) return jsonResponse({ success: true, duplicatesRemoved: 0 });
+
+      // Group by date — keep the first (oldest) ride per date, mark the rest as deleted
+      const dateMap = new Map<string, number[]>();
+      for (const ride of rides) {
+        const ids = dateMap.get(ride.date) || [];
+        ids.push(ride.id);
+        dateMap.set(ride.date, ids);
+      }
+
+      let duplicatesRemoved = 0;
+      const details: Array<{ date: string; kept: number; removed: number[] }> = [];
+      for (const [date, ids] of dateMap) {
+        if (ids.length <= 1) continue;
+        const [keep, ...remove] = ids;
+        for (const removeId of remove) {
+          const { error: delErr } = await supabase
+            .from("rides")
+            .update({ deleted: true })
+            .eq("id", removeId);
+          if (delErr) {
+            console.error(`[cleanup] Failed to soft-delete ride ${removeId}:`, delErr);
+          } else {
+            duplicatesRemoved++;
+          }
+        }
+        details.push({ date, kept: keep, removed: remove });
+      }
+
+      console.log(`[cleanup] Removed ${duplicatesRemoved} duplicate ride(s) across ${details.length} date(s)`);
+      return jsonResponse({ success: true, duplicatesRemoved, details });
+    }
+
     // --- import_coach_availability: one-time import from practice availability spreadsheet ---
     if (body.action === "import_coach_availability") {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -1321,12 +1382,113 @@ serve(async (req) => {
         if (r.coach_id) coachSlackMap.set(r.coach_id, r.slack_user_id);
       }
 
+      // Nickname → canonical name map (bidirectional lookup)
+      const NICKNAME_MAP: Record<string, string[]> = {
+        "chuck": ["charles"],
+        "charles": ["chuck"],
+        "bill": ["william"],
+        "william": ["bill"],
+        "mike": ["michael"],
+        "michael": ["mike"],
+        "matt": ["matthew"],
+        "matthew": ["matt"],
+        "dan": ["daniel"],
+        "daniel": ["dan"],
+        "dave": ["david"],
+        "david": ["dave"],
+        "jim": ["james"],
+        "james": ["jim", "jamie"],
+        "bob": ["robert"],
+        "robert": ["bob", "rob"],
+        "rob": ["robert"],
+        "tom": ["thomas"],
+        "thomas": ["tom"],
+        "joe": ["joseph"],
+        "joseph": ["joe"],
+        "rick": ["richard"],
+        "richard": ["rick", "dick"],
+        "dick": ["richard"],
+        "steve": ["stephen", "steven"],
+        "stephen": ["steve"],
+        "steven": ["steve"],
+        "ed": ["edward", "edwin"],
+        "edward": ["ed"],
+        "ted": ["theodore", "edward"],
+        "theodore": ["ted"],
+        "nick": ["nicholas"],
+        "nicholas": ["nick"],
+        "tony": ["anthony"],
+        "anthony": ["tony"],
+        "chris": ["christopher", "christian"],
+        "christopher": ["chris"],
+        "don": ["donald"],
+        "donald": ["don"],
+        "doug": ["douglas"],
+        "douglas": ["doug"],
+        "jeff": ["jeffrey", "geoffrey"],
+        "jeffrey": ["jeff"],
+        "sam": ["samuel", "samantha"],
+        "samuel": ["sam"],
+        "samantha": ["sam"],
+        "ben": ["benjamin"],
+        "benjamin": ["ben"],
+        "al": ["albert", "alan", "alexander"],
+        "alex": ["alexander", "alexandra"],
+        "alexander": ["alex", "al"],
+        "andy": ["andrew"],
+        "andrew": ["andy"],
+        "pat": ["patrick", "patricia"],
+        "patrick": ["pat"],
+        "jon": ["jonathan"],
+        "jonathan": ["jon"],
+        "jen": ["jennifer"],
+        "jennifer": ["jen"],
+        "bev": ["beverly"],
+        "beverly": ["bev"],
+      };
+
+      function findCoachByName(coachList: Array<{ id: number; name: string }>, csvName: string): { id: number; name: string } | undefined {
+        const csvLower = csvName.toLowerCase().trim();
+        // 1. Exact case-insensitive match
+        const exact = coachList.find(c => c.name.toLowerCase().trim() === csvLower);
+        if (exact) return exact;
+
+        // 2. Try nickname variants: swap CSV first name for each alias, check against DB
+        const spaceIdx = csvLower.indexOf(" ");
+        if (spaceIdx === -1) return undefined;
+        const csvFirst = csvLower.slice(0, spaceIdx);
+        const csvLast = csvLower.slice(spaceIdx + 1);
+
+        const aliases = NICKNAME_MAP[csvFirst];
+        if (aliases) {
+          for (const alias of aliases) {
+            const candidate = alias + " " + csvLast;
+            const match = coachList.find(c => c.name.toLowerCase().trim() === candidate);
+            if (match) return match;
+          }
+        }
+
+        // 3. Reverse: for each DB coach, swap their first name for aliases and check against CSV
+        for (const c of coachList) {
+          const dbLower = c.name.toLowerCase().trim();
+          const dbSpaceIdx = dbLower.indexOf(" ");
+          if (dbSpaceIdx === -1) continue;
+          const dbFirst = dbLower.slice(0, dbSpaceIdx);
+          const dbLast = dbLower.slice(dbSpaceIdx + 1);
+          if (dbLast !== csvLast) continue; // last names must match
+          const dbAliases = NICKNAME_MAP[dbFirst];
+          if (dbAliases && dbAliases.includes(csvFirst)) return c;
+        }
+
+        return undefined;
+      }
+
       let matchedCoaches = 0, processedEntries = 0, skippedNoRide = 0, skippedNoCoach = 0, skippedMaybe = 0;
       const unmatchedNames: string[] = [];
 
       for (const entry of AVAIL_DATA) {
-        // Case-insensitive name match
-        const coach = coaches?.find(c => c.name.toLowerCase() === entry.name.toLowerCase());
+        // Name match with nickname fallback
+        const coach = coaches ? findCoachByName(coaches, entry.name) : undefined;
         if (!coach) { skippedNoCoach++; unmatchedNames.push(entry.name); continue; }
         matchedCoaches++;
         const slackUserId = coachSlackMap.get(coach.id);

@@ -29,6 +29,7 @@ on:
           - post_poll
           - send_reminders
           - import_coach_availability
+          - cleanup_duplicate_rides
 
 jobs:
   attendance:
