@@ -732,12 +732,14 @@ async function getActiveRosterCount(
     return count ?? 0;
   }
   if (role === "coach") {
-    const { count } = await supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false");
+    // Exclude N/A level coaches — they are not eligible to ride
+    const { count } = await supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false").not("level", "eq", "N/A");
     return count ?? 0;
   }
   const [{ count: riderCount }, { count: coachCount }] = await Promise.all([
     supabase.from("riders").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false"),
-    supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false"),
+    // Exclude N/A level coaches — they are not eligible to ride
+    supabase.from("coaches").select("id", { count: "exact", head: true }).or("archived.is.null,archived.eq.false").not("level", "eq", "N/A"),
   ]);
   return (riderCount ?? 0) + (coachCount ?? 0);
 }
@@ -898,35 +900,44 @@ function buildPollMessage(
     },
   ];
 
-  // Rider-only note about completing the full practice
+  // Rider-only note about missing practices
   if (!isCoachChannel) {
     blocks.push({
       type: "context",
       elements: [{
         type: "mrkdwn",
-        text: "_NOTE: Attending riders must complete the full practice. Coaches are not allowed to release riders from practice anywhere other than the designated ride finish spot. If you have a time constraint or are concerned something else may prevent you from completing the ride as scheduled, please make sure to communicate this to the coaches in advance of practice._",
+        text: "_NOTE: Missing multiple practices due to injury or other circumstances? Please use the button below to send a direct message to the coaches explaining the situation and duration of your absence._",
       }],
     });
   }
 
-  blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
-        style: "primary",
-        action_id: "confirm_attendance",
-        value: `confirm_${rideId}`,
-      },
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Mark Future Attendance...", emoji: true },
-        action_id: "mark_future_practices",
-        value: `future_${rideId}`,
-      },
-    ],
-  });
+  // Action buttons: Respond + DM Head Coaches (riders) or Mark Future Attendance (coaches)
+  const actionElements: any[] = [
+    {
+      type: "button",
+      text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
+      style: "primary",
+      action_id: "confirm_attendance",
+      value: `confirm_${rideId}`,
+    },
+  ];
+  if (isCoachChannel) {
+    actionElements.push({
+      type: "button",
+      text: { type: "plain_text", text: "Mark Future Attendance...", emoji: true },
+      action_id: "mark_future_practices",
+      value: `future_${rideId}`,
+    });
+  } else {
+    actionElements.push({
+      type: "button",
+      text: { type: "plain_text", text: "DM Head Coaches", emoji: true },
+      action_id: "dm_head_coaches",
+      value: `dm_coaches_${rideId}`,
+    });
+  }
+
+  blocks.push({ type: "actions", elements: actionElements });
 
   // Append live tally if we have response data
   if (tally) {
@@ -1267,15 +1278,31 @@ async function postPollToChannel(
   }
 
   // Coach pre-response ephemerals — query all pre-populated responses for this ride
+  // Exclude N/A level coaches who are not eligible to ride
   if (role === "coach") {
     try {
       const { data: coachPreResponses } = await supabase
         .from("slack_poll_responses")
-        .select("slack_user_id, attendance_status")
+        .select("slack_user_id, attendance_status, coach_id")
         .eq("ride_id", rideId)
         .not("coach_id", "is", null);
+      // Filter out N/A coaches
+      const naCoachIds = new Set<number>();
+      if (coachPreResponses && coachPreResponses.length > 0) {
+        const coachIds = [...new Set(coachPreResponses.map((r: any) => r.coach_id).filter(Boolean))];
+        if (coachIds.length > 0) {
+          const { data: naCoaches } = await supabase
+            .from("coaches")
+            .select("id")
+            .in("id", coachIds)
+            .eq("level", "N/A");
+          for (const c of naCoaches ?? []) naCoachIds.add(c.id);
+        }
+      }
       for (const r of coachPreResponses ?? []) {
-        ephTargets.push({ slackId: r.slack_user_id, status: r.attendance_status, source: "pre-set" });
+        if (!naCoachIds.has(r.coach_id)) {
+          ephTargets.push({ slackId: r.slack_user_id, status: r.attendance_status, source: "pre-set" });
+        }
       }
     } catch (e) {
       console.error("[postPoll] Error fetching coach pre-responses for ephemerals:", e);
@@ -2047,6 +2074,29 @@ serve(async (req) => {
           return new Response("", { status: 200 });
         }
 
+        // Block N/A level coaches from responding — they are not eligible to ride
+        if (isCoach && btnProfile) {
+          const btnPerson = await findPerson(supabase, btnProfile);
+          if (btnPerson.coachId) {
+            const { data: coachRow } = await supabase
+              .from("coaches")
+              .select("level")
+              .eq("id", btnPerson.coachId)
+              .single();
+            if (coachRow?.level === "N/A") {
+              await fetch("https://slack.com/api/chat.postEphemeral", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  channel: originChannelId, user: slackUserId,
+                  text: ":no_entry: You need to be a Level 1 coach or higher to participate in team rides. If you believe this is an error, please contact the head coach.",
+                }),
+              });
+              return new Response("", { status: 200 });
+            }
+          }
+        }
+
         // Look up existing response for pre-fill (from advance marking or previous response)
         let existingChoice: string | undefined;
         const { data: existingResponse } = await supabase
@@ -2086,6 +2136,12 @@ serve(async (req) => {
         if (!futProfile) return new Response("", { status: 200 });
         const { riderId: futRiderId, coachId: futCoachId } = await findPerson(supabase, futProfile);
         if (!futRiderId && !futCoachId) return new Response("", { status: 200 });
+
+        // Block N/A level coaches (belt-and-suspenders — modal open is already blocked)
+        if (futCoachId && !futRiderId) {
+          const { data: futCoachRow } = await supabase.from("coaches").select("level").eq("id", futCoachId).single();
+          if (futCoachRow?.level === "N/A") return new Response("", { status: 200 });
+        }
 
         if (choice === "unknown") {
           await handleUnknownResponse(supabase, rideId, slackUserId, futRiderId, futCoachId);
@@ -2204,6 +2260,29 @@ serve(async (req) => {
             }),
           });
           return new Response("", { status: 200 });
+        }
+
+        // Block N/A level coaches from future attendance marking
+        if (isCoach && futProfile) {
+          const futPerson = await findPerson(supabase, futProfile);
+          if (futPerson.coachId) {
+            const { data: coachRow } = await supabase
+              .from("coaches")
+              .select("level")
+              .eq("id", futPerson.coachId)
+              .single();
+            if (coachRow?.level === "N/A") {
+              fetch("https://slack.com/api/chat.postEphemeral", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  channel: originChannelId, user: slackUserId,
+                  text: ":no_entry: You need to be a Level 1 coach or higher to participate in team rides.",
+                }),
+              });
+              return new Response("", { status: 200 });
+            }
+          }
         }
 
         if (upcomingRides.length === 0) {
@@ -2329,6 +2408,44 @@ serve(async (req) => {
         return new Response("", { status: 200 });
       }
 
+      // ----- "DM Head Coaches" button (rider poll) -----
+      if (actionId === "dm_head_coaches") {
+        // Open a modal for the rider to compose a message to head coaches
+        const triggerId = payload.trigger_id;
+        if (triggerId) {
+          const modal = {
+            type: "modal",
+            callback_id: "dm_head_coaches_submit",
+            title: { type: "plain_text", text: "Message Head Coaches" },
+            submit: { type: "plain_text", text: "Send Message" },
+            close: { type: "plain_text", text: "Cancel" },
+            blocks: [
+              {
+                type: "section",
+                text: { type: "mrkdwn", text: "Your message will be sent as a DM to the team's head coaches." },
+              },
+              {
+                type: "input",
+                block_id: "message_block",
+                element: {
+                  type: "plain_text_input",
+                  action_id: "coach_message",
+                  multiline: true,
+                  placeholder: { type: "plain_text", text: "Explain your situation and expected duration of absence..." },
+                },
+                label: { type: "plain_text", text: "Your message" },
+              },
+            ],
+          };
+          await fetch("https://slack.com/api/views.open", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ trigger_id: triggerId, view: modal }),
+          });
+        }
+        return new Response("", { status: 200 });
+      }
+
       // Unknown action — acknowledge
       return new Response("", { status: 200 });
     }
@@ -2338,6 +2455,87 @@ serve(async (req) => {
       const callbackId = payload.view?.callback_id ?? "";
       const values = payload.view?.state?.values ?? {};
       const metadata = payload.view?.private_metadata;
+
+      // ----- DM Head Coaches modal submission -----
+      if (callbackId === "dm_head_coaches_submit") {
+        const message = values?.message_block?.coach_message?.value?.trim() ?? "";
+        if (!message) {
+          return new Response(JSON.stringify({
+            response_action: "errors",
+            errors: { message_block: "Please enter a message." },
+          }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+
+        // Look up the sender's name from their Slack profile
+        const senderProfile = await getSlackProfile(slackUserId);
+        const senderName = senderProfile?.realName || senderProfile?.displayName || "A rider";
+
+        // Head coaches: Scott Martin and Sami Mahrus — look up their Slack IDs via coach table
+        const HEAD_COACH_NAMES = ["Scott Martin", "Sami Mahrus"];
+        const headCoachSlackIds: string[] = [];
+
+        for (const coachName of HEAD_COACH_NAMES) {
+          // Find coach by name
+          const { data: coaches } = await supabase
+            .from("coaches")
+            .select("id")
+            .ilike("name", coachName)
+            .limit(1);
+          const coachId = coaches?.[0]?.id;
+          if (coachId) {
+            // Find their Slack ID from past poll responses
+            const { data: responses } = await supabase
+              .from("slack_poll_responses")
+              .select("slack_user_id")
+              .eq("coach_id", coachId)
+              .limit(1);
+            if (responses?.[0]?.slack_user_id) {
+              headCoachSlackIds.push(responses[0].slack_user_id);
+            }
+          }
+        }
+
+        if (headCoachSlackIds.length === 0) {
+          console.error("[DM_COACHES] Could not find Slack IDs for head coaches");
+          return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+
+        // Send DM to each head coach
+        for (const coachSlackId of headCoachSlackIds) {
+          (async () => {
+            try {
+              const openRes = await fetch("https://slack.com/api/conversations.open", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ users: coachSlackId }),
+              });
+              const openData = await openRes.json();
+              if (!openData.ok) { console.error(`[DM_COACHES] conversations.open error:`, openData.error); return; }
+
+              await fetch("https://slack.com/api/chat.postMessage", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  channel: openData.channel.id,
+                  text: `Message from ${senderName}: ${message}`,
+                  blocks: [
+                    {
+                      type: "section",
+                      text: {
+                        type: "mrkdwn",
+                        text: `:envelope: *Message from <@${slackUserId}>:*\n\n${message}`,
+                      },
+                    },
+                  ],
+                }),
+              });
+              console.log(`[DM_COACHES] Forwarded message from ${senderName} to coach ${coachSlackId}`);
+            } catch (e) { console.error("[DM_COACHES] Error sending DM:", e); }
+          })();
+        }
+
+        return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
 
       // ----- Attendance modal submission -----
       if (callbackId.startsWith("attendance_")) {
@@ -2386,6 +2584,33 @@ serve(async (req) => {
         if (!riderId && !coachId) {
           console.log(`[ATTENDANCE] No match found — aborting. Profile: email=${profile.email}, name=${profile.realName}, phone=${profile.phone}`);
           return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+
+        // Block N/A level coaches from responding — they are not eligible to ride
+        if (coachId && !riderId) {
+          const { data: coachRow } = await supabase
+            .from("coaches")
+            .select("level")
+            .eq("id", coachId)
+            .single();
+          if (coachRow?.level === "N/A") {
+            console.log(`[ATTENDANCE] N/A coach blocked: coachId=${coachId}, slackUser=${slackUserId}`);
+            return new Response(JSON.stringify({
+              response_action: "update",
+              view: {
+                type: "modal",
+                title: { type: "plain_text", text: "Not Eligible" },
+                close: { type: "plain_text", text: "OK" },
+                blocks: [{
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: ":no_entry: *You need to be a Level 1 coach or higher to participate in team rides.*\n\nIf you believe this is an error, please contact the head coach.",
+                  },
+                }],
+              },
+            }), { status: 200, headers: { "Content-Type": "application/json" } });
+          }
         }
 
         // Update attendance on the ride record
