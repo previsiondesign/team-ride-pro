@@ -1341,37 +1341,43 @@ serve(async (req) => {
         if (r.coach_id) coachSlackMap.set(r.coach_id, r.slack_user_id);
       }
 
-      // Get active roster
+      // Get active roster (coaches include opt-out flag)
       const [{ data: riders }, { data: coaches }] = await Promise.all([
         supabase.from("riders").select("id").or("archived.is.null,archived.eq.false"),
-        supabase.from("coaches").select("id").or("archived.is.null,archived.eq.false"),
+        supabase.from("coaches").select("id, slack_reminders_disabled").or("archived.is.null,archived.eq.false"),
       ]);
 
       // Find non-responders who have a known Slack user ID (by role)
-      const reminderTargets: string[] = [];
+      // Track coach Slack IDs separately so we can add the mute button to their DMs
+      const riderTargets: string[] = [];
+      const coachTargets: string[] = [];
+      let skippedOptedOut = 0;
       for (const rider of riders ?? []) {
         if (!respondedRiderIds.has(rider.id)) {
           const slackId = riderSlackMap.get(rider.id);
-          if (slackId) reminderTargets.push(slackId);
+          if (slackId) riderTargets.push(slackId);
         }
       }
       for (const coach of coaches ?? []) {
         if (!respondedCoachIds.has(coach.id)) {
+          if ((coach as any).slack_reminders_disabled === true) { skippedOptedOut++; continue; }
           const slackId = coachSlackMap.get(coach.id);
-          if (slackId) reminderTargets.push(slackId);
+          if (slackId) coachTargets.push(slackId);
         }
       }
+      const coachSlackIds = new Set(coachTargets);
 
-      if (reminderTargets.length === 0) {
-        return jsonResponse({ success: true, reminders_sent: 0, reason: "Everyone has responded (or no Slack IDs on file)" });
+      if (riderTargets.length === 0 && coachTargets.length === 0) {
+        return jsonResponse({ success: true, reminders_sent: 0, skippedOptedOut, reason: "Everyone has responded (or no Slack IDs on file)" });
       }
 
       // Send DM reminders
+      const allTargets = [...riderTargets, ...coachTargets];
       const friendlyDate = formatDate(ride.date);
       const timeDisplay = formatTimeRange(practiceTimes.startTime, practiceTimes.endTime);
       let sent = 0;
 
-      for (const userId of reminderTargets) {
+      for (const userId of allTargets) {
         try {
           // Open a DM channel with the user
           const openRes = await fetch("https://slack.com/api/conversations.open", {
@@ -1384,7 +1390,24 @@ serve(async (req) => {
 
           const dmChannelId = openData.channel.id;
 
-          // Send a reminder with the Confirm Attendance button
+          // Build action buttons — coaches get an extra "Mute reminders" option
+          const actionElements: any[] = [{
+            type: "button",
+            text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
+            style: "primary",
+            action_id: "confirm_attendance",
+            value: `confirm_${ride.id}`,
+          }];
+          if (coachSlackIds.has(userId)) {
+            actionElements.push({
+              type: "button",
+              text: { type: "plain_text", text: "Mute future reminders", emoji: true },
+              action_id: "opt_out_reminders",
+              value: "opt_out",
+            });
+          }
+
+          // Send a reminder with the Confirm Attendance button (+ mute for coaches)
           const msgRes = await fetch("https://slack.com/api/chat.postMessage", {
             method: "POST",
             headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
@@ -1398,13 +1421,7 @@ serve(async (req) => {
                 },
                 {
                   type: "actions",
-                  elements: [{
-                    type: "button",
-                    text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
-                    style: "primary",
-                    action_id: "confirm_attendance",
-                    value: `confirm_${ride.id}`,
-                  }],
+                  elements: actionElements,
                 },
               ],
             }),
@@ -1958,6 +1975,85 @@ serve(async (req) => {
         const resData = await res.json();
         if (!resData.ok) console.error("views.open error (future):", resData.error);
 
+        return new Response("", { status: 200 });
+      }
+
+      // ----- "Mute future reminders" button (coach opt-out) -----
+      if (actionId === "opt_out_reminders") {
+        const profile = await getSlackProfile(slackUserId);
+        if (profile) {
+          const person = await findPerson(supabase, profile);
+          if (person.coachId) {
+            await supabase
+              .from("coaches")
+              .update({ slack_reminders_disabled: true })
+              .eq("id", person.coachId);
+            console.log(`[opt_out] Coach ${person.coachId} (${profile.realName}) opted out of reminders`);
+          }
+        }
+
+        // Replace the original message with confirmation + unmute option
+        const responseUrl = payload.response_url;
+        if (responseUrl) {
+          fetch(responseUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              replace_original: true,
+              text: "DM reminders muted.",
+              blocks: [
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: ":no_bell: *DM reminders muted.* You won't receive attendance reminder DMs for future practices." },
+                },
+                {
+                  type: "actions",
+                  elements: [{
+                    type: "button",
+                    text: { type: "plain_text", text: "Unmute reminders", emoji: true },
+                    action_id: "opt_in_reminders",
+                    value: "opt_in",
+                  }],
+                },
+              ],
+            }),
+          });
+        }
+        return new Response("", { status: 200 });
+      }
+
+      // ----- "Unmute reminders" button (coach opt back in) -----
+      if (actionId === "opt_in_reminders") {
+        const profile = await getSlackProfile(slackUserId);
+        if (profile) {
+          const person = await findPerson(supabase, profile);
+          if (person.coachId) {
+            await supabase
+              .from("coaches")
+              .update({ slack_reminders_disabled: false })
+              .eq("id", person.coachId);
+            console.log(`[opt_in] Coach ${person.coachId} (${profile.realName}) opted back in to reminders`);
+          }
+        }
+
+        // Replace message with confirmation
+        const responseUrl = payload.response_url;
+        if (responseUrl) {
+          fetch(responseUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              replace_original: true,
+              text: "DM reminders re-enabled.",
+              blocks: [
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: ":bell: *DM reminders re-enabled.* You'll receive attendance reminders for future practices." },
+                },
+              ],
+            }),
+          });
+        }
         return new Response("", { status: 200 });
       }
 
