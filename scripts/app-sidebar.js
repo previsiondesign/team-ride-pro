@@ -368,7 +368,9 @@
             _slackPollResponseMap = {};
         };
 
-        /** Load Slack poll responses for a ride and cache them. Triggers re-render on first load. */
+        /** Load Slack poll responses for a ride and cache them. Triggers re-render on first load.
+         *  Also infers status from ride record arrays for coaches/riders without explicit poll responses
+         *  (e.g. coaches imported via CSV, riders without Slack IDs). */
         function loadSlackPollResponsesForRide(rideId) {
             if (_slackPollResponseRideId === rideId) return; // already loaded
             _slackPollResponseRideId = rideId;
@@ -379,6 +381,25 @@
                     for (const r of responses) {
                         if (r.coach_id) map['coach_' + r.coach_id] = r.attendance_status;
                         if (r.rider_id) map['rider_' + r.rider_id] = r.attendance_status;
+                    }
+                    // Infer status from ride record for coaches/riders without explicit poll responses.
+                    // Coaches in available_coaches but not in poll responses → "attending" (e.g. CSV import)
+                    // Coaches NOT in available_coaches and not in poll responses → "absent" (e.g. CSV "N" import)
+                    const ride = data.rides ? data.rides.find(r => r.id === rideId) : null;
+                    if (ride) {
+                        const availCoaches = Array.isArray(ride.available_coaches) ? ride.available_coaches : [];
+                        const availCoachSet = new Set(availCoaches.map(id => Number(id)));
+                        // Fill in coaches without poll responses
+                        const allCoaches = data.coaches || [];
+                        for (const c of allCoaches) {
+                            const key = 'coach_' + c.id;
+                            if (map[key]) continue; // already has explicit poll response
+                            if (availCoachSet.has(Number(c.id))) {
+                                map[key] = 'attending'; // in available_coaches but no poll response → attending
+                            }
+                            // Note: we don't infer "absent" for coaches not in available_coaches
+                            // because they may simply not have responded yet (coaches don't default)
+                        }
                     }
                     _slackPollResponseMap = map;
                     // Re-render sidebars so status tags appear

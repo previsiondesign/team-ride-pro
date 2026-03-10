@@ -773,28 +773,42 @@ async function updatePollTally(
   // Update each channel's poll with its own role-filtered tally
   for (const poll of polls) {
     const role = channelRole(poll.channel_id);
-    const roleColumn = role === "coach" ? "coach_id" : "rider_id";
-
-    // Count only responses for this role (rider_id NOT NULL or coach_id NOT NULL)
-    const { data: responses } = await supabase
-      .from("slack_poll_responses")
-      .select("attendance_status")
-      .eq("ride_id", rideId)
-      .not(roleColumn, "is", null);
-
     const totalRoster = await getActiveRosterCount(supabase, role);
 
-    // Riders default to attending — tally is "attending = total - absent", no "not yet responded"
-    // Coaches must explicitly respond — tally tracks all states including "not yet responded"
+    // Use ride record arrays as source of truth (handles CSV imports + riders without Slack IDs)
     let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number };
     if (role === "rider") {
-      const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
-      tally = { attending: totalRoster - notAttendingCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
+      // Riders default to attending — use available_riders array from ride record
+      const availableCount = Array.isArray(ride.available_riders) ? ride.available_riders.length : 0;
+      const notAttendingCount = Math.max(0, totalRoster - availableCount);
+      tally = { attending: availableCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
     } else {
-      const attendingCount = responses?.filter((r) => r.attendance_status === "attending").length ?? 0;
-      const ifNeededCount = responses?.filter((r) => r.attendance_status === "if_needed").length ?? 0;
-      const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
-      const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
+      // Coaches: available_coaches includes both "attending" and "if_needed"
+      // Cross-reference with slack_poll_responses to distinguish if_needed
+      const availableCoachesArr: number[] = Array.isArray(ride.available_coaches) ? ride.available_coaches : [];
+      const { data: ifNeededResponses } = await supabase
+        .from("slack_poll_responses")
+        .select("coach_id")
+        .eq("ride_id", rideId)
+        .eq("attendance_status", "if_needed")
+        .not("coach_id", "is", null);
+      const ifNeededCoachIds = new Set((ifNeededResponses ?? []).map((r: any) => r.coach_id));
+      const ifNeededInAvailable = availableCoachesArr.filter(id => ifNeededCoachIds.has(id)).length;
+
+      const attendingCount = availableCoachesArr.length - ifNeededInAvailable;
+      const ifNeededCount = ifNeededInAvailable;
+      const notInAvailable = Math.max(0, totalRoster - availableCoachesArr.length);
+      // Distinguish "not attending" (explicit absent) from "not yet responded"
+      const { data: absentResponses } = await supabase
+        .from("slack_poll_responses")
+        .select("coach_id")
+        .eq("ride_id", rideId)
+        .eq("attendance_status", "absent")
+        .not("coach_id", "is", null);
+      const explicitAbsentCount = absentResponses?.length ?? 0;
+      // Coaches not in available_coaches and not explicitly absent = not yet responded
+      const notAttendingCount = Math.min(explicitAbsentCount, notInAvailable);
+      const noResponseCount = Math.max(0, notInAvailable - notAttendingCount);
       tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
     }
 
@@ -812,7 +826,7 @@ async function updatePollTally(
     });
     const data = await res.json();
     if (!data.ok) console.error(`chat.update error for ${poll.channel_id}:`, data.error);
-    else console.log(`Tally updated (${role}): ${attendingCount} yes, ${notAttendingCount} no, ${noResponseCount} pending`);
+    else console.log(`Tally updated (${role}): attending=${tally.attending}, ifNeeded=${tally.ifNeeded}, notAttending=${tally.notAttending}, noResponse=${tally.noResponse}`);
   }
 }
 
@@ -920,11 +934,11 @@ function buildPollMessage(
     });
   }
 
-  // Action buttons: Respond + DM Head Coaches (riders) or Mark Future Attendance (coaches)
+  // Action buttons: Update/Respond + DM Head Coaches (riders) or Mark Future Attendance (coaches)
   const actionElements: any[] = [
     {
       type: "button",
-      text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
+      text: { type: "plain_text", text: isCoachChannel ? "Respond for this Practice" : "Update Practice Attendance", emoji: true },
       style: "primary",
       action_id: "confirm_attendance",
       value: `confirm_${rideId}`,
@@ -1153,9 +1167,8 @@ async function postPollToChannel(
   const roleColumn = role === "coach" ? "coach_id" : "rider_id";
   const personType = role === "coach" ? "coach" : "rider";
 
-  // --- Pre-populate "absent" for riders/coaches with scheduled absences ---
-  // Only creates entries for people who don't already have a response (won't override
-  // explicit Slack responses or CSV-imported availability).
+  // --- Step 1: Collect scheduled absence person IDs (regardless of Slack ID) ---
+  const absentPersonIds = new Set<number>();
   try {
     const { data: absences } = await supabase
       .from("scheduled_absences")
@@ -1166,106 +1179,135 @@ async function postPollToChannel(
 
     if (absences && absences.length > 0) {
       const rideDow = new Date(dateStr + "T12:00:00").getDay();
-      const activeAbsences = absences.filter(a => {
+      for (const a of absences) {
         const days = a.specific_practice_days;
-        if (Array.isArray(days) && days.length > 0 && !days.includes(rideDow)) return false;
-        if (Array.isArray(a.exception_dates) && a.exception_dates.includes(dateStr)) return false;
-        return true;
-      });
-
-      if (activeAbsences.length > 0) {
-        // Batch-fetch: Slack user IDs from past responses + existing responses for this ride
-        const [{ data: pastResponses }, { data: existingForRide }] = await Promise.all([
-          supabase.from("slack_poll_responses").select(`${roleColumn}, slack_user_id`).not(roleColumn, "is", null),
-          supabase.from("slack_poll_responses").select("slack_user_id").eq("ride_id", rideId),
-        ]);
-        const personSlackMap = new Map<number, string>();
-        for (const r of pastResponses ?? []) {
-          const pid = role === "coach" ? r.coach_id : r.rider_id;
-          if (pid) personSlackMap.set(pid, r.slack_user_id);
-        }
-        const alreadyResponded = new Set((existingForRide ?? []).map(r => r.slack_user_id));
-
-        let prePopulated = 0;
-        for (const absence of activeAbsences) {
-          const slackUserId = personSlackMap.get(absence.person_id);
-          if (!slackUserId || alreadyResponded.has(slackUserId)) continue;
-
-          const riderId = personType === "rider" ? absence.person_id : null;
-          const coachId = personType === "coach" ? absence.person_id : null;
-          await trackPollResponse(supabase, rideId, slackUserId, riderId, coachId, "absent");
-          await updateAttendance(supabase, rideId, riderId, coachId, "remove");
-          alreadyResponded.add(slackUserId); // prevent duplicates
-          prePopulated++;
-        }
-        if (prePopulated > 0) {
-          console.log(`[postPoll] Pre-populated ${prePopulated} ${personType} absence(s) for ride ${rideId}`);
-        }
+        if (Array.isArray(days) && days.length > 0 && !days.includes(rideDow)) continue;
+        if (Array.isArray(a.exception_dates) && a.exception_dates.includes(dateStr)) continue;
+        absentPersonIds.add(a.person_id);
       }
+      if (absentPersonIds.size > 0) {
+        console.log(`[postPoll] Found ${absentPersonIds.size} ${personType}(s) with scheduled absences for ride ${rideId}`);
+      }
+    }
+  } catch (e) {
+    console.error("[postPoll] Error collecting scheduled absences:", e);
+  }
+
+  // --- Step 2: Build Slack ID lookup + existing responses (single batch for both blocks) ---
+  let personSlackMap = new Map<number, string>();
+  let alreadyRespondedPersonIds = new Set<number>();
+  try {
+    const [{ data: pastResponses }, { data: existingForRide }] = await Promise.all([
+      supabase.from("slack_poll_responses").select(`${roleColumn}, slack_user_id`).not(roleColumn, "is", null),
+      supabase.from("slack_poll_responses").select(`${roleColumn}`).eq("ride_id", rideId).not(roleColumn, "is", null),
+    ]);
+    for (const r of pastResponses ?? []) {
+      const pid = role === "coach" ? r.coach_id : r.rider_id;
+      if (pid) personSlackMap.set(pid, r.slack_user_id);
+    }
+    for (const r of existingForRide ?? []) {
+      const pid = role === "coach" ? r.coach_id : r.rider_id;
+      if (pid) alreadyRespondedPersonIds.add(pid);
+    }
+  } catch (e) {
+    console.error("[postPoll] Error fetching Slack lookups:", e);
+  }
+
+  // --- Step 3: Pre-populate absence poll responses (for those with Slack IDs, coaches always) ---
+  // For coaches: also call updateAttendance(remove) since coaches aren't auto-added
+  try {
+    let absencePrePop = 0;
+    for (const personId of absentPersonIds) {
+      if (alreadyRespondedPersonIds.has(personId)) continue; // don't override existing responses
+      const riderId = personType === "rider" ? personId : null;
+      const coachId = personType === "coach" ? personId : null;
+      // Coaches: need updateAttendance(remove) since they might be in available_coaches from CSV
+      if (coachId) {
+        await updateAttendance(supabase, rideId, null, coachId, "remove");
+      }
+      // Track poll response if Slack ID is known
+      const slackUserId = personSlackMap.get(personId);
+      if (slackUserId) {
+        await trackPollResponse(supabase, rideId, slackUserId, riderId, coachId, "absent");
+      }
+      absencePrePop++;
+    }
+    if (absencePrePop > 0) {
+      console.log(`[postPoll] Pre-populated ${absencePrePop} ${personType} absence(s) for ride ${rideId}`);
     }
   } catch (e) {
     console.error("[postPoll] Error pre-populating absences:", e);
   }
 
-  // --- Pre-populate ALL riders as "attending" by default (coaches are not defaulted) ---
-  // Runs after absence pre-population so riders with scheduled absences stay "absent".
-  // Only creates entries for riders who don't already have a response for this ride.
-  // Collects Slack IDs so we can send ephemeral confirmations after the poll is posted.
+  // --- Step 4: Pre-populate ALL riders as "attending" by default (coaches are not defaulted) ---
+  // Adds ALL active riders to available_riders regardless of whether they have a Slack ID.
+  // Only creates slack_poll_responses entries for riders with known Slack IDs.
   const defaultAttendingSlackIds: string[] = [];
   if (role === "rider") {
     try {
-      // Fetch active riders + their Slack IDs from past responses + who already responded
-      const [{ data: activeRiders }, { data: riderPastResponses }, { data: riderExisting }] = await Promise.all([
-        supabase.from("riders").select("id").or("archived.is.null,archived.eq.false"),
-        supabase.from("slack_poll_responses").select("rider_id, slack_user_id").not("rider_id", "is", null),
-        supabase.from("slack_poll_responses").select("slack_user_id, rider_id").eq("ride_id", rideId),
-      ]);
-      const riderSlackLookup = new Map<number, string>();
-      for (const r of riderPastResponses ?? []) {
-        if (r.rider_id) riderSlackLookup.set(r.rider_id, r.slack_user_id);
-      }
-      const alreadyRespondedRiders = new Set<number>();
-      for (const r of riderExisting ?? []) {
-        if (r.rider_id) alreadyRespondedRiders.add(r.rider_id);
-      }
+      const { data: activeRiders } = await supabase.from("riders").select("id").or("archived.is.null,archived.eq.false");
 
+      let addedCount = 0;
       for (const rider of activeRiders ?? []) {
-        if (alreadyRespondedRiders.has(rider.id)) continue; // already has a response (absence, future marking, etc.)
-        const slackUserId = riderSlackLookup.get(rider.id);
-        if (!slackUserId) continue; // no known Slack ID — can't create a poll response
-        await trackPollResponse(supabase, rideId, slackUserId, rider.id, null, "attending");
+        if (absentPersonIds.has(rider.id)) continue; // scheduled absence — stay absent
+        if (alreadyRespondedPersonIds.has(rider.id)) continue; // already has a response (future marking, etc.)
+
+        // ALWAYS add to available_riders — this is the key fix
         await updateAttendance(supabase, rideId, rider.id, null, "add");
-        defaultAttendingSlackIds.push(slackUserId);
+        addedCount++;
+
+        // Create poll response entry only if we know their Slack ID
+        const slackUserId = personSlackMap.get(rider.id);
+        if (slackUserId) {
+          await trackPollResponse(supabase, rideId, slackUserId, rider.id, null, "attending");
+          defaultAttendingSlackIds.push(slackUserId);
+        }
       }
-      if (defaultAttendingSlackIds.length > 0) {
-        console.log(`[postPoll] Default-attending: ${defaultAttendingSlackIds.length} rider(s) for ride ${rideId}`);
+      if (addedCount > 0) {
+        console.log(`[postPoll] Default-attending: ${addedCount} rider(s) added to available_riders (${defaultAttendingSlackIds.length} with poll responses) for ride ${rideId}`);
       }
     } catch (e) {
       console.error("[postPoll] Error pre-populating default rider attendance:", e);
     }
   }
 
-  // Check for pre-responses (from future marking, CSV import, absences, or rider defaults above) for tally
-  const { data: preResponses } = await supabase
-    .from("slack_poll_responses")
-    .select("attendance_status")
-    .eq("ride_id", rideId)
-    .not(roleColumn, "is", null);
-
-  // Build initial tally — riders default to attending, coaches track all states
-  let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number } | undefined;
+  // Build initial tally from ride record arrays (source of truth, handles all pre-population paths)
   const totalRoster = await getActiveRosterCount(supabase, role);
+  const rideAfterPrePop = await getRideById(supabase, rideId);
+  let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number } | undefined;
   if (role === "rider") {
-    // Riders: all default to attending. Tally = total - absent, no "not yet responded"
-    const notAttendingCount = preResponses?.filter(r => r.attendance_status === "absent").length ?? 0;
-    tally = { attending: totalRoster - notAttendingCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
-  } else if (preResponses && preResponses.length > 0) {
-    // Coaches: only show tally if there are pre-responses
-    const attendingCount = preResponses.filter(r => r.attendance_status === "attending").length;
-    const ifNeededCount = preResponses.filter(r => r.attendance_status === "if_needed").length;
-    const notAttendingCount = preResponses.filter(r => r.attendance_status === "absent").length;
-    const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
-    tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    // Riders: use available_riders count — all defaults + absences already applied above
+    const availableCount = Array.isArray(rideAfterPrePop?.available_riders) ? rideAfterPrePop.available_riders.length : 0;
+    const notAttendingCount = Math.max(0, totalRoster - availableCount);
+    tally = { attending: availableCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
+  } else {
+    // Coaches: use available_coaches + cross-reference if_needed from poll responses
+    const availableCoachesArr: number[] = Array.isArray(rideAfterPrePop?.available_coaches) ? rideAfterPrePop.available_coaches : [];
+    if (availableCoachesArr.length > 0 || absentPersonIds.size > 0) {
+      const { data: ifNeededResponses } = await supabase
+        .from("slack_poll_responses")
+        .select("coach_id")
+        .eq("ride_id", rideId)
+        .eq("attendance_status", "if_needed")
+        .not("coach_id", "is", null);
+      const ifNeededCoachIds = new Set((ifNeededResponses ?? []).map((r: any) => r.coach_id));
+      const ifNeededInAvailable = availableCoachesArr.filter(id => ifNeededCoachIds.has(id)).length;
+
+      const attendingCount = availableCoachesArr.length - ifNeededInAvailable;
+      const ifNeededCount = ifNeededInAvailable;
+      const notInAvailable = Math.max(0, totalRoster - availableCoachesArr.length);
+      // Count explicit absences (from poll responses or scheduled absences)
+      const { data: absentResponses } = await supabase
+        .from("slack_poll_responses")
+        .select("coach_id")
+        .eq("ride_id", rideId)
+        .eq("attendance_status", "absent")
+        .not("coach_id", "is", null);
+      const explicitAbsentCount = Math.max(absentResponses?.length ?? 0, absentPersonIds.size);
+      const notAttendingCount = Math.min(explicitAbsentCount, notInAvailable);
+      const noResponseCount = Math.max(0, notInAvailable - notAttendingCount);
+      tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    }
   }
 
   const isCoachChannel = role === "coach";
