@@ -3133,7 +3133,8 @@
         }
 
         /* Name + Slack status tag wrapper: takes flex:1 to push badges/icons right,
-           while name text and tag (✅❌✋) stay adjacent inside via inline flow. */
+           while name text and tag (✅❌✋) stay adjacent inside via inline flow.
+           Higher specificity needed to override .sidebar-list .card-body strong { flex:1 } */
         .name-status-wrap {
             display: inline-flex;
             align-items: center;
@@ -3141,8 +3142,9 @@
             flex: 1;
             overflow: hidden;
         }
-        .name-status-wrap strong,
-        .name-status-wrap em {
+        .sidebar-list .card-body .name-status-wrap strong,
+        .sidebar-list .card-body .name-status-wrap em {
+            flex: 0 1 auto;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
