@@ -1148,6 +1148,8 @@ async function postPollToChannel(
   // --- Pre-populate ALL riders as "attending" by default (coaches are not defaulted) ---
   // Runs after absence pre-population so riders with scheduled absences stay "absent".
   // Only creates entries for riders who don't already have a response for this ride.
+  // Collects Slack IDs so we can send ephemeral confirmations after the poll is posted.
+  const defaultAttendingSlackIds: string[] = [];
   if (role === "rider") {
     try {
       // Fetch active riders + their Slack IDs from past responses + who already responded
@@ -1165,17 +1167,16 @@ async function postPollToChannel(
         if (r.rider_id) alreadyRespondedRiders.add(r.rider_id);
       }
 
-      let defaultAttending = 0;
       for (const rider of activeRiders ?? []) {
         if (alreadyRespondedRiders.has(rider.id)) continue; // already has a response (absence, future marking, etc.)
         const slackUserId = riderSlackLookup.get(rider.id);
         if (!slackUserId) continue; // no known Slack ID — can't create a poll response
         await trackPollResponse(supabase, rideId, slackUserId, rider.id, null, "attending");
         await updateAttendance(supabase, rideId, rider.id, null, "add");
-        defaultAttending++;
+        defaultAttendingSlackIds.push(slackUserId);
       }
-      if (defaultAttending > 0) {
-        console.log(`[postPoll] Default-attending: ${defaultAttending} rider(s) for ride ${rideId}`);
+      if (defaultAttendingSlackIds.length > 0) {
+        console.log(`[postPoll] Default-attending: ${defaultAttendingSlackIds.length} rider(s) for ride ${rideId}`);
       }
     } catch (e) {
       console.error("[postPoll] Error pre-populating default rider attendance:", e);
@@ -1217,6 +1218,48 @@ async function postPollToChannel(
     );
     if (pollErr) console.error("Error saving poll reference:", pollErr);
     else console.log(`Poll reference saved: ride=${rideId}, channel=${channelId}, ts=${data.ts}`);
+  }
+
+  // --- Send ephemeral confirmations to riders who were auto-marked as attending ---
+  if (defaultAttendingSlackIds.length > 0) {
+    const friendlyDate = formatDate(dateStr);
+    const ephBlocks = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `:white_check_mark: *Your status: Attending (default)*\n*Practice:* ${friendlyDate}\nAll riders are marked attending by default. If you can't make it, please change your response below.`,
+        },
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: "Change Response", emoji: true },
+            action_id: "update_response",
+            value: `update_${rideId}`,
+          },
+        ],
+      },
+    ];
+    // Fire-and-forget — don't block poll posting on ephemeral delivery
+    for (const slackId of defaultAttendingSlackIds) {
+      fetch("https://slack.com/api/chat.postEphemeral", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: channelId,
+          user: slackId,
+          text: `Your status for ${friendlyDate}: Attending (default). Change your response if needed.`,
+          blocks: ephBlocks,
+        }),
+      }).then(async (r) => {
+        const d = await r.json();
+        if (!d.ok) console.error(`Ephemeral to ${slackId} failed:`, d.error);
+      }).catch((e) => console.error(`Ephemeral to ${slackId} error:`, e));
+    }
+    console.log(`[postPoll] Sent ephemeral confirmations to ${defaultAttendingSlackIds.length} default-attending rider(s)`);
   }
 
   console.log(`Poll posted to ${channelId} for ride ${rideId}`);
