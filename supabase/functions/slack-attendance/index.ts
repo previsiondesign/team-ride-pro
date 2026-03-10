@@ -1693,6 +1693,97 @@ serve(async (req) => {
       });
     }
 
+    // --- run_migrations: apply pending SQL migrations using direct Postgres connection ---
+    if (body.action === "run_migrations") {
+      // Each migration: { name, sql, check } — check is a query that returns rows if already applied
+      const MIGRATIONS: Array<{ name: string; sql: string; check: string }> = [
+        {
+          name: "ADD_REMINDER_LEAD_HOURS",
+          sql: `ALTER TABLE season_settings ADD COLUMN IF NOT EXISTS reminder_lead_hours INTEGER DEFAULT 4;
+                COMMENT ON COLUMN season_settings.reminder_lead_hours IS 'How many notification-window hours (9 AM - 8 PM) before practice to send DM reminders. Default 4.';`,
+          check: `SELECT column_name FROM information_schema.columns WHERE table_name = 'season_settings' AND column_name = 'reminder_lead_hours'`,
+        },
+        {
+          name: "ADD_COACH_REMINDER_OPT_OUT",
+          sql: `ALTER TABLE coaches ADD COLUMN IF NOT EXISTS slack_reminders_disabled BOOLEAN DEFAULT FALSE;
+                COMMENT ON COLUMN coaches.slack_reminders_disabled IS 'If true, coach will not receive automated DM reminders for attendance polls.';`,
+          check: `SELECT column_name FROM information_schema.columns WHERE table_name = 'coaches' AND column_name = 'slack_reminders_disabled'`,
+        },
+        {
+          name: "ADD_SLACK_POLL_TRACKING",
+          sql: `CREATE TABLE IF NOT EXISTS slack_attendance_polls (
+                  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                  ride_id BIGINT NOT NULL REFERENCES rides(id),
+                  channel_id TEXT NOT NULL,
+                  message_ts TEXT NOT NULL,
+                  role TEXT NOT NULL DEFAULT 'rider',
+                  created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS slack_poll_responses (
+                  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                  ride_id BIGINT NOT NULL REFERENCES rides(id),
+                  slack_user_id TEXT NOT NULL,
+                  rider_id BIGINT REFERENCES riders(id),
+                  coach_id BIGINT REFERENCES coaches(id),
+                  attendance_status TEXT NOT NULL DEFAULT 'attending',
+                  responded_at TIMESTAMPTZ DEFAULT NOW(),
+                  UNIQUE(ride_id, slack_user_id)
+                );`,
+          check: `SELECT table_name FROM information_schema.tables WHERE table_name = 'slack_poll_responses'`,
+        },
+        {
+          name: "ADD_RIDE_RIDER_SLACK_NOTES",
+          sql: `ALTER TABLE rides ADD COLUMN IF NOT EXISTS rider_slack_notes JSONB DEFAULT '{}'::jsonb;
+                COMMENT ON COLUMN rides.rider_slack_notes IS 'Per-rider notes from Slack attendance (keyed by slack_user_id).';`,
+          check: `SELECT column_name FROM information_schema.columns WHERE table_name = 'rides' AND column_name = 'rider_slack_notes'`,
+        },
+      ];
+
+      // Connect to Postgres directly (SUPABASE_DB_URL is auto-injected in edge functions)
+      const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+      if (!dbUrl) {
+        return jsonResponse({ success: false, error: "SUPABASE_DB_URL not available" }, 500);
+      }
+
+      const results: Array<{ name: string; status: string }> = [];
+      try {
+        // Dynamic import to avoid bundling issues if module isn't needed
+        const { Pool } = await import("https://deno.land/x/postgres@v0.17.0/mod.ts");
+        const pool = new Pool(dbUrl, 1);
+        const conn = await pool.connect();
+
+        try {
+          for (const migration of MIGRATIONS) {
+            // Check if already applied
+            const checkResult = await conn.queryObject(migration.check);
+            if (checkResult.rows.length > 0) {
+              results.push({ name: migration.name, status: "already_applied" });
+              continue;
+            }
+
+            // Run migration
+            try {
+              await conn.queryObject(migration.sql);
+              results.push({ name: migration.name, status: "applied" });
+              console.log(`[migrations] Applied: ${migration.name}`);
+            } catch (e) {
+              const errMsg = e instanceof Error ? e.message : String(e);
+              results.push({ name: migration.name, status: `error: ${errMsg}` });
+              console.error(`[migrations] Error applying ${migration.name}:`, e);
+            }
+          }
+        } finally {
+          conn.release();
+          await pool.end();
+        }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        return jsonResponse({ success: false, error: `DB connection failed: ${errMsg}` }, 500);
+      }
+
+      return jsonResponse({ success: true, migrations: results });
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
 

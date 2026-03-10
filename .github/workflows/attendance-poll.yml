@@ -33,6 +33,7 @@ on:
           - send_reminders
           - import_coach_availability
           - cleanup_duplicate_rides
+          - run_migrations
 
 jobs:
   attendance:
