@@ -1264,8 +1264,27 @@
             // CASE 2: Empty (or missing) availableRiders, but attendance was explicitly
             // initialized already (e.g. user clicked "Mark All Absent") — preserve the
             // empty state so we don't undo a deliberate action.
+            //
+            // ONE-TIME RECOVERY: A bug in mapRideDbToApp let stale settings.availableRiders:[]
+            // overwrite valid column data, then attendanceInitialized was set erroneously.
+            // Detect corrupted rides: future/today, not cancelled, zero riders but has coaches.
+            // Reset the flag so CASE 3 repopulates them.
             if (ride.attendanceInitialized === true) {
-                return;
+                const ridersEmpty = !Array.isArray(ride.availableRiders) || ride.availableRiders.length === 0;
+                const hasCoaches = Array.isArray(ride.availableCoaches) && ride.availableCoaches.length > 0;
+                if (ridersEmpty && hasCoaches && ride.date && !ride.cancelled) {
+                    const today = new Date().toISOString().substring(0, 10);
+                    if (ride.date >= today) {
+                        console.log('ensureRideAttendanceDefaults: recovering corrupted ride', ride.id, ride.date,
+                            '(zero riders but', ride.availableCoaches.length, 'coaches — resetting attendanceInitialized)');
+                        ride.attendanceInitialized = false;
+                        // Fall through to CASE 3 below to repopulate
+                    } else {
+                        return; // Past ride — preserve as-is
+                    }
+                } else {
+                    return;
+                }
             }
 
             // CASE 3: Ride has never had attendance set — default ALL active riders to

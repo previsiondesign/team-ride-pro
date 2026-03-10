@@ -566,16 +566,28 @@ function mapRideDbToApp(row) {
         result[appKey] = value;
     }
     if (row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)) {
-        Object.assign(result, row.settings);
+        // Merge settings onto result, but SKIP keys that have dedicated DB columns
+        // (availableRiders, availableCoaches). Those columns are the source of truth
+        // because the Slack edge function writes to them directly. The settings backup
+        // can be stale and must not overwrite fresh column data.
+        for (const [sKey, sVal] of Object.entries(row.settings)) {
+            if (sKey === 'availableRiders' || sKey === 'availableCoaches') continue;
+            result[sKey] = sVal;
+        }
     }
     // Normalize rescheduledFrom from settings fallback (column may be missing)
     if (result.rescheduledFrom && typeof result.rescheduledFrom === 'string') {
         const n = result.rescheduledFrom.substring(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(n)) result.rescheduledFrom = n;
     }
-    // Use settings.availableRiders as source of truth when present (column may not persist due to RLS/schema)
-    if (row.settings && Array.isArray(row.settings.availableRiders)) {
-        result.availableRiders = row.settings.availableRiders;
+    // Fallback: use settings.availableRiders ONLY when the column came back empty/null.
+    // The available_riders column is the source of truth (written by both the frontend
+    // and the Slack edge function). The settings backup is a safety net for RLS issues
+    // and must never overwrite valid column data.
+    if (row.settings && Array.isArray(row.settings.availableRiders) && row.settings.availableRiders.length > 0) {
+        if (!Array.isArray(result.availableRiders) || result.availableRiders.length === 0) {
+            result.availableRiders = row.settings.availableRiders;
+        }
     }
     // Restore group color names from settings fallback if the groups column lost them
     if (Array.isArray(result.groups)) {
