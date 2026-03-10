@@ -782,13 +782,22 @@ async function updatePollTally(
       .eq("ride_id", rideId)
       .not(roleColumn, "is", null);
 
-    const attendingCount = responses?.filter((r) => r.attendance_status === "attending").length ?? 0;
-    const ifNeededCount = responses?.filter((r) => r.attendance_status === "if_needed").length ?? 0;
-    const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
     const totalRoster = await getActiveRosterCount(supabase, role);
-    const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
 
-    const tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    // Riders default to attending — tally is "attending = total - absent", no "not yet responded"
+    // Coaches must explicitly respond — tally tracks all states including "not yet responded"
+    let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number };
+    if (role === "rider") {
+      const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
+      tally = { attending: totalRoster - notAttendingCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
+    } else {
+      const attendingCount = responses?.filter((r) => r.attendance_status === "attending").length ?? 0;
+      const ifNeededCount = responses?.filter((r) => r.attendance_status === "if_needed").length ?? 0;
+      const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
+      const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
+      tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    }
+
     const updatedPoll = buildPollMessage(rideId, ride.date, times, tally, role === "coach");
 
     const res = await fetch("https://slack.com/api/chat.update", {
@@ -945,12 +954,17 @@ function buildPollMessage(
     const ifNeededSegment = isCoachChannel && tally.ifNeeded > 0
       ? ` · ${tally.ifNeeded} if needed`
       : "";
+    // Riders default to attending — no "not yet responded" field
+    // Coaches must explicitly respond — show "not yet responded" count
+    const noResponseSegment = isCoachChannel && tally.noResponse > 0
+      ? ` · ${tally.noResponse} not yet responded`
+      : "";
     blocks.push({
       type: "context",
       elements: [
         {
           type: "mrkdwn",
-          text: `_${tally.attending} attending${ifNeededSegment} · ${tally.notAttending} not attending · ${tally.noResponse} not yet responded_`,
+          text: `_${tally.attending} attending${ifNeededSegment} · ${tally.notAttending} not attending${noResponseSegment}_`,
         },
       ],
     });
@@ -1238,12 +1252,18 @@ async function postPollToChannel(
     .eq("ride_id", rideId)
     .not(roleColumn, "is", null);
 
+  // Build initial tally — riders default to attending, coaches track all states
   let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number } | undefined;
-  if (preResponses && preResponses.length > 0) {
+  const totalRoster = await getActiveRosterCount(supabase, role);
+  if (role === "rider") {
+    // Riders: all default to attending. Tally = total - absent, no "not yet responded"
+    const notAttendingCount = preResponses?.filter(r => r.attendance_status === "absent").length ?? 0;
+    tally = { attending: totalRoster - notAttendingCount, ifNeeded: 0, notAttending: notAttendingCount, noResponse: 0 };
+  } else if (preResponses && preResponses.length > 0) {
+    // Coaches: only show tally if there are pre-responses
     const attendingCount = preResponses.filter(r => r.attendance_status === "attending").length;
     const ifNeededCount = preResponses.filter(r => r.attendance_status === "if_needed").length;
     const notAttendingCount = preResponses.filter(r => r.attendance_status === "absent").length;
-    const totalRoster = await getActiveRosterCount(supabase, role);
     const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
     tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
   }
