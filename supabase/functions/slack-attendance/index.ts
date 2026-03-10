@@ -1,14 +1,20 @@
 // supabase/functions/slack-attendance/index.ts
 // Slack attendance poll with 3-step flow:
-//   1. Channel message with @channel: "Confirm your attendance for [DATE] at [TIME]" + [Confirm Attendance]
-//   2. Modal: "I will attend" / "I will not attend" + mandatory reason if absent
-//   3. Ephemeral confirmation with [Update Response] button
+//   1. Channel message with @channel + [Respond for this Practice] + [Mark Future Attendance...]
+//   2. Modal: "I will attend" / "I will not attend" (+ "Can attend if needed" for coaches)
+//      Coaches get optional "Comments/Requests" field (100 char). Riders get mandatory reason for absent.
+//   3. Ephemeral confirmation with timestamp + [Change Response] button
 //
-// Live tally: original poll message updates with "X attending · Y not attending · Z not yet responded"
+// "Mark Future Practices" opens a multi-ride modal to pre-mark attendance for all upcoming practices.
+// Pre-responses show up when the scheduled poll arrives (modal pre-fills + tally includes them).
+//
+// Live tally: original poll message updates with "X attending · Y if needed · Z not attending · W not yet responded"
+// Coach "if needed" status stored in rides.settings.coachIfNeeded for practice planner integration
 //
 // Also handles:
 //   - /attend slash command (quick mark-attending)
 //   - /post-poll slash command (post poll to channel)
+//   - Cross-channel guard: coaches blocked from rider poll, riders blocked from coach poll
 //   - Cron actions via X-Cron-Secret header:
 //       post_poll            — post poll for next practice immediately
 //       post_poll_if_tomorrow — only post if next practice is tomorrow (for daily cron)
@@ -179,17 +185,95 @@ function noMatchMessage(profile: SlackProfile): string {
 // HELPERS — Database
 // =============================================================================
 
+/** Get the next upcoming ride that matches a planned practice day.
+ *  A ride is a "planned practice" if its date matches a season_settings practice
+ *  (by specificDate or by dayOfWeek) and that practice is not excludeFromPlanner. */
 async function getNextRide(supabase: ReturnType<typeof createClient>) {
   const today = new Date().toISOString().slice(0, 10);
+
+  // Fetch practices from season_settings to know which days are planned
+  const { data: settingsRow } = await supabase
+    .from("season_settings")
+    .select("practices")
+    .eq("id", "current")
+    .single();
+  const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
+
+  // Fetch the next several upcoming rides (we may need to skip non-practice rides)
   const { data: rides, error } = await supabase
     .from("rides")
     .select("id, date, available_riders, available_coaches, cancelled")
     .eq("cancelled", false)
     .gte("date", today)
     .order("date", { ascending: true })
-    .limit(1);
+    .limit(20);
   if (error) { console.error("Error fetching rides:", error); return null; }
-  return rides?.[0] ?? null;
+  if (!rides || rides.length === 0) return null;
+
+  // If no practices are configured, fall back to first ride (backward compat)
+  if (practices.length === 0) {
+    console.log("No practices configured in season_settings — using first upcoming ride");
+    return rides[0];
+  }
+
+  // Find the first ride that matches a non-excluded practice
+  for (const ride of rides) {
+    if (isPlannedPractice(ride.date, practices)) return ride;
+  }
+
+  console.log("No upcoming rides match a planned practice day");
+  return null;
+}
+
+/** Get all upcoming planned rides (for "Mark Future Practices" modal). Skips the very next practice. */
+async function getUpcomingPlannedRides(
+  supabase: ReturnType<typeof createClient>,
+  limit: number = 25
+): Promise<Array<{ id: number; date: string }>> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: settingsRow } = await supabase
+    .from("season_settings")
+    .select("practices")
+    .eq("id", "current")
+    .single();
+  const practices: any[] = Array.isArray(settingsRow?.practices) ? settingsRow.practices : [];
+
+  const { data: rides, error } = await supabase
+    .from("rides")
+    .select("id, date")
+    .eq("cancelled", false)
+    .gte("date", today)
+    .order("date", { ascending: true })
+    .limit(50);
+  if (error || !rides) return [];
+
+  // Filter to planned practices only
+  const planned = practices.length > 0
+    ? rides.filter(r => isPlannedPractice(r.date, practices))
+    : rides;
+
+  // Skip the first one (it's the current/next practice which has its own poll)
+  return planned.slice(1, 1 + limit);
+}
+
+/** Check if a date matches a planned (non-excluded) practice */
+function isPlannedPractice(dateStr: string, practices: any[]): boolean {
+  // Check specific-date practices first
+  const specificMatch = practices.find(
+    (p: any) => p.specificDate === dateStr && !p.excludeFromPlanner
+  );
+  if (specificMatch) return true;
+
+  // Check recurring day-of-week practices
+  const d = new Date(dateStr + "T12:00:00");
+  const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ...
+  const recurringMatch = practices.find((p: any) => {
+    const pDow = typeof p.dayOfWeek === "string" ? parseInt(p.dayOfWeek, 10) : p.dayOfWeek;
+    const hasSpecificDate = p.specificDate != null && p.specificDate !== undefined && p.specificDate !== "";
+    return Number(pDow) === dayOfWeek && !hasSpecificDate && !p.excludeFromPlanner;
+  });
+  return !!recurringMatch;
 }
 
 async function getRideById(supabase: ReturnType<typeof createClient>, rideId: number) {
@@ -202,24 +286,54 @@ async function getRideById(supabase: ReturnType<typeof createClient>, rideId: nu
   return data;
 }
 
-/** Get practice time from season_settings for a given date's day-of-week */
-async function getPracticeTime(supabase: ReturnType<typeof createClient>, dateStr: string): Promise<string | null> {
+/** Get practice start/end times from season_settings for a given date */
+async function getPracticeTimes(
+  supabase: ReturnType<typeof createClient>, dateStr: string
+): Promise<{ startTime: string | null; endTime: string | null }> {
   try {
-    const d = new Date(dateStr + "T12:00:00");
-    const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ...
     const { data } = await supabase
       .from("season_settings")
       .select("practices")
       .eq("id", "current")
       .single();
     if (data?.practices && Array.isArray(data.practices)) {
-      const match = data.practices.find((p: any) => p.dayOfWeek === dayOfWeek);
-      if (match?.time) return match.time; // e.g. "15:30"
+      // Check specific-date practice first
+      const specificMatch = data.practices.find((p: any) => p.specificDate === dateStr);
+      if (specificMatch?.time) return { startTime: specificMatch.time, endTime: specificMatch.endTime || null };
+
+      // Check recurring day-of-week practice
+      const d = new Date(dateStr + "T12:00:00");
+      const dayOfWeek = d.getDay();
+      const recurringMatch = data.practices.find((p: any) => {
+        const pDow = typeof p.dayOfWeek === "string" ? parseInt(p.dayOfWeek, 10) : p.dayOfWeek;
+        const hasSpecificDate = p.specificDate != null && p.specificDate !== undefined && p.specificDate !== "";
+        return Number(pDow) === dayOfWeek && !hasSpecificDate;
+      });
+      if (recurringMatch?.time) return { startTime: recurringMatch.time, endTime: recurringMatch.endTime || null };
     }
   } catch (e) {
-    console.error("Error fetching practice time:", e);
+    console.error("Error fetching practice times:", e);
   }
-  return null;
+  return { startTime: null, endTime: null };
+}
+
+/** Compute practice times from an already-fetched practices array (pure, no DB call) */
+function computeTimesForDate(
+  practices: any[], dateStr: string
+): { startTime: string | null; endTime: string | null } {
+  const specificMatch = practices.find((p: any) => p.specificDate === dateStr);
+  if (specificMatch?.time) return { startTime: specificMatch.time, endTime: specificMatch.endTime || null };
+
+  const d = new Date(dateStr + "T12:00:00");
+  const dayOfWeek = d.getDay();
+  const recurringMatch = practices.find((p: any) => {
+    const pDow = typeof p.dayOfWeek === "string" ? parseInt(p.dayOfWeek, 10) : p.dayOfWeek;
+    const hasSpecificDate = p.specificDate != null && p.specificDate !== undefined && p.specificDate !== "";
+    return Number(pDow) === dayOfWeek && !hasSpecificDate;
+  });
+  if (recurringMatch?.time) return { startTime: recurringMatch.time, endTime: recurringMatch.endTime || null };
+
+  return { startTime: null, endTime: null };
 }
 
 /** Format "15:30" → "3:30 PM" */
@@ -233,11 +347,49 @@ function formatTime12h(time24: string): string {
   return `${h}:${m} ${ampm}`;
 }
 
+/** Format "15:30" → "3:30pm" (compact lowercase, no space) */
+function formatTimeCompact(time24: string): string {
+  const [hStr, mStr] = time24.split(":");
+  let h = parseInt(hStr, 10);
+  const m = mStr || "00";
+  const ampm = h >= 12 ? "pm" : "am";
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  // Omit :00 for even hours → "3pm" instead of "3:00pm"
+  return m === "00" ? `${h}${ampm}` : `${h}:${m}${ampm}`;
+}
+
+/** Format a time range: "from 3:40-6pm" or "from 3:40-6:30pm" or "at 3:40pm" (no end time) */
+function formatTimeRange(startTime: string | null, endTime: string | null): string {
+  if (!startTime) return "";
+  if (endTime) return ` from ${formatTimeCompact(startTime)}-${formatTimeCompact(endTime)}`;
+  return ` at ${formatTimeCompact(startTime)}`;
+}
+
+/** Format a time range for parenthesized display: "9am - 2pm" (no "from", spaces around dash) */
+function formatTimeRangeParens(startTime: string | null, endTime: string | null): string {
+  if (!startTime) return "";
+  if (endTime) return `${formatTimeCompact(startTime)} - ${formatTimeCompact(endTime)}`;
+  return formatTimeCompact(startTime);
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Format current time as "Mon 3/9 @ 5:15pm" in Pacific time */
+function formatNowTimestamp(): string {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "short", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? "";
+  return `${get("weekday")} ${get("month")}/${get("day")} @ ${get("hour")}:${get("minute")}${get("dayPeriod").toLowerCase()}`;
 }
 
 async function updateAttendance(
@@ -247,10 +399,12 @@ async function updateAttendance(
   coachId: number | null,
   action: "add" | "remove"
 ): Promise<boolean> {
+  console.log(`[updateAttendance] START: rideId=${rideId}, riderId=${riderId}, coachId=${coachId}, action=${action}`);
   const ride = await getRideById(supabase, rideId);
-  if (!ride) return false;
+  if (!ride) { console.error(`[updateAttendance] getRideById returned null for rideId=${rideId}`); return false; }
   const availableRiders: number[] = Array.isArray(ride.available_riders) ? [...ride.available_riders] : [];
   const availableCoaches: number[] = Array.isArray(ride.available_coaches) ? [...ride.available_coaches] : [];
+  console.log(`[updateAttendance] Before: riders=${JSON.stringify(availableRiders)}, coaches=${JSON.stringify(availableCoaches)}`);
   let changed = false;
   if (riderId) {
     if (action === "add" && !availableRiders.includes(riderId)) { availableRiders.push(riderId); changed = true; }
@@ -260,9 +414,13 @@ async function updateAttendance(
     if (action === "add" && !availableCoaches.includes(coachId)) { availableCoaches.push(coachId); changed = true; }
     else if (action === "remove" && availableCoaches.includes(coachId)) { availableCoaches.splice(availableCoaches.indexOf(coachId), 1); changed = true; }
   }
+  console.log(`[updateAttendance] After: riders=${JSON.stringify(availableRiders)}, coaches=${JSON.stringify(availableCoaches)}, changed=${changed}`);
   if (changed) {
     const { error } = await supabase.from("rides").update({ available_riders: availableRiders, available_coaches: availableCoaches }).eq("id", rideId);
-    if (error) { console.error("Error updating attendance:", error); return false; }
+    if (error) { console.error("[updateAttendance] DB error:", error); return false; }
+    console.log(`[updateAttendance] DB write successful`);
+  } else {
+    console.log(`[updateAttendance] No change needed (already in desired state)`);
   }
   return true;
 }
@@ -286,23 +444,141 @@ async function saveAbsenceReason(
   else console.log(`Reason saved for ${riderId ? "rider " + riderId : "coach " + coachId} on ride ${rideId}`);
 }
 
+/** Clear (delete) the note for a person on a ride — used when response is updated without a note */
+async function clearNote(
+  supabase: ReturnType<typeof createClient>,
+  rideId: number,
+  riderId: number | null,
+  coachId: number | null
+): Promise<void> {
+  let query = supabase.from("ride_rider_slack_notes").delete().eq("ride_id", rideId);
+  if (riderId) query = query.eq("rider_id", riderId);
+  else if (coachId) query = query.eq("coach_id", coachId);
+  const { error } = await query;
+  if (error) console.error("Error clearing note:", error);
+  else console.log(`Note cleared for ${riderId ? "rider " + riderId : "coach " + coachId} on ride ${rideId}`);
+}
+
+/** Revert a response to "unknown" — delete the response row, remove from roster, clear notes */
+async function handleUnknownResponse(
+  supabase: ReturnType<typeof createClient>,
+  rideId: number,
+  slackUserId: string,
+  riderId: number | null,
+  coachId: number | null
+): Promise<void> {
+  // Delete the poll response row entirely ("unknown" = no response)
+  await supabase
+    .from("slack_poll_responses")
+    .delete()
+    .eq("ride_id", rideId)
+    .eq("slack_user_id", slackUserId);
+
+  // Remove from roster
+  await updateAttendance(supabase, rideId, riderId, coachId, "remove");
+
+  // Clear coachIfNeeded
+  if (coachId && !riderId) {
+    await updateCoachIfNeededStatus(supabase, rideId, coachId, false);
+  }
+
+  // Clear any notes
+  await clearNote(supabase, rideId, riderId, coachId);
+}
+
+/** When a rider/coach marks "attending" via Slack poll but has a scheduled absence
+ *  covering that practice date, add the date as an exception so TeamRide Pro's
+ *  auto-removal doesn't override the Slack attendance response. */
+async function addAbsenceExceptionDate(
+  supabase: ReturnType<typeof createClient>,
+  riderId: number | null,
+  coachId: number | null,
+  rideDate: string
+): Promise<void> {
+  // Determine person_type and person_id
+  const personType = riderId ? "rider" : coachId ? "coach" : null;
+  const personId = riderId ?? coachId;
+  if (!personType || !personId) return;
+
+  // Find active scheduled absences covering this date
+  const { data: absences, error } = await supabase
+    .from("scheduled_absences")
+    .select("id, exception_dates, start_date, end_date, specific_practice_days")
+    .eq("person_type", personType)
+    .eq("person_id", personId)
+    .lte("start_date", rideDate)
+    .gte("end_date", rideDate);
+
+  if (error) { console.error("[addAbsenceException] query error:", error); return; }
+  if (!absences || absences.length === 0) return;
+
+  // Filter for absences that actually apply (check specific_practice_days)
+  const rideDow = new Date(rideDate + "T12:00:00").getDay();
+  const matching = absences.filter(a => {
+    const days = a.specific_practice_days;
+    if (Array.isArray(days) && days.length > 0 && !days.includes(rideDow)) return false;
+    // Already excepted?
+    if (Array.isArray(a.exception_dates) && a.exception_dates.includes(rideDate)) return false;
+    return true;
+  });
+
+  // Add exception date to each matching absence
+  for (const absence of matching) {
+    const exceptions = Array.isArray(absence.exception_dates) ? [...absence.exception_dates] : [];
+    exceptions.push(rideDate);
+    const { error: updateError } = await supabase
+      .from("scheduled_absences")
+      .update({ exception_dates: exceptions })
+      .eq("id", absence.id);
+    if (updateError) {
+      console.error(`[addAbsenceException] update error for absence ${absence.id}:`, updateError);
+    } else {
+      console.log(`[addAbsenceException] Added exception ${rideDate} to absence ${absence.id} for ${personType} ${personId}`);
+    }
+  }
+}
+
+/** Update rides.settings.coachIfNeeded for a coach's "if_needed" status */
+async function updateCoachIfNeededStatus(
+  supabase: ReturnType<typeof createClient>,
+  rideId: number,
+  coachId: number,
+  ifNeeded: boolean
+): Promise<void> {
+  const { data: ride } = await supabase
+    .from("rides")
+    .select("settings")
+    .eq("id", rideId)
+    .single();
+  const settings = ride?.settings ?? {};
+  const coachIfNeeded = settings.coachIfNeeded ?? {};
+  if (ifNeeded) {
+    coachIfNeeded[coachId] = true;
+  } else {
+    delete coachIfNeeded[coachId];
+  }
+  settings.coachIfNeeded = coachIfNeeded;
+  await supabase.from("rides").update({ settings }).eq("id", rideId);
+  console.log(`coachIfNeeded updated: ride=${rideId}, coach=${coachId}, ifNeeded=${ifNeeded}`);
+}
+
 // =============================================================================
 // HELPERS — Poll response tracking & live tally
 // =============================================================================
 
-/** Upsert a poll response (who answered and whether they're attending) */
+/** Upsert a poll response (who answered and their attendance status) */
 async function trackPollResponse(
   supabase: ReturnType<typeof createClient>,
   rideId: number,
   slackUserId: string,
   riderId: number | null,
   coachId: number | null,
-  attending: boolean
+  attendanceStatus: "attending" | "absent" | "if_needed"
 ): Promise<void> {
   const row: Record<string, unknown> = {
     ride_id: rideId,
     slack_user_id: slackUserId,
-    attending,
+    attendance_status: attendanceStatus,
     responded_at: new Date().toISOString(),
   };
   if (riderId) row.rider_id = riderId;
@@ -312,7 +588,7 @@ async function trackPollResponse(
     .from("slack_poll_responses")
     .upsert(row, { onConflict: "ride_id,slack_user_id" });
   if (error) console.error("Error tracking poll response:", error);
-  else console.log(`Poll response tracked: ride=${rideId}, user=${slackUserId}, attending=${attending}`);
+  else console.log(`Poll response tracked: ride=${rideId}, user=${slackUserId}, status=${attendanceStatus}`);
 }
 
 /** Count active (non-archived) riders, coaches, or both */
@@ -359,7 +635,7 @@ async function updatePollTally(
   // Get ride info to rebuild the message blocks
   const ride = await getRideById(supabase, rideId);
   if (!ride) return;
-  const timeStr = await getPracticeTime(supabase, ride.date);
+  const times = await getPracticeTimes(supabase, ride.date);
 
   // Update each channel's poll with its own role-filtered tally
   for (const poll of polls) {
@@ -369,17 +645,18 @@ async function updatePollTally(
     // Count only responses for this role (rider_id NOT NULL or coach_id NOT NULL)
     const { data: responses } = await supabase
       .from("slack_poll_responses")
-      .select("attending")
+      .select("attendance_status")
       .eq("ride_id", rideId)
       .not(roleColumn, "is", null);
 
-    const attendingCount = responses?.filter((r) => r.attending).length ?? 0;
-    const notAttendingCount = responses?.filter((r) => !r.attending).length ?? 0;
+    const attendingCount = responses?.filter((r) => r.attendance_status === "attending").length ?? 0;
+    const ifNeededCount = responses?.filter((r) => r.attendance_status === "if_needed").length ?? 0;
+    const notAttendingCount = responses?.filter((r) => r.attendance_status === "absent").length ?? 0;
     const totalRoster = await getActiveRosterCount(supabase, role);
-    const noResponseCount = Math.max(0, totalRoster - attendingCount - notAttendingCount);
+    const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
 
-    const tally = { attending: attendingCount, notAttending: notAttendingCount, noResponse: noResponseCount };
-    const updatedPoll = buildPollMessage(rideId, ride.date, timeStr, tally);
+    const tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+    const updatedPoll = buildPollMessage(rideId, ride.date, times, tally, role === "coach");
 
     const res = await fetch("https://slack.com/api/chat.update", {
       method: "POST",
@@ -401,44 +678,137 @@ async function updatePollTally(
 // HELPERS — Slack UI builders
 // =============================================================================
 
+/** Future Attendance: Modal with inline dropdowns per upcoming practice.
+ *  Uses section blocks with accessory selects for inline layout (label left, dropdown right).
+ *  Changes auto-save instantly via block_actions — no submit button needed. */
+function buildFutureAttendanceModal(
+  rides: Array<{ id: number; date: string }>,
+  isCoach: boolean,
+  channelId: string,
+  existingResponses: Map<number, string>, // rideId -> "attending"|"absent"|"if_needed"
+  timesMap: Map<string, { startTime: string | null; endTime: string | null }> // dateStr -> times
+) {
+  // Build dropdown options (rider vs coach)
+  const unknownOption = { text: { type: "plain_text" as const, text: "Unknown" }, value: "unknown" };
+  const options: any[] = [
+    unknownOption,
+    { text: { type: "plain_text" as const, text: "Attending" }, value: "attend" },
+    { text: { type: "plain_text" as const, text: "Not Attending" }, value: "absent" },
+  ];
+  if (isCoach) {
+    options.push({ text: { type: "plain_text" as const, text: "If Needed" }, value: "if_needed" });
+  }
+
+  // Map DB status to dropdown value
+  const statusToValue: Record<string, string> = {
+    attending: "attend",
+    absent: "absent",
+    if_needed: "if_needed",
+  };
+
+  const blocks: any[] = [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: "Mark your attendance for upcoming practices.\nChanges save automatically." },
+    },
+    { type: "divider" },
+  ];
+
+  for (const ride of rides) {
+    const friendlyDate = formatDate(ride.date);
+    const rideTimes = timesMap.get(ride.date);
+    const timeLabel = rideTimes ? formatTimeRangeParens(rideTimes.startTime, rideTimes.endTime) : "";
+    const label = timeLabel ? `*${friendlyDate}* (${timeLabel})` : `*${friendlyDate}*`;
+    const existing = existingResponses.get(ride.id);
+    const existingValue = existing ? statusToValue[existing] : undefined;
+    const initialOption = existingValue
+      ? options.find((o: any) => o.value === existingValue) || unknownOption
+      : unknownOption;
+
+    blocks.push({
+      type: "section",
+      block_id: `ride_${ride.id}`,
+      text: { type: "mrkdwn", text: label },
+      accessory: {
+        type: "static_select",
+        action_id: `future_choice_${ride.id}`,
+        options,
+        initial_option: initialOption,
+      },
+    });
+  }
+
+  return {
+    type: "modal" as const,
+    callback_id: "future_attendance",
+    private_metadata: JSON.stringify({ isCoach, channelId }),
+    title: { type: "plain_text" as const, text: "Future Practices" },
+    close: { type: "plain_text" as const, text: "Done" },
+    blocks,
+  };
+}
+
 /** Step 1: Channel message with "Confirm Attendance" button + optional live tally */
 function buildPollMessage(
   rideId: number,
   dateStr: string,
-  timeStr: string | null,
-  tally?: { attending: number; notAttending: number; noResponse: number }
+  times: { startTime: string | null; endTime: string | null },
+  tally?: { attending: number; ifNeeded: number; notAttending: number; noResponse: number },
+  isCoachChannel?: boolean
 ) {
   const friendlyDate = formatDate(dateStr);
-  const timeDisplay = timeStr ? ` at ${formatTime12h(timeStr)}` : "";
-  const headline = `Please confirm your attendance for practice on *${friendlyDate}*${timeDisplay}`;
+  const timeDisplay = formatTimeRange(times.startTime, times.endTime);
+  const headline = `Please mark your attendance for practice on *${friendlyDate}*${timeDisplay}`;
 
   const blocks: any[] = [
     {
       type: "section",
       text: { type: "mrkdwn", text: `:clipboard: ${headline}` },
     },
-    {
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          text: { type: "plain_text", text: "Confirm Attendance", emoji: true },
-          style: "primary",
-          action_id: "confirm_attendance",
-          value: `confirm_${rideId}`,
-        },
-      ],
-    },
   ];
+
+  // Rider-only note about completing the full practice
+  if (!isCoachChannel) {
+    blocks.push({
+      type: "context",
+      elements: [{
+        type: "mrkdwn",
+        text: "_NOTE: Attending riders must complete the full practice. Coaches are not allowed to release riders from practice anywhere other than the designated ride finish spot. If you have a time constraint or are concerned something else may prevent you from completing the ride as scheduled, please make sure to communicate this to the coaches in advance of practice._",
+      }],
+    });
+  }
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
+        style: "primary",
+        action_id: "confirm_attendance",
+        value: `confirm_${rideId}`,
+      },
+      {
+        type: "button",
+        text: { type: "plain_text", text: "Mark Future Attendance...", emoji: true },
+        action_id: "mark_future_practices",
+        value: `future_${rideId}`,
+      },
+    ],
+  });
 
   // Append live tally if we have response data
   if (tally) {
+    // Only show "if needed" segment in coach channel (riders don't have that option)
+    const ifNeededSegment = isCoachChannel && tally.ifNeeded > 0
+      ? ` · ${tally.ifNeeded} if needed`
+      : "";
     blocks.push({
       type: "context",
       elements: [
         {
           type: "mrkdwn",
-          text: `_${tally.attending} attending · ${tally.notAttending} not attending · ${tally.noResponse} not yet responded_`,
+          text: `_${tally.attending} attending${ifNeededSegment} · ${tally.notAttending} not attending · ${tally.noResponse} not yet responded_`,
         },
       ],
     });
@@ -451,10 +821,38 @@ function buildPollMessage(
   };
 }
 
-/** Step 2: Modal with attend/not-attend radio buttons + conditional reason field */
-function buildAttendanceModal(rideId: number, dateStr: string, timeStr: string | null, showReason: boolean) {
+/** Step 2: Modal with attend/not-attend radio buttons + conditional reason field
+ *  Coaches get a 3rd "Can attend if needed" option and an optional comments field */
+function buildAttendanceModal(
+  rideId: number,
+  dateStr: string,
+  times: { startTime: string | null; endTime: string | null },
+  showReason: boolean,
+  isCoach: boolean = false,
+  channelId: string = "",
+  existingChoice?: string // "attend" | "absent" | "if_needed" — pre-fills radio from advance response
+) {
   const friendlyDate = formatDate(dateStr);
-  const timeDisplay = timeStr ? ` at ${formatTime12h(timeStr)}` : "";
+  const timeDisplay = formatTimeRange(times.startTime, times.endTime);
+
+  const radioOptions: any[] = [
+    {
+      text: { type: "plain_text", text: "I will attend", emoji: true },
+      value: "attend",
+    },
+    {
+      text: { type: "plain_text", text: "I will not attend", emoji: true },
+      value: "absent",
+    },
+  ];
+
+  // Coaches get a 3rd option
+  if (isCoach) {
+    radioOptions.push({
+      text: { type: "plain_text", text: "Can attend if needed", emoji: true },
+      value: "if_needed",
+    });
+  }
 
   const blocks: any[] = [
     {
@@ -468,22 +866,15 @@ function buildAttendanceModal(rideId: number, dateStr: string, timeStr: string |
       element: {
         type: "radio_buttons",
         action_id: "attendance_choice",
-        options: [
-          {
-            text: { type: "plain_text", text: "I will attend", emoji: true },
-            value: "attend",
-          },
-          {
-            text: { type: "plain_text", text: "I will not attend", emoji: true },
-            value: "absent",
-          },
-        ],
+        options: radioOptions,
+        ...(existingChoice ? { initial_option: radioOptions.find((o: any) => o.value === existingChoice) } : {}),
       },
       label: { type: "plain_text", text: "Will you attend this practice?" },
     },
   ];
 
-  if (showReason) {
+  // Reason field: only shown for RIDERS when "absent" is selected (coaches don't need a reason)
+  if (showReason && !isCoach) {
     blocks.push({
       type: "input",
       block_id: "reason_block",
@@ -497,33 +888,76 @@ function buildAttendanceModal(rideId: number, dateStr: string, timeStr: string |
     });
   }
 
+  // Coaches always get an optional comments/requests field
+  if (isCoach) {
+    blocks.push({
+      type: "input",
+      block_id: "comments_block",
+      optional: true,
+      element: {
+        type: "plain_text_input",
+        action_id: "comments_input",
+        max_length: 100,
+        multiline: false,
+        placeholder: { type: "plain_text", text: "e.g., Can only stay until 5pm..." },
+      },
+      label: { type: "plain_text", text: "Comments/Requests" },
+    });
+  }
+
   return {
     type: "modal" as const,
     callback_id: `attendance_${rideId}`,
-    // Encode time in private_metadata so we can rebuild the modal on update
-    private_metadata: JSON.stringify({ rideId, dateStr, timeStr }),
-    title: { type: "plain_text" as const, text: "Confirm Attendance" },
+    // Store isCoach + channelId in metadata so handlers can rebuild and post ephemeral
+    private_metadata: JSON.stringify({ rideId, dateStr, times, isCoach, channelId }),
+    title: { type: "plain_text" as const, text: "Practice Attendance" },
     submit: { type: "plain_text" as const, text: "Submit" },
     close: { type: "plain_text" as const, text: "Cancel" },
     blocks,
   };
 }
 
-/** Step 3: Ephemeral confirmation blocks with Update Response button */
-function buildConfirmationBlocks(rideId: number, dateStr: string, attending: boolean, reason?: string) {
+/** Step 3: Ephemeral confirmation blocks with timestamp and Change Response button */
+function buildConfirmationBlocks(
+  rideId: number,
+  dateStr: string,
+  attendanceStatus: "attending" | "absent" | "if_needed",
+  isUpdate: boolean,
+  reason?: string,
+  comments?: string
+) {
   const friendlyDate = formatDate(dateStr);
-  const emoji = attending ? ":white_check_mark:" : ":x:";
-  const status = attending ? "Attending" : "Not attending";
+  const timestamp = formatNowTimestamp();
+  const header = isUpdate ? "UPDATED Response" : "Response recorded";
+  let emoji: string;
+  let status: string;
+  switch (attendanceStatus) {
+    case "attending":
+      emoji = ":white_check_mark:";
+      status = "Attending";
+      break;
+    case "if_needed":
+      emoji = ":raised_hand:";
+      status = "Can attend if needed";
+      break;
+    case "absent":
+      emoji = ":x:";
+      status = "Not attending";
+      break;
+  }
 
-  let text = `${emoji} *Response recorded*\n*Practice:* ${friendlyDate}\n*Status:* ${status}`;
-  if (!attending && reason) {
+  let text = `${emoji} *${header} (${timestamp})*\n*Practice:* ${friendlyDate}\n*Status:* ${status}`;
+  if (attendanceStatus === "absent" && reason) {
     text += `\n*Reason:* ${reason}`;
+  }
+  if (comments) {
+    text += `\n*Comments:* ${comments}`;
   }
 
   return {
     response_type: "ephemeral",
     replace_original: false,
-    text: `Response recorded: ${status} for ${friendlyDate}`,
+    text: `${header}: ${status} for ${friendlyDate}`,
     blocks: [
       {
         type: "section",
@@ -534,7 +968,7 @@ function buildConfirmationBlocks(rideId: number, dateStr: string, attending: boo
         elements: [
           {
             type: "button",
-            text: { type: "plain_text", text: "Update Response", emoji: true },
+            text: { type: "plain_text", text: "Change Response", emoji: true },
             action_id: "update_response",
             value: `update_${rideId}`,
           },
@@ -558,8 +992,84 @@ async function postPollToChannel(
     console.error("Missing SLACK_BOT_TOKEN or channel ID");
     return false;
   }
-  const timeStr = await getPracticeTime(supabase, dateStr);
-  const poll = buildPollMessage(rideId, dateStr, timeStr);
+  const times = await getPracticeTimes(supabase, dateStr);
+  const role = channelRole(channelId);
+  const roleColumn = role === "coach" ? "coach_id" : "rider_id";
+  const personType = role === "coach" ? "coach" : "rider";
+
+  // --- Pre-populate "absent" for riders/coaches with scheduled absences ---
+  // Only creates entries for people who don't already have a response (won't override
+  // explicit Slack responses or CSV-imported availability).
+  try {
+    const { data: absences } = await supabase
+      .from("scheduled_absences")
+      .select("id, person_id, person_type, specific_practice_days, exception_dates")
+      .eq("person_type", personType)
+      .lte("start_date", dateStr)
+      .gte("end_date", dateStr);
+
+    if (absences && absences.length > 0) {
+      const rideDow = new Date(dateStr + "T12:00:00").getDay();
+      const activeAbsences = absences.filter(a => {
+        const days = a.specific_practice_days;
+        if (Array.isArray(days) && days.length > 0 && !days.includes(rideDow)) return false;
+        if (Array.isArray(a.exception_dates) && a.exception_dates.includes(dateStr)) return false;
+        return true;
+      });
+
+      if (activeAbsences.length > 0) {
+        // Batch-fetch: Slack user IDs from past responses + existing responses for this ride
+        const [{ data: pastResponses }, { data: existingForRide }] = await Promise.all([
+          supabase.from("slack_poll_responses").select(`${roleColumn}, slack_user_id`).not(roleColumn, "is", null),
+          supabase.from("slack_poll_responses").select("slack_user_id").eq("ride_id", rideId),
+        ]);
+        const personSlackMap = new Map<number, string>();
+        for (const r of pastResponses ?? []) {
+          const pid = role === "coach" ? r.coach_id : r.rider_id;
+          if (pid) personSlackMap.set(pid, r.slack_user_id);
+        }
+        const alreadyResponded = new Set((existingForRide ?? []).map(r => r.slack_user_id));
+
+        let prePopulated = 0;
+        for (const absence of activeAbsences) {
+          const slackUserId = personSlackMap.get(absence.person_id);
+          if (!slackUserId || alreadyResponded.has(slackUserId)) continue;
+
+          const riderId = personType === "rider" ? absence.person_id : null;
+          const coachId = personType === "coach" ? absence.person_id : null;
+          await trackPollResponse(supabase, rideId, slackUserId, riderId, coachId, "absent");
+          await updateAttendance(supabase, rideId, riderId, coachId, "remove");
+          alreadyResponded.add(slackUserId); // prevent duplicates
+          prePopulated++;
+        }
+        if (prePopulated > 0) {
+          console.log(`[postPoll] Pre-populated ${prePopulated} ${personType} absence(s) for ride ${rideId}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[postPoll] Error pre-populating absences:", e);
+  }
+
+  // Check for pre-responses (from future marking, CSV import, or absences above) for tally
+  const { data: preResponses } = await supabase
+    .from("slack_poll_responses")
+    .select("attendance_status")
+    .eq("ride_id", rideId)
+    .not(roleColumn, "is", null);
+
+  let tally: { attending: number; ifNeeded: number; notAttending: number; noResponse: number } | undefined;
+  if (preResponses && preResponses.length > 0) {
+    const attendingCount = preResponses.filter(r => r.attendance_status === "attending").length;
+    const ifNeededCount = preResponses.filter(r => r.attendance_status === "if_needed").length;
+    const notAttendingCount = preResponses.filter(r => r.attendance_status === "absent").length;
+    const totalRoster = await getActiveRosterCount(supabase, role);
+    const noResponseCount = Math.max(0, totalRoster - attendingCount - ifNeededCount - notAttendingCount);
+    tally = { attending: attendingCount, ifNeeded: ifNeededCount, notAttending: notAttendingCount, noResponse: noResponseCount };
+  }
+
+  const isCoachChannel = role === "coach";
+  const poll = buildPollMessage(rideId, dateStr, times, tally, isCoachChannel);
   const res = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
@@ -713,9 +1223,9 @@ serve(async (req) => {
       }
 
       // Send DM reminders
-      const timeStr = await getPracticeTime(supabase, ride.date);
+      const reminderTimes = await getPracticeTimes(supabase, ride.date);
       const friendlyDate = formatDate(ride.date);
-      const timeDisplay = timeStr ? ` at ${formatTime12h(timeStr)}` : "";
+      const timeDisplay = formatTimeRange(reminderTimes.startTime, reminderTimes.endTime);
       let sent = 0;
 
       for (const userId of reminderTargets) {
@@ -737,17 +1247,17 @@ serve(async (req) => {
             headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               channel: dmChannelId,
-              text: `Reminder: Please confirm attendance for practice on ${friendlyDate}`,
+              text: `Reminder: Please mark your attendance for practice on ${friendlyDate}`,
               blocks: [
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: `:wave: Reminder: Please confirm your attendance for practice on *${friendlyDate}*${timeDisplay}` },
+                  text: { type: "mrkdwn", text: `:wave: Reminder: Please mark your attendance for practice on *${friendlyDate}*${timeDisplay}` },
                 },
                 {
                   type: "actions",
                   elements: [{
                     type: "button",
-                    text: { type: "plain_text", text: "Confirm Attendance", emoji: true },
+                    text: { type: "plain_text", text: "Respond for this Practice", emoji: true },
                     style: "primary",
                     action_id: "confirm_attendance",
                     value: `confirm_${ride.id}`,
@@ -765,6 +1275,94 @@ serve(async (req) => {
       }
 
       return jsonResponse({ success: true, rideId: ride.id, reminders_sent: sent, non_responders: reminderTargets.length });
+    }
+
+    // --- import_coach_availability: one-time import from practice availability spreadsheet ---
+    if (body.action === "import_coach_availability") {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      // Parsed CSV data: coaches with future availability (Y=Yes, N=No, M=Maybe→unknown)
+      const AVAIL_DATA: Array<{ name: string; availability: Record<string, "Y" | "N" | "M"> }> = [
+        { name: "Adam Phillips", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "Y", "2026-04-15": "Y", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+        { name: "Beverly Seabreeze", availability: { "2026-03-11": "N", "2026-03-15": "N", "2026-03-18": "N", "2026-03-25": "N", "2026-03-29": "N", "2026-04-01": "N" } },
+        { name: "Bill Dauphinais", availability: { "2026-03-11": "Y", "2026-03-15": "Y" } },
+        { name: "Chuck Moore", availability: { "2026-03-11": "Y" } },
+        { name: "Christian Hackett", availability: { "2026-03-11": "N", "2026-03-15": "M", "2026-03-18": "N", "2026-03-25": "N", "2026-03-29": "M", "2026-04-01": "N" } },
+        { name: "Cory Creath", availability: { "2026-03-11": "N" } },
+        { name: "Dale Kunkel", availability: { "2026-03-11": "N", "2026-03-15": "Y", "2026-03-18": "M", "2026-03-25": "N", "2026-03-29": "Y", "2026-04-01": "N", "2026-04-05": "Y", "2026-04-08": "N", "2026-04-15": "N", "2026-04-19": "Y", "2026-04-22": "N", "2026-04-26": "Y", "2026-04-29": "N", "2026-05-06": "Y", "2026-05-10": "Y" } },
+        { name: "Daniel Ciccarone", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "Y", "2026-04-15": "N", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "M", "2026-04-29": "M", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+        { name: "Daniel Robinson", availability: { "2026-03-11": "N", "2026-03-15": "Y", "2026-03-18": "N", "2026-03-25": "N", "2026-03-29": "Y", "2026-04-01": "N", "2026-04-05": "Y", "2026-04-08": "N", "2026-04-15": "N", "2026-04-19": "Y", "2026-04-22": "N", "2026-04-26": "Y", "2026-04-29": "N", "2026-05-06": "N", "2026-05-10": "Y", "2026-05-13": "N" } },
+        { name: "David Collman", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "N", "2026-04-15": "Y", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+        { name: "Eric Eberhardt", availability: { "2026-03-11": "N", "2026-03-15": "N", "2026-03-18": "N", "2026-03-25": "N", "2026-03-29": "Y", "2026-04-01": "N", "2026-04-05": "N", "2026-04-08": "N", "2026-04-15": "N", "2026-04-19": "Y", "2026-04-22": "N", "2026-04-26": "Y", "2026-04-29": "N", "2026-05-06": "N", "2026-05-10": "Y", "2026-05-13": "N" } },
+        { name: "James Powell", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "Y", "2026-04-15": "Y", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+        { name: "Marcus Gaetani", availability: { "2026-03-11": "Y", "2026-03-15": "N", "2026-03-18": "N", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y" } },
+        { name: "MATTHEW MOSELEY", availability: { "2026-03-11": "M", "2026-03-15": "M", "2026-03-18": "M", "2026-03-25": "M", "2026-03-29": "M", "2026-04-01": "M", "2026-04-05": "M", "2026-04-08": "M", "2026-04-15": "M", "2026-04-19": "M", "2026-04-22": "M", "2026-04-26": "M", "2026-04-29": "M", "2026-05-06": "M", "2026-05-10": "M", "2026-05-13": "M" } },
+        { name: "Mike Van Allen", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "N", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "N", "2026-04-08": "M", "2026-04-15": "M", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y" } },
+        { name: "Sami Mahrus", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "Y", "2026-04-15": "Y", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+        { name: "Scott Martin", availability: { "2026-03-11": "Y", "2026-03-15": "Y", "2026-03-18": "Y", "2026-03-25": "Y", "2026-03-29": "Y", "2026-04-01": "Y", "2026-04-05": "Y", "2026-04-08": "N", "2026-04-15": "Y", "2026-04-19": "Y", "2026-04-22": "Y", "2026-04-26": "Y", "2026-04-29": "Y", "2026-05-06": "Y", "2026-05-10": "Y", "2026-05-13": "Y" } },
+      ];
+
+      // Fetch all coaches and rides for the date range
+      const allDates = new Set<string>();
+      for (const entry of AVAIL_DATA) {
+        for (const d of Object.keys(entry.availability)) allDates.add(d);
+      }
+      const [{ data: coaches }, { data: rides }, { data: pastResponses }] = await Promise.all([
+        supabase.from("coaches").select("id, name").or("archived.is.null,archived.eq.false"),
+        supabase.from("rides").select("id, date").in("date", [...allDates]),
+        supabase.from("slack_poll_responses").select("coach_id, slack_user_id").not("coach_id", "is", null),
+      ]);
+
+      // Build lookup maps
+      const rideByDate = new Map<string, number>();
+      for (const r of rides ?? []) rideByDate.set(r.date, r.id);
+      const coachSlackMap = new Map<number, string>();
+      for (const r of pastResponses ?? []) {
+        if (r.coach_id) coachSlackMap.set(r.coach_id, r.slack_user_id);
+      }
+
+      let matchedCoaches = 0, processedEntries = 0, skippedNoRide = 0, skippedNoCoach = 0, skippedMaybe = 0;
+      const unmatchedNames: string[] = [];
+
+      for (const entry of AVAIL_DATA) {
+        // Case-insensitive name match
+        const coach = coaches?.find(c => c.name.toLowerCase() === entry.name.toLowerCase());
+        if (!coach) { skippedNoCoach++; unmatchedNames.push(entry.name); continue; }
+        matchedCoaches++;
+        const slackUserId = coachSlackMap.get(coach.id);
+
+        for (const [dateStr, status] of Object.entries(entry.availability)) {
+          const rideId = rideByDate.get(dateStr);
+          if (!rideId) { skippedNoRide++; continue; }
+
+          if (status === "Y") {
+            await updateAttendance(supabase, rideId, null, coach.id, "add");
+            if (slackUserId) {
+              await trackPollResponse(supabase, rideId, slackUserId, null, coach.id, "attending");
+            }
+            processedEntries++;
+          } else if (status === "N") {
+            await updateAttendance(supabase, rideId, null, coach.id, "remove");
+            if (slackUserId) {
+              await trackPollResponse(supabase, rideId, slackUserId, null, coach.id, "absent");
+            }
+            processedEntries++;
+          } else {
+            // "M" (Maybe) → unknown — skip (don't create a response)
+            skippedMaybe++;
+          }
+        }
+      }
+
+      return jsonResponse({
+        success: true,
+        matchedCoaches,
+        processedEntries,
+        skippedNoCoach,
+        skippedNoRide,
+        skippedMaybe,
+        unmatchedNames,
+      });
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -806,12 +1404,65 @@ serve(async (req) => {
         const triggerId = payload.trigger_id;
         if (!triggerId) return ephemeral("Could not open attendance form.");
 
+        // Capture the channel where the button was clicked (for ephemeral confirmation later)
+        const originChannelId = payload.channel?.id ?? "";
+
         // Get ride date and practice time for the modal header
         const ride = await getRideById(supabase, rideId);
         if (!ride) return ephemeral("Could not find that practice.");
 
-        const timeStr = await getPracticeTime(supabase, ride.date);
-        const modal = buildAttendanceModal(rideId, ride.date, timeStr, false);
+        // Determine if this person is a coach or rider
+        let isCoach = false;
+        let isRider = false;
+        const btnProfile = await getSlackProfile(slackUserId);
+        if (btnProfile) {
+          const btnPerson = await findPerson(supabase, btnProfile);
+          isCoach = !!btnPerson.coachId && !btnPerson.riderId;
+          isRider = !!btnPerson.riderId && !btnPerson.coachId;
+        }
+
+        // Block cross-channel responses: coaches can't use rider poll, riders can't use coach poll
+        const isRiderChannel = originChannelId === SLACK_ATTENDANCE_CHANNEL_ID;
+        const isCoachChannel = originChannelId === SLACK_COACH_CHANNEL_ID;
+        if (isCoach && isRiderChannel) {
+          await fetch("https://slack.com/api/chat.postEphemeral", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: originChannelId, user: slackUserId,
+              text: ":no_entry: This is the rider attendance poll. Please use the poll in the coach channel to confirm your attendance.",
+            }),
+          });
+          return new Response("", { status: 200 });
+        }
+        if (isRider && isCoachChannel) {
+          await fetch("https://slack.com/api/chat.postEphemeral", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: originChannelId, user: slackUserId,
+              text: ":no_entry: This is the coach attendance poll. Please use the poll in the rider channel to confirm your attendance.",
+            }),
+          });
+          return new Response("", { status: 200 });
+        }
+
+        // Look up existing response for pre-fill (from advance marking or previous response)
+        let existingChoice: string | undefined;
+        const { data: existingResponse } = await supabase
+          .from("slack_poll_responses")
+          .select("attendance_status")
+          .eq("ride_id", rideId)
+          .eq("slack_user_id", slackUserId)
+          .maybeSingle();
+        if (existingResponse) {
+          const statusMap: Record<string, string> = { attending: "attend", absent: "absent", if_needed: "if_needed" };
+          existingChoice = statusMap[existingResponse.attendance_status];
+        }
+
+        const btnTimes = await getPracticeTimes(supabase, ride.date);
+        const showReason = existingChoice === "absent" && !isCoach;
+        const modal = buildAttendanceModal(rideId, ride.date, btnTimes, showReason, isCoach, originChannelId, existingChoice);
 
         const res = await fetch("https://slack.com/api/views.open", {
           method: "POST",
@@ -824,18 +1475,60 @@ serve(async (req) => {
         return new Response("", { status: 200 });
       }
 
+      // ----- Future Practices dropdown changed (auto-save each selection) -----
+      if (actionId.startsWith("future_choice_")) {
+        const rideId = parseInt(actionId.replace("future_choice_", ""), 10);
+        const choice = action.selected_option?.value; // "attend", "absent", "if_needed", "unknown"
+        if (isNaN(rideId) || !choice) return new Response("", { status: 200 });
+
+        // Look up the person
+        const futProfile = await getSlackProfile(slackUserId);
+        if (!futProfile) return new Response("", { status: 200 });
+        const { riderId: futRiderId, coachId: futCoachId } = await findPerson(supabase, futProfile);
+        if (!futRiderId && !futCoachId) return new Response("", { status: 200 });
+
+        if (choice === "unknown") {
+          await handleUnknownResponse(supabase, rideId, slackUserId, futRiderId, futCoachId);
+        } else {
+          const attendanceStatus: "attending" | "absent" | "if_needed" =
+            choice === "attend" ? "attending" : choice === "if_needed" ? "if_needed" : "absent";
+          const addToRoster = choice !== "absent";
+          await updateAttendance(supabase, rideId, futRiderId, futCoachId, addToRoster ? "add" : "remove");
+          await trackPollResponse(supabase, rideId, slackUserId, futRiderId, futCoachId, attendanceStatus);
+          if (futCoachId && !futRiderId) {
+            await updateCoachIfNeededStatus(supabase, rideId, futCoachId, choice === "if_needed");
+          }
+          await clearNote(supabase, rideId, futRiderId, futCoachId);
+          // Add exception date to any scheduled absence when marking "attending"/"if_needed"
+          if (addToRoster) {
+            (async () => {
+              const rideForDate = await getRideById(supabase, rideId);
+              if (rideForDate?.date) {
+                await addAbsenceExceptionDate(supabase, futRiderId, futCoachId, rideForDate.date);
+              }
+            })().catch(e => console.error("[FUTURE] Exception date error:", e));
+          }
+        }
+
+        // Update tally if a poll exists for this ride (fire-and-forget)
+        updatePollTally(supabase, rideId).catch(e => console.error("Future tally error:", e));
+
+        return new Response("", { status: 200 });
+      }
+
       // ----- Radio button changed inside modal (show/hide reason field) -----
       if (actionId === "attendance_choice") {
-        const selectedValue = action.selected_option?.value; // "attend" or "absent"
+        const selectedValue = action.selected_option?.value; // "attend", "absent", or "if_needed"
         const viewId = payload.view?.id;
         const viewHash = payload.view?.hash;
         const metadata = payload.view?.private_metadata;
 
         if (!viewId || !metadata) return new Response("", { status: 200 });
 
-        const { rideId, dateStr, timeStr } = JSON.parse(metadata);
+        const { rideId, dateStr, times, isCoach, channelId } = JSON.parse(metadata);
+        // Only show reason field for "absent" (NOT for "if_needed")
         const showReason = selectedValue === "absent";
-        const updatedModal = buildAttendanceModal(rideId, dateStr, timeStr, showReason);
+        const updatedModal = buildAttendanceModal(rideId, dateStr, times ?? { startTime: null, endTime: null }, showReason, isCoach ?? false, channelId ?? "", selectedValue);
 
         const res = await fetch("https://slack.com/api/views.update", {
           method: "POST",
@@ -844,6 +1537,106 @@ serve(async (req) => {
         });
         const resData = await res.json();
         if (!resData.ok) console.error("views.update error:", resData.error);
+
+        return new Response("", { status: 200 });
+      }
+
+      // ----- "Mark Future Practices" button -----
+      if (actionId === "mark_future_practices") {
+        const triggerId = payload.trigger_id;
+        const originChannelId = payload.channel?.id ?? "";
+        if (!triggerId) return new Response("", { status: 200 });
+
+        // Phase 1: Parallel fetch — Slack profile + season_settings + rides (3 calls at once)
+        const today = new Date().toISOString().slice(0, 10);
+        const [futProfile, settingsResult, ridesResult] = await Promise.all([
+          getSlackProfile(slackUserId),
+          supabase.from("season_settings").select("practices").eq("id", "current").single(),
+          supabase.from("rides").select("id, date").eq("cancelled", false)
+            .gte("date", today).order("date", { ascending: true }).limit(50),
+        ]);
+
+        // Phase 2: Parallel — findPerson (needs profile) runs alongside computing planned rides
+        const practices: any[] = Array.isArray(settingsResult.data?.practices) ? settingsResult.data.practices : [];
+        const allRides = ridesResult.data ?? [];
+        const planned = practices.length > 0 ? allRides.filter(r => isPlannedPractice(r.date, practices)) : allRides;
+        const upcomingRides = planned.slice(1, 26); // Skip first (current practice), cap at 25
+
+        // Determine coach/rider
+        let isCoach = false;
+        let isRider = false;
+        if (futProfile) {
+          const futPerson = await findPerson(supabase, futProfile);
+          isCoach = !!futPerson.coachId && !futPerson.riderId;
+          isRider = !!futPerson.riderId && !futPerson.coachId;
+        }
+
+        // Cross-channel guard
+        const isRiderChannel = originChannelId === SLACK_ATTENDANCE_CHANNEL_ID;
+        const isCoachChannel = originChannelId === SLACK_COACH_CHANNEL_ID;
+        if (isCoach && isRiderChannel) {
+          fetch("https://slack.com/api/chat.postEphemeral", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: originChannelId, user: slackUserId,
+              text: ":no_entry: This is the rider attendance poll. Please use the poll in the coach channel.",
+            }),
+          });
+          return new Response("", { status: 200 });
+        }
+        if (isRider && isCoachChannel) {
+          fetch("https://slack.com/api/chat.postEphemeral", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: originChannelId, user: slackUserId,
+              text: ":no_entry: This is the coach attendance poll. Please use the poll in the rider channel.",
+            }),
+          });
+          return new Response("", { status: 200 });
+        }
+
+        if (upcomingRides.length === 0) {
+          fetch("https://slack.com/api/chat.postEphemeral", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: originChannelId, user: slackUserId,
+              text: "No future practices found to mark attendance for.",
+            }),
+          });
+          return new Response("", { status: 200 });
+        }
+
+        // Phase 3: Batch-fetch existing responses (single DB call)
+        const rideIds = upcomingRides.map(r => r.id);
+        const { data: existingResponses } = await supabase
+          .from("slack_poll_responses")
+          .select("ride_id, attendance_status")
+          .eq("slack_user_id", slackUserId)
+          .in("ride_id", rideIds);
+        const responseMap = new Map<number, string>();
+        for (const r of existingResponses ?? []) {
+          responseMap.set(r.ride_id, r.attendance_status);
+        }
+
+        // Compute practice times in-memory (no extra DB calls — uses already-fetched practices)
+        const uniqueDates = [...new Set(upcomingRides.map(r => r.date))];
+        const timesMap = new Map<string, { startTime: string | null; endTime: string | null }>();
+        for (const dateStr of uniqueDates) {
+          timesMap.set(dateStr, computeTimesForDate(practices, dateStr));
+        }
+
+        // Build and open the future attendance modal
+        const futureModal = buildFutureAttendanceModal(upcomingRides, isCoach, originChannelId, responseMap, timesMap);
+        const res = await fetch("https://slack.com/api/views.open", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ trigger_id: triggerId, view: futureModal }),
+        });
+        const resData = await res.json();
+        if (!resData.ok) console.error("views.open error (future):", resData.error);
 
         return new Response("", { status: 200 });
       }
@@ -865,7 +1658,7 @@ serve(async (req) => {
           return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
 
-        const choice = values?.choice_block?.attendance_choice?.selected_option?.value; // "attend" or "absent"
+        const choice = values?.choice_block?.attendance_choice?.selected_option?.value; // "attend", "absent", or "if_needed"
 
         if (!choice) {
           // No selection made — show validation error
@@ -875,11 +1668,19 @@ serve(async (req) => {
           }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
 
-        const attending = choice === "attend";
-        const reason = values?.reason_block?.reason_input?.value?.trim() ?? "";
+        // Map choice to attendance status and action
+        // Both "attend" and "if_needed" keep the person in available_coaches
+        const attendanceStatus: "attending" | "absent" | "if_needed" =
+          choice === "attend" ? "attending" : choice === "if_needed" ? "if_needed" : "absent";
+        const addToRoster = choice !== "absent"; // "attend" and "if_needed" both stay available
 
-        // Validate: reason is required if not attending
-        if (!attending && !reason) {
+        const reason = values?.reason_block?.reason_input?.value?.trim() ?? "";
+        const comments = values?.comments_block?.comments_input?.value?.trim() ?? "";
+        const parsedMeta = metadata ? JSON.parse(metadata) : {};
+        const isCoachSubmission = parsedMeta.isCoach ?? false;
+
+        // Validate: reason is required only for RIDERS selecting "absent" (coaches don't need a reason)
+        if (choice === "absent" && !reason && !isCoachSubmission) {
           return new Response(JSON.stringify({
             response_action: "errors",
             errors: { reason_block: "Please provide a reason for missing practice." },
@@ -892,36 +1693,71 @@ serve(async (req) => {
           return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
 
-        const { riderId, coachId } = await findPerson(supabase, profile);
+        const { riderId, coachId, matchedBy } = await findPerson(supabase, profile);
+        console.log(`[ATTENDANCE] findPerson result: riderId=${riderId}, coachId=${coachId}, matchedBy=${matchedBy}, slackUser=${slackUserId}, email=${profile.email}, name=${profile.realName}`);
         if (!riderId && !coachId) {
+          console.log(`[ATTENDANCE] No match found — aborting. Profile: email=${profile.email}, name=${profile.realName}, phone=${profile.phone}`);
           return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
 
         // Update attendance on the ride record
-        await updateAttendance(supabase, rideId, riderId, coachId, attending ? "add" : "remove");
+        const rosterAction = addToRoster ? "add" : "remove";
+        console.log(`[ATTENDANCE] Calling updateAttendance: rideId=${rideId}, riderId=${riderId}, coachId=${coachId}, action=${rosterAction}`);
+        const updateResult = await updateAttendance(supabase, rideId, riderId, coachId, rosterAction);
+        console.log(`[ATTENDANCE] updateAttendance returned: ${updateResult}`);
 
-        // Save absence reason if not attending
-        if (!attending && reason) {
-          await saveAbsenceReason(supabase, rideId, riderId, coachId, reason);
+        // If marking "attending" (or "if_needed"), add an exception date to any scheduled
+        // absence covering this practice so TeamRide Pro's auto-removal doesn't override.
+        if (addToRoster) {
+          // Get the ride date for the exception (fire-and-forget to not block modal response)
+          (async () => {
+            const rideForDate = await getRideById(supabase, rideId);
+            if (rideForDate?.date) {
+              await addAbsenceExceptionDate(supabase, riderId, coachId, rideForDate.date);
+            }
+          })().catch(e => console.error("[ATTENDANCE] Exception date error:", e));
         }
 
+        // Save or clear notes: if reason or comments provided, save; otherwise clear stale notes
+        const noteText = choice === "absent" && reason ? reason : comments || "";
+        if (noteText) {
+          await saveAbsenceReason(supabase, rideId, riderId, coachId, noteText);
+        } else {
+          // Clear any previous note (e.g., coach changed from "if_needed + comment" to "attending")
+          await clearNote(supabase, rideId, riderId, coachId);
+        }
+
+        // Update coachIfNeeded status on the ride settings (coaches only)
+        if (coachId && !riderId) {
+          await updateCoachIfNeededStatus(supabase, rideId, coachId, choice === "if_needed");
+        }
+
+        // Check if this is an update (previous response exists for this user+ride)
+        const { data: prevResponse } = await supabase
+          .from("slack_poll_responses")
+          .select("id")
+          .eq("ride_id", rideId)
+          .eq("slack_user_id", slackUserId)
+          .maybeSingle();
+        const isUpdate = !!prevResponse;
+
         // Track the poll response and update the live tally on the original message
-        await trackPollResponse(supabase, rideId, slackUserId, riderId, coachId, attending);
+        await trackPollResponse(supabase, rideId, slackUserId, riderId, coachId, attendanceStatus);
         // Fire-and-forget tally update (don't block the modal response)
         updatePollTally(supabase, rideId).catch((e) => console.error("Tally update error:", e));
 
-        // Get ride date for confirmation
+        // Get ride date and originating channel for ephemeral confirmation
         const ride = await getRideById(supabase, rideId);
         const dateStr = ride?.date ?? (metadata ? JSON.parse(metadata).dateStr : "unknown");
+        const channelId = metadata ? JSON.parse(metadata).channelId : "";
 
-        // Send ephemeral confirmation with Update Response button
-        // Determine which channel this person belongs to (rider → rider channel, coach → coach channel)
-        try {
-          const channelId = coachId && !riderId && SLACK_COACH_CHANNEL_ID
-            ? SLACK_COACH_CHANNEL_ID
-            : SLACK_ATTENDANCE_CHANNEL_ID || SLACK_COACH_CHANNEL_ID;
-          if (channelId) {
-            const confirmation = buildConfirmationBlocks(rideId, dateStr, attending, reason || undefined);
+        // Post ephemeral confirmation with timestamp back to the originating channel
+        if (channelId) {
+          try {
+            const confirmation = buildConfirmationBlocks(
+              rideId, dateStr, attendanceStatus, isUpdate,
+              reason || undefined, comments || undefined
+            );
             await fetch("https://slack.com/api/chat.postEphemeral", {
               method: "POST",
               headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
@@ -932,9 +1768,9 @@ serve(async (req) => {
                 blocks: confirmation.blocks,
               }),
             });
+          } catch (e) {
+            console.error("Error posting ephemeral confirmation:", e);
           }
-        } catch (e) {
-          console.error("Error posting confirmation:", e);
         }
 
         return new Response(JSON.stringify({ response_action: "clear" }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -987,8 +1823,10 @@ serve(async (req) => {
 
   if (updated) {
     // Track the response and update tally (fire-and-forget)
-    trackPollResponse(supabase, ride.id, slackUserId, riderId, coachId, true).catch((e) => console.error("Track error:", e));
+    trackPollResponse(supabase, ride.id, slackUserId, riderId, coachId, "attending").catch((e) => console.error("Track error:", e));
     updatePollTally(supabase, ride.id).catch((e) => console.error("Tally error:", e));
+    // Add exception date to any scheduled absence (fire-and-forget)
+    addAbsenceExceptionDate(supabase, riderId, coachId, ride.date).catch((e) => console.error("Exception date error:", e));
   }
 
   return updated

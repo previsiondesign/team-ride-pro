@@ -28,6 +28,7 @@ on:
           - post_poll_if_tomorrow
           - post_poll
           - send_reminders
+          - import_coach_availability
 
 jobs:
   attendance:
