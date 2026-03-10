@@ -1370,13 +1370,17 @@ serve(async (req) => {
       }
       const [{ data: coaches }, { data: rides }, { data: pastResponses }] = await Promise.all([
         supabase.from("coaches").select("id, name").or("archived.is.null,archived.eq.false"),
-        supabase.from("rides").select("id, date").in("date", [...allDates]),
+        supabase.from("rides").select("id, date").in("date", [...allDates])
+          .or("cancelled.is.null,cancelled.eq.false")
+          .or("deleted.is.null,deleted.eq.false"),
         supabase.from("slack_poll_responses").select("coach_id, slack_user_id").not("coach_id", "is", null),
       ]);
 
-      // Build lookup maps
+      // Build lookup maps — first ride per date wins (matches cleanup which keeps the oldest)
       const rideByDate = new Map<string, number>();
-      for (const r of rides ?? []) rideByDate.set(r.date, r.id);
+      for (const r of rides ?? []) {
+        if (!rideByDate.has(r.date)) rideByDate.set(r.date, r.id);
+      }
       const coachSlackMap = new Map<number, string>();
       for (const r of pastResponses ?? []) {
         if (r.coach_id) coachSlackMap.set(r.coach_id, r.slack_user_id);
