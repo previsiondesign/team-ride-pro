@@ -1389,6 +1389,9 @@ async function postPollToChannel(
   }
 
   if (ephTargets.length > 0) {
+    // Small delay so Slack renders the poll message first — ephemerals then appear below it
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const friendlyDate = formatDate(dateStr);
     const statusDisplay = (status: string, source: string) => {
       switch (status) {

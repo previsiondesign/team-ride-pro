@@ -813,6 +813,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableRiders = [];
+            ride.attendanceInitialized = true; // Prevent ensureRideAttendanceDefaults from re-populating
             saveRideToDB(ride);
             renderSidebars();
         }
@@ -824,6 +825,7 @@
             const ride = data.rides.find(r => r.id === data.currentRide);
             if (!ride) return;
             ride.availableCoaches = [];
+            ride.attendanceInitialized = true; // Prevent ensureRideAttendanceDefaults from re-populating
             saveRideToDB(ride);
             renderSidebars();
         }

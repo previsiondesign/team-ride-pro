@@ -1240,10 +1240,10 @@
 
         function ensureRideAttendanceDefaults(ride) {
             if (!ride) return;
-            // If the ride already has an availableRiders array (from DB or prior save), never overwrite it.
-            // This preserves attendance changes (e.g. marking absent then attending again) across refresh.
-            if (Array.isArray(ride.availableRiders)) {
-                // Even if already initialized, remove any newly scheduled-absent riders/coaches
+
+            // CASE 1: Ride already has a non-empty availableRiders array — preserve it,
+            // just filter out any newly scheduled-absent riders/coaches.
+            if (Array.isArray(ride.availableRiders) && ride.availableRiders.length > 0) {
                 const rideDate = ride.date || '';
                 if (rideDate) {
                     ride.availableRiders = ride.availableRiders.filter(id => {
@@ -1260,7 +1260,17 @@
                 ride.attendanceInitialized = true;
                 return;
             }
-            
+
+            // CASE 2: Empty (or missing) availableRiders, but attendance was explicitly
+            // initialized already (e.g. user clicked "Mark All Absent") — preserve the
+            // empty state so we don't undo a deliberate action.
+            if (ride.attendanceInitialized === true) {
+                return;
+            }
+
+            // CASE 3: Ride has never had attendance set — default ALL active riders to
+            // attending (minus scheduled absences).  This makes future practices show
+            // everyone attending instead of everyone absent.
             const isRefined = isRideRefined(ride);
             let defaultAvailableRiders = [];
             if (isRefined) {
@@ -1277,7 +1287,7 @@
                     return !status.absent;
                 });
             }
-            
+
             ride.availableRiders = defaultAvailableRiders;
             ride.attendanceInitialized = true;
             saveRideToDB(ride);
