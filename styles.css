@@ -2829,34 +2829,36 @@
             align-items: center;
         }
 
-        /* ── Simplified view (rider/coach assignment pages) — full-screen mobile ── */
-        body.simplified-view {
-            background: #ffffff;
-            background-image: none;
+        /* ── Assignment tabs full-screen on mobile (all user types) ── */
+        @media (max-width: 768px) {
+            body.assignments-tabs-active {
+                background: #ffffff;
+                background-image: none;
+            }
+
+            body.assignments-tabs-active .sticky-top {
+                display: none !important;
+            }
+
+            body.assignments-tabs-active .container {
+                margin: 0;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
+                max-width: 100%;
+                min-width: 0;
+            }
+
+            body.assignments-tabs-active .tab-content {
+                padding: 0;
+            }
+
+            body.assignments-tabs-active .section {
+                margin: 0;
+            }
         }
 
-        body.simplified-view .sticky-top {
-            display: none !important;
-        }
-
-        body.simplified-view .container {
-            margin: 0;
-            padding: 0;
-            border-radius: 0;
-            box-shadow: none;
-            max-width: 100%;
-            min-width: 0;
-        }
-
-        body.simplified-view .tab-content {
-            padding: 0;
-        }
-
-        body.simplified-view .section {
-            margin: 0;
-        }
-
-        /* Greeting banner */
+        /* Greeting banner (simplified login only) */
         .simplified-greeting-banner {
             background: #1976D2;
             color: white;

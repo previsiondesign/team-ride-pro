@@ -1842,9 +1842,6 @@
         }
 
         function enableSimplifiedViewMode(type) {
-            // Full-screen layout: remove background image, card frame, header
-            document.body.classList.add('simplified-view');
-
             // Greeting banner: "Hi [FirstName or nickname]!"
             if (simplifiedLoginInfo) {
                 const person = simplifiedLoginInfo.type === 'rider'
