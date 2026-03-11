@@ -2833,11 +2833,12 @@
         /* ── Assignment tabs full-screen on mobile (all user types) ── */
         @media (max-width: 768px) {
             body.assignments-tabs-active {
-                background: #ffffff;
-                background-image: none;
+                background: #ffffff !important;
+                background-image: none !important;
             }
 
-            body.assignments-tabs-active .sticky-top {
+            body.assignments-tabs-active .sticky-top,
+            body.assignments-tabs-active .header-scroll-shield {
                 display: none !important;
             }
 
