@@ -31,9 +31,13 @@
             return upcomingRides.length > 0 ? upcomingRides[0].ride : null;
         }
 
-        // Admin detection: Supabase-authenticated admin (not simplified-login coach)
+        // Admin detection: Supabase-authenticated admin OR simplified-login coach with admin role
         function isAssignmentAdmin() {
-            return typeof isCoach === 'function' && isCoach() && !simplifiedLoginInfo;
+            // Full Supabase-auth admin (existing path)
+            if (typeof isCoach === 'function' && isCoach() && !simplifiedLoginInfo) return true;
+            // Simplified-login admin: coach whose admin status was confirmed during phone lookup
+            if (simplifiedLoginInfo && simplifiedLoginInfo.type === 'coach' && simplifiedLoginInfo.isAdmin === true) return true;
+            return false;
         }
 
         // All planned rides (past + future), sorted by date ascending

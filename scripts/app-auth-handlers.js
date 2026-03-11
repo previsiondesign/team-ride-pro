@@ -247,6 +247,7 @@
                     userType: lookupResult.type,
                     userId: lookupResult.id,
                     userName: lookupResult.name,
+                    isAdmin: lookupResult.isAdmin || false,
                     codeId: codeId,
                     isEmail: isEmail
                 };
@@ -370,6 +371,7 @@
                     type: pendingVerification.userType,
                     id: pendingVerification.userId,
                     name: pendingVerification.userName,
+                    isAdmin: pendingVerification.isAdmin || false,
                     timestamp: Date.now(),
                     rememberDevice: true
                 });

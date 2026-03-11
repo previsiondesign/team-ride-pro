@@ -2057,7 +2057,13 @@ async function lookupUserByPhoneOrEmail(phoneOrEmail) {
                 .maybeSingle();
             
             if (!coachError && coachData) {
-                return { type: 'coach', id: coachData.id, name: coachData.name };
+                // Check if this coach has admin role (for simplified-login admin detection)
+                var isAdmin = false;
+                try {
+                    var adminCheck = await client.rpc('check_coach_is_admin', { coach_id_to_check: coachData.id });
+                    isAdmin = adminCheck.data === true;
+                } catch (e) { console.warn('Could not check admin status:', e); }
+                return { type: 'coach', id: coachData.id, name: coachData.name, isAdmin: isAdmin };
             }
         }
         
@@ -2094,7 +2100,13 @@ async function lookupUserByPhoneOrEmail(phoneOrEmail) {
                         const inputLast10 = normalizedPhone.slice(-10);
                         const coachLast10 = coachPhoneNormalized.slice(-10);
                         if (inputLast10 === coachLast10 && coachLast10.length === 10) {
-                            return { type: 'coach', id: coach.id, name: coach.name };
+                            // Check if this coach has admin role (for simplified-login admin detection)
+                            var isAdmin = false;
+                            try {
+                                var adminCheck = await client.rpc('check_coach_is_admin', { coach_id_to_check: coach.id });
+                                isAdmin = adminCheck.data === true;
+                            } catch (e) { console.warn('Could not check admin status:', e); }
+                            return { type: 'coach', id: coach.id, name: coach.name, isAdmin: isAdmin };
                         }
                     }
                 }
