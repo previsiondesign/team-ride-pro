@@ -786,12 +786,7 @@
                     <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;" id="verification-code-message">
                         We've sent a verification code to <strong id="verification-phone-email"></strong>. Please enter it below.
                     </p>
-                    <div style="text-align: center; margin-bottom: 4px;">
-                        <label style="font-size: 13px; color: #64748b; cursor: pointer; user-select: none;">
-                            <input type="checkbox" id="remember-device-checkbox" checked style="margin-right: 5px; cursor: pointer;">
-                            Remember this device for 30 days
-                        </label>
-                    </div>
+                    <!-- Device is always remembered for 30 days via localStorage -->
                     <div>
                         <label class="field-label" for="verification-code-input">Verification Code</label>
                         <input type="text" id="verification-code-input" class="modal-field-input" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required style="text-align: center; font-size: 20px; letter-spacing: 4px; font-weight: bold;" oninput="handleCodeInput(this)">
@@ -877,7 +872,7 @@
     <script src="scripts/app-utils.js?v=20260217a"></script>
     <script src="scripts/app-scales.js?v=20260217a"></script>
     <!-- Feature modules -->
-    <script src="scripts/app-auth-handlers.js?v=20260311"></script>
+    <script src="scripts/app-auth-handlers.js?v=20260311b"></script>
     <script src="scripts/app-groups.js?v=20260217a"></script>
     <script src="scripts/app-riders.js?v=20260302"></script>
     <script src="scripts/app-coaches.js?v=20260217a"></script>

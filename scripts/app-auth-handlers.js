@@ -365,22 +365,16 @@
                     return;
                 }
                 
-                // Verification successful - store login info and redirect
-                const rememberDevice = document.getElementById('remember-device-checkbox')?.checked;
+                // Verification successful - always remember device (localStorage, 30 days)
                 const loginPayload = JSON.stringify({
                     type: pendingVerification.userType,
                     id: pendingVerification.userId,
                     name: pendingVerification.userName,
                     timestamp: Date.now(),
-                    rememberDevice: !!rememberDevice
+                    rememberDevice: true
                 });
-                if (rememberDevice) {
-                    window.localStorage.setItem('simplifiedLogin', loginPayload);
-                    window.sessionStorage.removeItem('simplifiedLogin');
-                } else {
-                    window.sessionStorage.setItem('simplifiedLogin', loginPayload);
-                    window.localStorage.removeItem('simplifiedLogin');
-                }
+                window.localStorage.setItem('simplifiedLogin', loginPayload);
+                window.sessionStorage.removeItem('simplifiedLogin');
                 
                 // Clear pending verification from localStorage
                 try { localStorage.removeItem('pendingVerification'); } catch (e) {}
@@ -1898,9 +1892,11 @@
             enableSimplifiedViewMode('rider');
         }
 
+        var _greetingBannerShown = false;
         function enableSimplifiedViewMode(type) {
-            // Greeting banner: "Hi [FirstName or nickname]!"
-            if (simplifiedLoginInfo) {
+            // Greeting banner: "Hi [FirstName or nickname]!" — show only once
+            if (simplifiedLoginInfo && !_greetingBannerShown) {
+                _greetingBannerShown = true;
                 const person = simplifiedLoginInfo.type === 'rider'
                     ? (data.riders || []).find(r => r.id == simplifiedLoginInfo.id)
                     : (data.coaches || []).find(c => c.id == simplifiedLoginInfo.id);
