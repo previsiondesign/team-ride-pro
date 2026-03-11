@@ -1720,6 +1720,7 @@
                 document.addEventListener(ev, bumpActivity, { passive: true });
             });
             idleCheckTimer = setInterval(function() {
+                if (window.isDeveloperMode) return;          // no idle logout in dev mode
                 if (Date.now() - lastActivityAt < IDLE_LOGOUT_MS) return;
                 clearInterval(idleCheckTimer);
                 idleCheckTimer = null;
