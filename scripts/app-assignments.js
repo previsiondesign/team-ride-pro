@@ -31,6 +31,41 @@
             return upcomingRides.length > 0 ? upcomingRides[0].ride : null;
         }
 
+        // Admin detection: Supabase-authenticated admin (not simplified-login coach)
+        function isAssignmentAdmin() {
+            return typeof isCoach === 'function' && isCoach() && !simplifiedLoginInfo;
+        }
+
+        // All planned rides (past + future), sorted by date ascending
+        function getAllPlannedRides() {
+            var isPlanned = function(ride) {
+                return ride.planningStarted === true || (Array.isArray(ride.groups) && ride.groups.length > 0);
+            };
+            return (data.rides || [])
+                .filter(function(ride) {
+                    if (ride.deleted) return false;
+                    if (ride.cancelled) return false;
+                    if (!ride.date) return false;
+                    if (!isPlanned(ride)) return false;
+                    return true;
+                })
+                .map(function(ride) { return { ride: ride, date: parseISODate(ride.date) }; })
+                .filter(function(item) { return item.date !== null; })
+                .sort(function(a, b) { return a.date - b.date; })
+                .map(function(item) { return item.ride; });
+        }
+
+        // Central ride selector: uses admin's override if set, else next upcoming
+        function getAssignmentRide() {
+            if (adminSelectedRideId !== null && isAssignmentAdmin()) {
+                var allRides = getAllPlannedRides();
+                var found = allRides.find(function(r) { return r.id === adminSelectedRideId; });
+                if (found) return found;
+                adminSelectedRideId = null; // selected ride gone, reset
+            }
+            return getNextUpcomingRide();
+        }
+
         function getRouteById(routeId) {
             if (!routeId) return null;
             return (data.routes || []).find(route => String(route.id) === String(routeId)) || null;
@@ -68,7 +103,7 @@
             const container = document.getElementById('ride-assignments-container');
             if (!container) return;
 
-            const ride = getNextUpcomingRide();
+            const ride = getAssignmentRide();
             
             // Check and auto-unpublish if 12 hours have passed
             if (ride) {
@@ -110,9 +145,14 @@
             }
             
             // Always show goals at the top (visible regardless of which groups are opened)
+            var _isAdmin = isAssignmentAdmin();
+            var _isBrowsing = _isAdmin && adminSelectedRideId !== null;
             let html = `
                 <div style="margin-bottom: 24px; padding: 0 16px;">
-                    <h2 style="margin: 0 0 12px 0; padding-top: 16px; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 16px; margin-bottom: 12px;">
+                        <h2 style="margin: 0; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}${_isBrowsing ? ' <span style="font-size: 12px; color: #999; font-weight: 400; margin-left: 6px;">(browsing)</span>' : ''}</h2>
+                        ${_isAdmin ? '<button onclick="toggleAssignmentNavMenu(event)" style="background: none; border: none; cursor: pointer; font-size: 22px; padding: 4px 8px; color: #666; line-height: 1;" title="Navigate practices" aria-label="Practice navigation menu">&#9776;</button>' : ''}
+                    </div>
                     <div style="margin-bottom: 12px; padding: 12px; background: #f9f9f9; border-radius: 4px; font-size: 14px; color: #555;">
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
@@ -332,7 +372,7 @@
                 const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,precipitation_probability&forecast_days=7&timezone=auto&temperature_unit=fahrenheit&alerts=all`;
                 
                 // Debug: Log the location being used for weather lookup
-                const ride = getNextUpcomingRide();
+                const ride = getAssignmentRide();
                 if (ride) {
                     const practice = getPracticeSettingsForRide(ride);
                     const practiceLocation = ride.meetLocation || (practice ? practice.meetLocation : '');
@@ -437,7 +477,7 @@
             const container = document.getElementById('coach-assignments-container');
             if (!container) return;
 
-            const ride = getNextUpcomingRide();
+            const ride = getAssignmentRide();
             
             // Check and auto-unpublish if 12 hours have passed
             if (ride) {
@@ -479,9 +519,14 @@
             }
             
             // Always show goals at the top (visible regardless of which groups are opened)
+            var _isAdmin2 = isAssignmentAdmin();
+            var _isBrowsing2 = _isAdmin2 && adminSelectedRideId !== null;
             let html = `
                 <div style="margin-bottom: 24px; padding: 0 16px;">
-                    <h2 style="margin: 0 0 12px 0; padding-top: 16px; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 16px; margin-bottom: 12px;">
+                        <h2 style="margin: 0; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}${_isBrowsing2 ? ' <span style="font-size: 12px; color: #999; font-weight: 400; margin-left: 6px;">(browsing)</span>' : ''}</h2>
+                        ${_isAdmin2 ? '<button onclick="toggleAssignmentNavMenu(event)" style="background: none; border: none; cursor: pointer; font-size: 22px; padding: 4px 8px; color: #666; line-height: 1;" title="Navigate practices" aria-label="Practice navigation menu">&#9776;</button>' : ''}
+                    </div>
                     <div style="margin-bottom: 12px; padding: 12px; background: #f9f9f9; border-radius: 4px; font-size: 14px; color: #555;">
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
@@ -813,9 +858,111 @@
             };
             setTimeout(() => document.addEventListener('click', closeMenu), 0);
         }
-        
+
+        // ── Admin practice navigation menu ──
+
+        function toggleAssignmentNavMenu(event) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            // Toggle: if already open, close it
+            var existing = document.getElementById('assignment-nav-menu');
+            if (existing) { existing.remove(); return; }
+
+            var allRides = getAllPlannedRides();
+            var currentRide = getAssignmentRide();
+            if (!currentRide || allRides.length === 0) return;
+
+            var currentIndex = -1;
+            for (var i = 0; i < allRides.length; i++) {
+                if (allRides[i].id === currentRide.id) { currentIndex = i; break; }
+            }
+            var nextUpcoming = getNextUpcomingRide();
+            var isViewingDefault = (adminSelectedRideId === null) ||
+                                   (nextUpcoming && currentRide.id === nextUpcoming.id);
+
+            var hasPrior = currentIndex > 0;
+            var hasNext = currentIndex >= 0 && currentIndex < allRides.length - 1;
+
+            // Build menu
+            var menu = document.createElement('div');
+            menu.id = 'assignment-nav-menu';
+            menu.style.cssText = 'position:fixed;background:white;border:1px solid #ddd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.18);z-index:10000;min-width:200px;padding:4px 0;';
+
+            var btn = event.target.closest('button');
+            var rect = btn.getBoundingClientRect();
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+            menu.style.top = (rect.bottom + 4) + 'px';
+
+            function addItem(label, action) {
+                var item = document.createElement('div');
+                item.textContent = label;
+                item.style.cssText = 'padding:10px 16px;cursor:pointer;font-size:14px;color:#333;';
+                item.onmouseenter = function() { item.style.background = '#f5f5f5'; };
+                item.onmouseleave = function() { item.style.background = 'transparent'; };
+                item.onclick = function(e) { e.stopPropagation(); action(); menu.remove(); };
+                menu.appendChild(item);
+            }
+
+            function formatRideLabel(ride) {
+                var d = parseISODate(ride.date);
+                return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ride.date;
+            }
+
+            if (hasPrior) {
+                addItem('\u25C0  Prior Practice (' + formatRideLabel(allRides[currentIndex - 1]) + ')',
+                    function() { navigateAssignmentRide(allRides[currentIndex - 1].id); });
+            }
+            if (hasNext) {
+                addItem('Next Practice (' + formatRideLabel(allRides[currentIndex + 1]) + ')  \u25B6',
+                    function() { navigateAssignmentRide(allRides[currentIndex + 1].id); });
+            }
+            if (!isViewingDefault && nextUpcoming) {
+                var sep = document.createElement('div');
+                sep.style.cssText = 'border-top:1px solid #eee;margin:4px 0;';
+                menu.appendChild(sep);
+                addItem('\u21BB  Current Practice', function() { navigateAssignmentRide(null); });
+            }
+
+            if (!hasPrior && !hasNext) {
+                var noItems = document.createElement('div');
+                noItems.textContent = 'No other practices';
+                noItems.style.cssText = 'padding:10px 16px;font-size:14px;color:#999;';
+                menu.appendChild(noItems);
+            }
+
+            document.body.appendChild(menu);
+
+            var closeMenu = function(e) {
+                if (!menu.contains(e.target) && e.target !== btn) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            };
+            setTimeout(function() { document.addEventListener('click', closeMenu); }, 0);
+        }
+        window.toggleAssignmentNavMenu = toggleAssignmentNavMenu;
+
+        function navigateAssignmentRide(rideId) {
+            // Close nav menu if open
+            var menu = document.getElementById('assignment-nav-menu');
+            if (menu) menu.remove();
+
+            adminSelectedRideId = rideId;
+            // Re-render whichever assignment tab is currently visible
+            var riderContainer = document.getElementById('ride-assignments-container');
+            var coachContainer = document.getElementById('coach-assignments-container');
+            if (riderContainer && riderContainer.offsetParent !== null) {
+                renderRideAssignments();
+            }
+            if (coachContainer && coachContainer.offsetParent !== null) {
+                renderCoachAssignments();
+            }
+        }
+        window.navigateAssignmentRide = navigateAssignmentRide;
+
         function handleAbsent(type, id, groupId, role) {
-            const ride = getNextUpcomingRide();
+            const ride = getAssignmentRide();
             if (!ride || !ride.groups) return;
             
             const group = ride.groups.find(g => g.id === groupId);
@@ -863,7 +1010,7 @@
         }
         
         function handleMoved(type, id, groupId, role) {
-            const ride = getNextUpcomingRide();
+            const ride = getAssignmentRide();
             if (!ride || !ride.groups) return;
             
             const sourceGroup = ride.groups.find(g => g.id === groupId);
@@ -936,7 +1083,7 @@
         }
         
         function completeMove(type, id, sourceGroupId, targetGroupId, role) {
-            const ride = getNextUpcomingRide();
+            const ride = getAssignmentRide();
             if (!ride || !ride.groups) return;
             
             const sourceGroup = ride.groups.find(g => g.id === sourceGroupId);

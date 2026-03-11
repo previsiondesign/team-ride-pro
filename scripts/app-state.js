@@ -172,6 +172,7 @@
         let lastVisibilityCheck = Date.now();
         let isReloading = false;
         let appBootComplete = false;
+        let adminSelectedRideId = null; // Admin-only: override ride shown in assignment views
 
         // Season/practice state
         let currentPracticeIdForTimeRange = null;
