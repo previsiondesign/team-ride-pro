@@ -131,6 +131,7 @@
             document.getElementById('simplified-login-form').style.display = 'block';
             document.getElementById('verification-code-form').style.display = 'none';
             pendingVerification = null; // Clear pending verification
+            try { sessionStorage.removeItem('pendingVerification'); } catch (e) {}
             const subtitle = document.getElementById('login-subtitle');
             if (subtitle) {
                 subtitle.textContent = 'Enter your phone or email to access your assignments';
@@ -249,7 +250,9 @@
                     codeId: codeId,
                     isEmail: isEmail
                 };
-                
+                // Persist to sessionStorage so mobile tab-switch/reload doesn't lose state
+                try { sessionStorage.setItem('pendingVerification', JSON.stringify(pendingVerification)); } catch (e) {}
+
                 // Show verification code form
                 showVerificationCodeForm(phoneOrEmail, isEmail);
                 
@@ -353,6 +356,9 @@
                     window.localStorage.removeItem('simplifiedLogin');
                 }
                 
+                // Clear pending verification from sessionStorage
+                try { sessionStorage.removeItem('pendingVerification'); } catch (e) {}
+
                 // Route to assignments view
                 window.location.href = 'teamridepro_v3.html?view=assignments';
                 
@@ -612,13 +618,33 @@
             const needsSimplifiedLogin = (viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach') && !simplifiedLoginInfo;
 
             if (needsSimplifiedLogin && !isAuthenticated) {
-                // Show simplified login form
+                // Show auth overlay
                 if (authOverlay) {
                     authOverlay.classList.remove('hidden');
                     authOverlay.style.display = 'flex';
                 }
                 if (mainContainer) mainContainer.style.display = 'none';
                 if (userMenu) userMenu.style.display = 'none';
+
+                // Check if there's a pending verification saved from before a page reload
+                try {
+                    const saved = sessionStorage.getItem('pendingVerification');
+                    if (saved) {
+                        const restored = JSON.parse(saved);
+                        if (restored && restored.phoneOrEmail && restored.codeId) {
+                            pendingVerification = restored;
+                            // Show verification code form instead of login form
+                            document.getElementById('login-form').style.display = 'none';
+                            document.getElementById('admin-request-form').style.display = 'none';
+                            document.getElementById('password-reset-form').style.display = 'none';
+                            document.getElementById('simplified-login-form').style.display = 'none';
+                            document.getElementById('verification-code-form').style.display = 'block';
+                            showVerificationCodeForm(restored.phoneOrEmail, restored.isEmail);
+                            return;
+                        }
+                    }
+                } catch (e) {}
+
                 showSimplifiedLogin();
                 return;
             }
