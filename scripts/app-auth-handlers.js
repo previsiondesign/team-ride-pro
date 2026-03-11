@@ -131,7 +131,7 @@
             document.getElementById('simplified-login-form').style.display = 'block';
             document.getElementById('verification-code-form').style.display = 'none';
             pendingVerification = null; // Clear pending verification
-            try { sessionStorage.removeItem('pendingVerification'); } catch (e) {}
+            try { localStorage.removeItem('pendingVerification'); } catch (e) {}
             const subtitle = document.getElementById('login-subtitle');
             if (subtitle) {
                 subtitle.textContent = 'Enter your phone or email to access your assignments';
@@ -250,8 +250,12 @@
                     codeId: codeId,
                     isEmail: isEmail
                 };
-                // Persist to sessionStorage so mobile tab-switch/reload doesn't lose state
-                try { sessionStorage.setItem('pendingVerification', JSON.stringify(pendingVerification)); } catch (e) {}
+                // Persist to localStorage so mobile tab-switch/kill doesn't lose state
+                try {
+                    localStorage.setItem('pendingVerification', JSON.stringify(
+                        Object.assign({}, pendingVerification, { _savedAt: Date.now() })
+                    ));
+                } catch (e) {}
 
                 // Show verification code form
                 showVerificationCodeForm(phoneOrEmail, isEmail);
@@ -283,13 +287,35 @@
                 phoneEmailEl.textContent = phoneOrEmail;
             }
             
-            // Focus on code input
+            // Focus on code input and clear any previous value
             setTimeout(() => {
                 const codeInput = document.getElementById('verification-code-input');
                 if (codeInput) {
+                    codeInput.value = '';
                     codeInput.focus();
                 }
             }, 100);
+            // Reset verify button text
+            const btn = document.getElementById('verify-code-button');
+            if (btn) { btn.disabled = false; btn.textContent = 'Verify Code'; }
+        }
+
+        // Auto-verify when 6 digits are entered (with brief delay for UX)
+        var _autoVerifyTimer = null;
+        function handleCodeInput(input) {
+            clearTimeout(_autoVerifyTimer);
+            // Strip non-digits
+            var val = input.value.replace(/\D/g, '');
+            if (val !== input.value) input.value = val;
+            var btn = document.getElementById('verify-code-button');
+            if (val.length === 6 && /^\d{6}$/.test(val)) {
+                if (btn && !btn.disabled) {
+                    btn.textContent = 'Verifying...';
+                    _autoVerifyTimer = setTimeout(function() { handleVerifyCode(); }, 1000);
+                }
+            } else {
+                if (btn && !btn.disabled) btn.textContent = 'Verify Code';
+            }
         }
 
         // Verify the code entered by user
@@ -356,8 +382,8 @@
                     window.localStorage.removeItem('simplifiedLogin');
                 }
                 
-                // Clear pending verification from sessionStorage
-                try { sessionStorage.removeItem('pendingVerification'); } catch (e) {}
+                // Clear pending verification from localStorage
+                try { localStorage.removeItem('pendingVerification'); } catch (e) {}
 
                 // Route to assignments view
                 window.location.href = 'teamridepro_v3.html?view=assignments';
@@ -626,12 +652,14 @@
                 if (mainContainer) mainContainer.style.display = 'none';
                 if (userMenu) userMenu.style.display = 'none';
 
-                // Check if there's a pending verification saved from before a page reload
+                // Check if there's a pending verification saved from before a page reload / tab kill
                 try {
-                    const saved = sessionStorage.getItem('pendingVerification');
+                    const saved = localStorage.getItem('pendingVerification');
                     if (saved) {
                         const restored = JSON.parse(saved);
-                        if (restored && restored.phoneOrEmail && restored.codeId) {
+                        const age = Date.now() - (restored._savedAt || 0);
+                        const MAX_PENDING_AGE = 10 * 60 * 1000; // 10 minutes
+                        if (restored && restored.phoneOrEmail && restored.codeId && age < MAX_PENDING_AGE) {
                             pendingVerification = restored;
                             // Show verification code form instead of login form
                             document.getElementById('login-form').style.display = 'none';
@@ -641,6 +669,9 @@
                             document.getElementById('verification-code-form').style.display = 'block';
                             showVerificationCodeForm(restored.phoneOrEmail, restored.isEmail);
                             return;
+                        } else {
+                            // Expired, clean up
+                            localStorage.removeItem('pendingVerification');
                         }
                     }
                 } catch (e) {}

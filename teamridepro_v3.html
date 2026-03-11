@@ -786,20 +786,20 @@
                     <p style="font-size: 14px; color: #64748b; margin-bottom: 8px;" id="verification-code-message">
                         We've sent a verification code to <strong id="verification-phone-email"></strong>. Please enter it below.
                     </p>
-                    <div>
-                        <label class="field-label" for="verification-code-input">Verification Code</label>
-                        <input type="text" id="verification-code-input" class="modal-field-input" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: bold;" onkeypress="if(event.key === 'Enter') handleVerifyCode()">
-                    </div>
-                    <button type="button" class="btn-small" style="width: 100%; margin-top: 8px;" id="verify-code-button" onclick="handleVerifyCode()">Verify Code</button>
-                    <div style="text-align: center; margin-top: 10px;">
+                    <div style="text-align: center; margin-bottom: 4px;">
                         <label style="font-size: 13px; color: #64748b; cursor: pointer; user-select: none;">
-                            <input type="checkbox" id="remember-device-checkbox" style="margin-right: 5px; cursor: pointer;">
+                            <input type="checkbox" id="remember-device-checkbox" checked style="margin-right: 5px; cursor: pointer;">
                             Remember this device for 30 days
                         </label>
                     </div>
-                    <div style="text-align: center; margin-top: 8px;">
+                    <div>
+                        <label class="field-label" for="verification-code-input">Verification Code</label>
+                        <input type="text" id="verification-code-input" class="modal-field-input" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required style="text-align: center; font-size: 20px; letter-spacing: 4px; font-weight: bold;" oninput="handleCodeInput(this)">
+                    </div>
+                    <button type="button" class="btn-small" style="width: 100%; margin-top: 8px;" id="verify-code-button" onclick="handleVerifyCode()">Verify Code</button>
+                    <div style="text-align: center; margin-top: 8px; font-size: 13px;">
                         <a href="#" class="auth-link" id="resend-code-link" onclick="event.preventDefault(); handleResendVerificationCode();">Resend Code</a>
-                        <span style="margin: 0 8px;">|</span>
+                        <span style="margin: 0 6px; color: #94a3b8;">|</span>
                         <a href="#" class="auth-link" onclick="event.preventDefault(); showSimplifiedLogin();">Change Phone/Email</a>
                     </div>
                 </div>

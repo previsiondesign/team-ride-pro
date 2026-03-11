@@ -2179,6 +2179,7 @@
             max-width: 100%;
             padding: 32px;
             margin: auto;
+            box-sizing: border-box;
         }
 
         .login-title {
@@ -3997,15 +3998,21 @@
             /* Auth overlay: fit and scroll on small screens */
             .auth-overlay {
                 align-items: flex-start;
-                padding: 16px;
+                padding: 12px;
             }
             .login-container {
                 padding: 20px 16px;
                 width: 100%;
                 max-width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .login-title {
                 font-size: 22px;
+            }
+            .login-brand {
+                font-size: 24px !important;
+                margin-bottom: 16px !important;
             }
         }
 
