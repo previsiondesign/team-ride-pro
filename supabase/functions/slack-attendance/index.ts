@@ -127,11 +127,14 @@ async function findPerson(
   supabase: ReturnType<typeof createClient>,
   profile: SlackProfile
 ): Promise<PersonMatch> {
+  // All lookups filter out archived records so stale duplicates don't shadow active ones
+  const notArchived = "archived.is.null,archived.eq.false";
+
   // Strategy 1: Email
   if (profile.email) {
     const [{ data: riders }, { data: coaches }] = await Promise.all([
-      supabase.from("riders").select("id").ilike("email", profile.email),
-      supabase.from("coaches").select("id").ilike("email", profile.email),
+      supabase.from("riders").select("id").ilike("email", profile.email).or(notArchived),
+      supabase.from("coaches").select("id").ilike("email", profile.email).or(notArchived),
     ]);
     const riderId = riders?.[0]?.id ?? null;
     const coachId = coaches?.[0]?.id ?? null;
@@ -146,8 +149,8 @@ async function findPerson(
     const slackDigits = phoneDigits(profile.phone);
     if (slackDigits.length >= 7) {
       const [{ data: riders }, { data: coaches }] = await Promise.all([
-        supabase.from("riders").select("id, phone").not("phone", "is", null),
-        supabase.from("coaches").select("id, phone").not("phone", "is", null),
+        supabase.from("riders").select("id, phone").not("phone", "is", null).or(notArchived),
+        supabase.from("coaches").select("id, phone").not("phone", "is", null).or(notArchived),
       ]);
       const matchedRider = riders?.find((r) => r.phone && phoneDigits(r.phone) === slackDigits);
       const matchedCoach = coaches?.find((c) => c.phone && phoneDigits(c.phone) === slackDigits);
@@ -162,8 +165,8 @@ async function findPerson(
   const namesToTry = [profile.realName, profile.displayName].filter(Boolean) as string[];
   for (const name of namesToTry) {
     const [{ data: riders }, { data: coaches }] = await Promise.all([
-      supabase.from("riders").select("id").ilike("name", name),
-      supabase.from("coaches").select("id").ilike("name", name),
+      supabase.from("riders").select("id").ilike("name", name).or(notArchived),
+      supabase.from("coaches").select("id").ilike("name", name).or(notArchived),
     ]);
     const riderId = riders?.[0]?.id ?? null;
     const coachId = coaches?.[0]?.id ?? null;
