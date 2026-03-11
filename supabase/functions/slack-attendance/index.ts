@@ -2121,93 +2121,108 @@ serve(async (req) => {
         // Capture the channel where the button was clicked (for ephemeral confirmation later)
         const originChannelId = payload.channel?.id ?? "";
 
-        // Get ride date and practice time for the modal header
-        const ride = await getRideById(supabase, rideId);
-        if (!ride) return ephemeral("Could not find that practice.");
+        // IMMEDIATELY open a loading modal to beat Slack's 3-second trigger_id expiry.
+        // This prevents "The link is closed" errors on cold starts.
+        const loadingModal = {
+          type: "modal" as const,
+          title: { type: "plain_text" as const, text: "Attendance" },
+          blocks: [{ type: "section", text: { type: "mrkdwn", text: ":hourglass_flowing_sand: Loading attendance form..." } }],
+        };
+        const openRes = await fetch("https://slack.com/api/views.open", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ trigger_id: triggerId, view: loadingModal }),
+        });
+        const openData = await openRes.json();
+        if (!openData.ok) {
+          console.error("views.open (loading) error:", openData.error);
+          return new Response("", { status: 200 });
+        }
+        const viewId = openData.view?.id;
+
+        // Helper to replace the loading modal with an error message and close
+        const showModalError = async (msg: string) => {
+          if (!viewId) return;
+          await fetch("https://slack.com/api/views.update", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              view_id: viewId,
+              view: {
+                type: "modal",
+                title: { type: "plain_text", text: "Attendance" },
+                close: { type: "plain_text", text: "OK" },
+                blocks: [{ type: "section", text: { type: "mrkdwn", text: msg } }],
+              },
+            }),
+          });
+        };
+
+        // Now do all lookups in parallel (modal is already open, no time pressure)
+        const [ride, btnProfile] = await Promise.all([
+          getRideById(supabase, rideId),
+          getSlackProfile(slackUserId),
+        ]);
+        if (!ride) { await showModalError(":warning: Could not find that practice."); return new Response("", { status: 200 }); }
 
         // Determine if this person is a coach or rider
         let isCoach = false;
         let isRider = false;
-        const btnProfile = await getSlackProfile(slackUserId);
+        let personCoachId: number | null = null;
         if (btnProfile) {
           const btnPerson = await findPerson(supabase, btnProfile);
           isCoach = !!btnPerson.coachId && !btnPerson.riderId;
           isRider = !!btnPerson.riderId && !btnPerson.coachId;
+          personCoachId = btnPerson.coachId;
         }
 
         // Block cross-channel responses: coaches can't use rider poll, riders can't use coach poll
         const isRiderChannel = originChannelId === SLACK_ATTENDANCE_CHANNEL_ID;
         const isCoachChannel = originChannelId === SLACK_COACH_CHANNEL_ID;
         if (isCoach && isRiderChannel) {
-          await fetch("https://slack.com/api/chat.postEphemeral", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              channel: originChannelId, user: slackUserId,
-              text: ":no_entry: This is the rider attendance poll. Please use the poll in the coach channel to confirm your attendance.",
-            }),
-          });
+          await showModalError(":no_entry: This is the rider attendance poll. Please use the poll in the coach channel to confirm your attendance.");
           return new Response("", { status: 200 });
         }
         if (isRider && isCoachChannel) {
-          await fetch("https://slack.com/api/chat.postEphemeral", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              channel: originChannelId, user: slackUserId,
-              text: ":no_entry: This is the coach attendance poll. Please use the poll in the rider channel to confirm your attendance.",
-            }),
-          });
+          await showModalError(":no_entry: This is the coach attendance poll. Please use the poll in the rider channel to confirm your attendance.");
           return new Response("", { status: 200 });
         }
 
         // Block N/A level coaches from responding — they are not eligible to ride
-        if (isCoach && btnProfile) {
-          const btnPerson = await findPerson(supabase, btnProfile);
-          if (btnPerson.coachId) {
-            const { data: coachRow } = await supabase
-              .from("coaches")
-              .select("level")
-              .eq("id", btnPerson.coachId)
-              .single();
-            if (coachRow?.level === "N/A") {
-              await fetch("https://slack.com/api/chat.postEphemeral", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  channel: originChannelId, user: slackUserId,
-                  text: ":no_entry: You need to be a Level 1 coach or higher to participate in team rides. If you believe this is an error, please contact the head coach.",
-                }),
-              });
-              return new Response("", { status: 200 });
-            }
+        if (isCoach && personCoachId) {
+          const { data: coachRow } = await supabase
+            .from("coaches")
+            .select("level")
+            .eq("id", personCoachId)
+            .single();
+          if (coachRow?.level === "N/A") {
+            await showModalError(":no_entry: You need to be a Level 1 coach or higher to participate in team rides. If you believe this is an error, please contact the head coach.");
+            return new Response("", { status: 200 });
           }
         }
 
-        // Look up existing response for pre-fill (from advance marking or previous response)
+        // Look up existing response for pre-fill + practice times (parallel)
+        const [existingResponseResult, btnTimes] = await Promise.all([
+          supabase.from("slack_poll_responses").select("attendance_status").eq("ride_id", rideId).eq("slack_user_id", slackUserId).maybeSingle(),
+          getPracticeTimes(supabase, ride.date),
+        ]);
         let existingChoice: string | undefined;
-        const { data: existingResponse } = await supabase
-          .from("slack_poll_responses")
-          .select("attendance_status")
-          .eq("ride_id", rideId)
-          .eq("slack_user_id", slackUserId)
-          .maybeSingle();
-        if (existingResponse) {
+        if (existingResponseResult.data) {
           const statusMap: Record<string, string> = { attending: "attend", absent: "absent", if_needed: "if_needed" };
-          existingChoice = statusMap[existingResponse.attendance_status];
+          existingChoice = statusMap[existingResponseResult.data.attendance_status];
         }
 
-        const btnTimes = await getPracticeTimes(supabase, ride.date);
         const showReason = existingChoice === "absent" && !isCoach;
         const modal = buildAttendanceModal(rideId, ride.date, btnTimes, showReason, isCoach, originChannelId, existingChoice);
 
-        const res = await fetch("https://slack.com/api/views.open", {
+        // Update the loading modal with the real attendance form
+        const res = await fetch("https://slack.com/api/views.update", {
           method: "POST",
           headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ trigger_id: triggerId, view: modal }),
+          body: JSON.stringify({ view_id: viewId, view: modal }),
         });
         const resData = await res.json();
-        if (!resData.ok) console.error("views.open error:", resData.error);
+        if (!resData.ok) console.error("views.update error:", resData.error);
 
         return new Response("", { status: 200 });
       }
