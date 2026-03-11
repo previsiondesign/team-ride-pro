@@ -203,7 +203,7 @@ async function getNextRide(supabase: ReturnType<typeof createClient>) {
   // Filter out both cancelled and deleted rides (handle null values — many rides have null instead of false)
   const { data: rides, error } = await supabase
     .from("rides")
-    .select("id, date, available_riders, available_coaches, cancelled, deleted")
+    .select("id, date, available_riders, available_coaches, cancelled, deleted, published_groups")
     .or("cancelled.is.null,cancelled.eq.false")
     .or("deleted.is.null,deleted.eq.false")
     .gte("date", today)
@@ -1548,6 +1548,11 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ skipped: true, reason: "No upcoming practice found" });
+
+      // Skip reminders if groups have already been published (planning is done)
+      if (ride.published_groups === true) {
+        return jsonResponse({ skipped: true, reason: "Groups already published — reminders not needed", rideId: ride.id, date: ride.date });
+      }
 
       // Load configurable lead time from season_settings (default: 4 hours)
       const { data: settingsRow } = await supabase
