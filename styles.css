@@ -4015,6 +4015,15 @@
                 font-size: 24px !important;
                 margin-bottom: 16px !important;
             }
+            /* Prevent iOS auto-zoom on input focus (requires >= 16px) */
+            .login-container .modal-field-input,
+            .login-container input[type="text"],
+            .login-container input[type="email"],
+            .login-container input[type="tel"],
+            .login-container input[type="password"],
+            .login-container select {
+                font-size: 16px;
+            }
         }
 
         /* Small mobile devices (max-width: 480px) */
