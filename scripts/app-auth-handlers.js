@@ -1842,6 +1842,26 @@
         }
 
         function enableSimplifiedViewMode(type) {
+            // Full-screen layout: remove background image, card frame, header
+            document.body.classList.add('simplified-view');
+
+            // Greeting banner: "Hi [FirstName or nickname]!"
+            if (simplifiedLoginInfo) {
+                const person = simplifiedLoginInfo.type === 'rider'
+                    ? (data.riders || []).find(r => r.id == simplifiedLoginInfo.id)
+                    : (data.coaches || []).find(c => c.id == simplifiedLoginInfo.id);
+                const greeting = person?.nickname
+                    || simplifiedLoginInfo.name?.split(/\s+/)[0]
+                    || 'there';
+                const banner = document.createElement('div');
+                banner.className = 'simplified-greeting-banner';
+                banner.textContent = 'Hi ' + greeting + '!';
+                const mainContent = document.querySelector('.container');
+                if (mainContent) mainContent.prepend(banner);
+                setTimeout(function() { banner.classList.add('fade-out'); }, 2000);
+                setTimeout(function() { banner.remove(); }, 2500);
+            }
+
             // Hide the desktop tab bar entirely in simplified view (desktop + mobile)
             const desktopTabs = document.getElementById('desktop-tabs');
             if (desktopTabs) {

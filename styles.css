@@ -2829,6 +2829,49 @@
             align-items: center;
         }
 
+        /* ── Simplified view (rider/coach assignment pages) — full-screen mobile ── */
+        body.simplified-view {
+            background: #ffffff;
+            background-image: none;
+        }
+
+        body.simplified-view .sticky-top {
+            display: none !important;
+        }
+
+        body.simplified-view .container {
+            margin: 0;
+            padding: 0;
+            border-radius: 0;
+            box-shadow: none;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        body.simplified-view .tab-content {
+            padding: 0;
+        }
+
+        body.simplified-view .section {
+            margin: 0;
+        }
+
+        /* Greeting banner */
+        .simplified-greeting-banner {
+            background: #1976D2;
+            color: white;
+            text-align: center;
+            padding: 12px 16px;
+            font-size: 18px;
+            font-weight: 600;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .simplified-greeting-banner.fade-out {
+            opacity: 0;
+        }
+
         .mobile-assignment-groups {
             display: flex;
             flex-direction: column;

@@ -77,7 +77,7 @@
             
             if (!ride) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: 40px 20px; color: #666;">
+                    <div style="text-align: center; padding: 40px 16px; color: #666;">
                         <p style="font-size: 18px; margin-bottom: 8px;">No planned practice</p>
                         <p style="font-size: 14px;">Open the Practice Planner and plan the next practice to see assignments here.</p>
                     </div>
@@ -111,8 +111,8 @@
             
             // Always show goals at the top (visible regardless of which groups are opened)
             let html = `
-                <div style="margin-bottom: 24px;">
-                    <h2 style="margin: 0 0 12px 0; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
+                <div style="margin-bottom: 24px; padding: 0 16px;">
+                    <h2 style="margin: 0 0 12px 0; padding-top: 16px; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
                     <div style="margin-bottom: 12px; padding: 12px; background: #f9f9f9; border-radius: 4px; font-size: 14px; color: #555;">
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
@@ -446,7 +446,7 @@
             
             if (!ride) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: 40px 20px; color: #666;">
+                    <div style="text-align: center; padding: 40px 16px; color: #666;">
                         <p style="font-size: 18px; margin-bottom: 8px;">No planned practice</p>
                         <p style="font-size: 14px;">Open the Practice Planner and plan the next practice to see assignments here.</p>
                     </div>
@@ -480,8 +480,8 @@
             
             // Always show goals at the top (visible regardless of which groups are opened)
             let html = `
-                <div style="margin-bottom: 24px;">
-                    <h2 style="margin: 0 0 12px 0; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
+                <div style="margin-bottom: 24px; padding: 0 16px;">
+                    <h2 style="margin: 0 0 12px 0; padding-top: 16px; font-size: 20px; color: #333;">${escapeHtml(dateDisplay)}</h2>
                     <div style="margin-bottom: 12px; padding: 12px; background: #f9f9f9; border-radius: 4px; font-size: 14px; color: #555;">
                         ${timeDisplay ? `<div style="margin-bottom: 6px;"><strong>Time:</strong> ${escapeHtml(timeDisplay)}</div>` : ''}
                         ${practiceLocation ? `<div style="margin-bottom: 6px;"><strong>Location:</strong> ${escapeHtml(practiceLocation)}</div>` : ''}
