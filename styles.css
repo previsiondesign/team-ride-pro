@@ -889,6 +889,11 @@
             overflow-x: auto;
             overflow-y: clip;
             padding-bottom: 4px;
+            scrollbar-width: none;          /* Firefox */
+            -ms-overflow-style: none;       /* IE/Edge */
+        }
+        .roster-grid::-webkit-scrollbar {
+            display: none;                  /* Chrome/Safari */
         }
 
         .roster-header-container {
