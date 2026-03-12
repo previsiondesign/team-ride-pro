@@ -9149,18 +9149,22 @@
             container.innerHTML = centerColumnHtml;
             truncateOverflowingNames();
 
-            // After truncation completes (2 rAF frames), check if any coach name
-            // elements still overflow even after short-name swap. If so, widen the
-            // grid's min column size to give cards more room.
+            // After truncation completes (2 rAF frames), check if any coach row's
+            // children overflow. The item has overflow:hidden so scrollWidth won't help;
+            // instead sum children's actual widths and compare to the container.
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const grid = document.getElementById('groups-grid');
                     if (!grid) return;
-                    // Check if any name element is still clipped after truncation
-                    const nameEls = grid.querySelectorAll('.coach-inline-item .truncate-name');
+                    const items = grid.querySelectorAll('.coach-inline-item');
                     let hasOverflow = false;
-                    nameEls.forEach(el => {
-                        if (el.scrollWidth > el.clientWidth + 1) {
+                    items.forEach(item => {
+                        let childrenWidth = 0;
+                        for (let i = 0; i < item.children.length; i++) {
+                            childrenWidth += item.children[i].scrollWidth;
+                        }
+                        // Account for gap/padding (item has padding: 0 4px 2px 4px = 8px horizontal)
+                        if (childrenWidth > item.clientWidth - 8) {
                             hasOverflow = true;
                         }
                     });
