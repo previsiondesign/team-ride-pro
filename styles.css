@@ -3231,6 +3231,9 @@
         }
 
         /* Group card coach rows: force name+badges to respect card width */
+        .coach-inline-item {
+            overflow: hidden;
+        }
         .coach-inline-item .coach-name-with-bike {
             display: flex;
             flex: 1;
@@ -3250,6 +3253,13 @@
         }
         .coach-inline-item .badge-level-inline,
         .coach-inline-item .bike-badge {
+            flex-shrink: 0;
+        }
+        /* Role badge and menu button must never shrink */
+        .coach-inline-item .coach-role-badge-fixed {
+            flex-shrink: 0;
+        }
+        .coach-inline-item .card-menu-btn {
             flex-shrink: 0;
         }
 
