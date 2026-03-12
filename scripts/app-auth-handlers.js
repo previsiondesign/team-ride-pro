@@ -953,8 +953,9 @@
                     return;
                 }
                 const lock = await getAdminEditLock();
-                const otherUserHasLock = !!(lock && lock.user_id && currentUser && lock.user_id !== currentUser.id);
-                const lockNowFree = !lock || !lock.user_id || (currentUser && lock.user_id === currentUser.id);
+                const lockStale = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) >= 2 * 60 * 1000;
+                const otherUserHasLock = !!(lock && lock.user_id && currentUser && lock.user_id !== currentUser.id && !lockStale);
+                const lockNowFree = !lock || !lock.user_id || (currentUser && lock.user_id === currentUser.id) || lockStale;
 
                 if ((isReadOnlyMode || isDeveloperMode) && _lastBannerPollHadOtherUser && lockNowFree) {
                     _lastBannerPollHadOtherUser = false;
@@ -1026,54 +1027,7 @@
                 return;
             }
 
-            const overlay = document.getElementById('lock-conflict-overlay');
-            const dialog = document.getElementById('lock-conflict-dialog');
-            const waiting = document.getElementById('lock-conflict-waiting');
-            if (overlay && dialog && waiting) {
-                dialog.style.display = 'none';
-                const waitText = document.getElementById('lock-conflict-waiting-text');
-                if (waitText) waitText.textContent = 'Waiting for ' + name + ' to respond…';
-                waiting.style.display = 'block';
-                overlay.style.display = 'flex';
-
-                const cancelBtn = document.getElementById('lock-conflict-waiting-cancel');
-                if (cancelBtn) {
-                    cancelBtn.onclick = () => {
-                        if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
-                        lockConflictRequestPollTimer = null;
-                        overlay.style.display = 'none';
-                    };
-                }
-
-                if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
-                lockConflictRequestPollTimer = setInterval(async () => {
-                    try {
-                        const req = await getTakeOverRequest();
-                        if (!req) {
-                            clearInterval(lockConflictRequestPollTimer);
-                            lockConflictRequestPollTimer = null;
-                            overlay.style.display = 'none';
-                            alert('Access request was cleared or expired. Try again.');
-                            return;
-                        }
-                        if (req.status === 'granted') {
-                            clearInterval(lockConflictRequestPollTimer);
-                            lockConflictRequestPollTimer = null;
-                            overlay.style.display = 'none';
-                            alert('Access granted! Reloading with edit access...');
-                            window.location.reload();
-                        } else if (req.status === 'denied') {
-                            clearInterval(lockConflictRequestPollTimer);
-                            lockConflictRequestPollTimer = null;
-                            overlay.style.display = 'none';
-                            const reason = req.response_message ? ` Reason: ${req.response_message}` : '';
-                            alert(`Access denied by ${name}.${reason}`);
-                        }
-                    } catch (e) {
-                        console.warn('Request access poll error:', e);
-                    }
-                }, REQUESTER_POLL_MS);
-            }
+            startRequesterPoll({ name: name, lock: lock, currentUser: currentUser });
         }
 
         function setReadOnlyMode(enabled, lockInfo = null) {
@@ -1146,7 +1100,154 @@
         document.addEventListener('input', handleReadOnlyInteraction, true);
         document.addEventListener('dragstart', handleReadOnlyInteraction, true);
 
-        // lockConflictRequestPollTimer, takeOverRequestPollTimer, takeOverCountdownTimer, takeOverCountdownSeconds are in app-state.js
+        // lockConflictRequestPollTimer, requesterCountdownTimer, requesterCountdownSeconds,
+        // takeOverRequestPollTimer, takeOverCountdownTimer, takeOverCountdownSeconds are in app-state.js
+
+        // Shared helper: start the requester waiting UI with countdown + poll for granted/denied/stale.
+        // Called after a takeover request has been created.
+        // Options: { name, lock, currentUser, onCancel, onGranted, onDenied }
+        function startRequesterPoll(opts) {
+            const { name, lock, currentUser, onCancel } = opts;
+            const overlay = document.getElementById('lock-conflict-overlay');
+            const dialog = document.getElementById('lock-conflict-dialog');
+            const waiting = document.getElementById('lock-conflict-waiting');
+            const waitText = document.getElementById('lock-conflict-waiting-text');
+            const countdownEl = document.getElementById('lock-conflict-waiting-countdown');
+            if (!overlay || !waiting) return;
+            if (dialog) dialog.style.display = 'none';
+            if (waitText) waitText.textContent = 'Waiting for ' + name + ' to respond\u2026';
+            if (countdownEl) countdownEl.textContent = '';
+            waiting.style.display = 'block';
+            overlay.style.display = 'flex';
+
+            // Cleanup helper
+            function cleanupTimers() {
+                if (lockConflictRequestPollTimer) { clearInterval(lockConflictRequestPollTimer); lockConflictRequestPollTimer = null; }
+                if (requesterCountdownTimer) { clearInterval(requesterCountdownTimer); requesterCountdownTimer = null; }
+            }
+
+            // Cancel button
+            const cancelBtn = document.getElementById('lock-conflict-waiting-cancel');
+            if (cancelBtn) {
+                cancelBtn.onclick = () => {
+                    cleanupTimers();
+                    overlay.style.display = 'none';
+                    if (dialog) { dialog.style.display = 'block'; waiting.style.display = 'none'; }
+                    if (typeof onCancel === 'function') onCancel();
+                    else setReadOnlyMode(true, lock);
+                };
+            }
+
+            // Called when access is successfully acquired
+            async function acquireEditAccess() {
+                cleanupTimers();
+                overlay.style.display = 'none';
+                if (typeof clearTakeOverRequest === 'function') {
+                    try { await clearTakeOverRequest(); } catch (e) {}
+                }
+                var sessionStart = new Date().toISOString();
+                await upsertAdminEditLock({
+                    user_id: currentUser.id,
+                    email: currentUser.email || null,
+                    user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
+                    started_at: sessionStart
+                });
+                setReadOnlyMode(false, null);
+                if (adminEditLockInterval) clearInterval(adminEditLockInterval);
+                adminEditLockInterval = setInterval(async () => {
+                    if (isReadOnlyMode) return;
+                    await upsertAdminEditLock({
+                        user_id: currentUser.id,
+                        email: currentUser.email || null,
+                        user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
+                        started_at: sessionStart
+                    });
+                }, 60 * 1000);
+                if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);
+                takeOverCheckInterval = setInterval(async () => {
+                    if (isReadOnlyMode) return;
+                    if (typeof getTakeOverRequest !== 'function') return;
+                    try {
+                        var req = await getTakeOverRequest();
+                        if (!req || req.status !== 'pending' || req.requesting_user_id === currentUser.id) return;
+                        clearInterval(takeOverCheckInterval);
+                        takeOverCheckInterval = null;
+                        clearInterval(adminEditLockInterval);
+                        adminEditLockInterval = null;
+                        showTakeOverRequestPopup(req);
+                    } catch (e) {
+                        console.warn('Take over check poll error:', e);
+                    }
+                }, TAKEOVER_POLL_MS);
+            }
+
+            // Start countdown (matches the holder's TAKEOVER_COUNTDOWN_SEC)
+            requesterCountdownSeconds = TAKEOVER_COUNTDOWN_SEC;
+            if (countdownEl) countdownEl.textContent = 'Auto-access in ' + requesterCountdownSeconds + 's if no response\u2026';
+            if (requesterCountdownTimer) clearInterval(requesterCountdownTimer);
+            requesterCountdownTimer = setInterval(async () => {
+                requesterCountdownSeconds--;
+                if (countdownEl) {
+                    if (requesterCountdownSeconds > 0) {
+                        countdownEl.textContent = 'Auto-access in ' + requesterCountdownSeconds + 's if no response\u2026';
+                    } else {
+                        countdownEl.textContent = 'Checking lock status\u2026';
+                    }
+                }
+                if (requesterCountdownSeconds <= 0) {
+                    clearInterval(requesterCountdownTimer);
+                    requesterCountdownTimer = null;
+                    // Countdown expired — check if lock holder is still active
+                    try {
+                        var currentLock = typeof getAdminEditLock === 'function' ? await getAdminEditLock() : null;
+                        var lockStale = currentLock && currentLock.updated_at && (Date.now() - new Date(currentLock.updated_at).getTime()) >= 2 * 60 * 1000;
+                        var lockGone = !currentLock || !currentLock.user_id;
+                        if (lockStale || lockGone) {
+                            // Holder is gone — auto-take the lock
+                            await acquireEditAccess();
+                            return;
+                        }
+                        // Lock is still fresh — holder should have auto-granted by now.
+                        // Continue polling for a bit longer (the response might just be slow to arrive).
+                        if (countdownEl) countdownEl.textContent = 'Waiting for response\u2026';
+                    } catch (e) {
+                        console.warn('Countdown lock check error:', e);
+                        if (countdownEl) countdownEl.textContent = 'Waiting for response\u2026';
+                    }
+                }
+            }, 1000);
+
+            // Poll for granted/denied status
+            if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
+            lockConflictRequestPollTimer = setInterval(async () => {
+                try {
+                    var req = await getTakeOverRequest();
+                    if (!req) {
+                        // Request row was cleared — could mean granted and cleaned up
+                        // Check if we now hold the lock or it's free
+                        cleanupTimers();
+                        overlay.style.display = 'none';
+                        // Reload to re-run initAdminEditLock which will acquire if free
+                        window.location.reload();
+                        return;
+                    }
+                    if (req.status === 'pending') return;
+                    cleanupTimers();
+                    overlay.style.display = 'none';
+                    if (typeof clearTakeOverRequest === 'function') {
+                        try { await clearTakeOverRequest(); } catch (e) {}
+                    }
+                    if (req.status === 'granted') {
+                        await acquireEditAccess();
+                    } else {
+                        setReadOnlyMode(true, lock);
+                        if (req.response_message) alert('Access denied. ' + req.response_message);
+                    }
+                } catch (e) {
+                    console.warn('Take over poll error:', e);
+                }
+            }, REQUESTER_POLL_MS);
+        }
 
         function showLockConflictDialog(lock) {
             const name = lock.user_name || lock.email || 'another admin';
@@ -1181,48 +1282,7 @@
                     alert('Could not send request. Please try Read-Only or Developer Mode.');
                     return;
                 }
-                dialog.style.display = 'none';
-                document.getElementById('lock-conflict-waiting-text').textContent = 'Waiting for ' + name + ' to respond…';
-                waiting.style.display = 'block';
-                const cancelBtn = document.getElementById('lock-conflict-waiting-cancel');
-                if (cancelBtn) {
-                    cancelBtn.onclick = () => {
-                        if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
-                        lockConflictRequestPollTimer = null;
-                        overlay.style.display = 'none';
-                        dialog.style.display = 'block';
-                        waiting.style.display = 'none';
-                        setReadOnlyMode(true, lock);
-                    };
-                }
-                if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
-                lockConflictRequestPollTimer = setInterval(async () => {
-                    try {
-                        const req = await getTakeOverRequest();
-                        if (!req || req.status === 'pending') return;
-                        clearInterval(lockConflictRequestPollTimer);
-                        lockConflictRequestPollTimer = null;
-                        overlay.style.display = 'none';
-                        // Clean up the processed request row so it does not block future requests
-                        if (typeof clearTakeOverRequest === 'function') await clearTakeOverRequest();
-                        if (req.status === 'granted') {
-                            if (typeof releaseAdminEditLock === 'function') await releaseAdminEditLock();
-                            var _takeoverSessionStart = new Date().toISOString();
-                            await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin', started_at: _takeoverSessionStart });
-                            setReadOnlyMode(false, null);
-                            if (adminEditLockInterval) clearInterval(adminEditLockInterval);
-                            adminEditLockInterval = setInterval(async () => {
-                                if (isReadOnlyMode) return;
-                                await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin', started_at: _takeoverSessionStart });
-                            }, 60 * 1000);
-                        } else {
-                            setReadOnlyMode(true, lock);
-                            if (req.response_message) alert('Access denied. ' + req.response_message);
-                        }
-                    } catch (e) {
-                        console.warn('Take over poll error:', e);
-                    }
-                }, REQUESTER_POLL_MS);
+                startRequesterPoll({ name: name, lock: lock, currentUser: currentUser, onCancel: function() { setReadOnlyMode(true, lock); } });
             };
             document.getElementById('lock-conflict-developer').onclick = () => {
                 if (lockConflictRequestPollTimer) clearInterval(lockConflictRequestPollTimer);
@@ -1785,6 +1845,10 @@
                 if (!client || !client.auth.getSession) return;
                 client.auth.getSession().then(function({ data: { session } }) {
                     if (!session) return;
+                    // Release the edit lock before signing out so other users aren't blocked
+                    if (typeof releaseAdminEditLock === 'function') {
+                        releaseAdminEditLock().catch(function() {});
+                    }
                     if (typeof signOut === 'function') signOut().catch(function() {});
                     if (typeof handleAuthStateChange === 'function') handleAuthStateChange(false);
                 }).catch(function() {});

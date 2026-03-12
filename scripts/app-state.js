@@ -163,6 +163,8 @@
         // Auth state
         let pendingVerification = null;
         let lockConflictRequestPollTimer = null;
+        let requesterCountdownTimer = null;
+        let requesterCountdownSeconds = 0;
         let takeOverRequestPollTimer = null;
         let takeOverCountdownTimer = null;
         let takeOverCountdownSeconds = 30;
