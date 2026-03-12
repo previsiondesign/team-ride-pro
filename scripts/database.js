@@ -1918,15 +1918,17 @@ async function upsertAdminEditLock(lockInfo) {
     if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping upsertAdminEditLock'); return; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
+    const row = {
+        id: 'current',
+        user_id: lockInfo.user_id,
+        email: lockInfo.email || null,
+        user_name: lockInfo.user_name || null,
+        updated_at: new Date().toISOString()
+    };
+    if (lockInfo.started_at) row.started_at = lockInfo.started_at;
     const { error } = await client
         .from('admin_edit_locks')
-        .upsert([{
-            id: 'current',
-            user_id: lockInfo.user_id,
-            email: lockInfo.email || null,
-            user_name: lockInfo.user_name || null,
-            updated_at: new Date().toISOString()
-        }], { onConflict: 'id' });
+        .upsert([row], { onConflict: 'id' });
     if (error) throw error;
 }
 

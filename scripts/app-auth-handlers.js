@@ -930,8 +930,8 @@
 
             if (isFreshLock && isOtherUser) {
                 const name = lock.user_name || lock.email || 'Another admin';
-                const since = formatLockTime(lock.updated_at);
-                const statusText = `| ${name} logged in${since ? ' (active as of ' + since + ')' : ''}`;
+                const since = formatLockTime(lock.started_at || lock.updated_at);
+                const statusText = `| ${name} logged in${since ? ' (active since ' + since + ')' : ''}`;
                 if (devStatus) devStatus.textContent = statusText;
                 if (roStatus) roStatus.textContent = statusText;
                 if (devReqBtn) devReqBtn.style.display = '';
@@ -1207,12 +1207,13 @@
                         if (typeof clearTakeOverRequest === 'function') await clearTakeOverRequest();
                         if (req.status === 'granted') {
                             if (typeof releaseAdminEditLock === 'function') await releaseAdminEditLock();
-                            await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin' });
+                            var _takeoverSessionStart = new Date().toISOString();
+                            await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin', started_at: _takeoverSessionStart });
                             setReadOnlyMode(false, null);
                             if (adminEditLockInterval) clearInterval(adminEditLockInterval);
                             adminEditLockInterval = setInterval(async () => {
                                 if (isReadOnlyMode) return;
-                                await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin' });
+                                await upsertAdminEditLock({ user_id: currentUser.id, email: currentUser.email || null, user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin', started_at: _takeoverSessionStart });
                             }, 60 * 1000);
                         } else {
                             setReadOnlyMode(true, lock);
@@ -1256,10 +1257,12 @@
                     return;
                 }
 
+                var _adminSessionStart = new Date().toISOString();
                 await upsertAdminEditLock({
                     user_id: currentUser.id,
                     email: currentUser.email || null,
-                    user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin'
+                    user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
+                    started_at: _adminSessionStart
                 });
                 setReadOnlyMode(false, null);
 
@@ -1271,7 +1274,8 @@
                     await upsertAdminEditLock({
                         user_id: currentUser.id,
                         email: currentUser.email || null,
-                        user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin'
+                        user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
+                        started_at: _adminSessionStart
                     });
                 }, 60 * 1000);
                 if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);

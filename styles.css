@@ -103,6 +103,8 @@
             /* margins set dynamically by JS based on collapsed state */
         }
 
+
+
         /* ===== Sticky Practice Banner ===== */
         .practice-banner {
             position: fixed;
@@ -687,6 +689,16 @@
 
         .tab-content.active {
             display: block;
+        }
+
+        .tab-content {
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #rides-tab {
+            max-width: none;
         }
 
         .section {
@@ -3441,6 +3453,9 @@
                 min-width: 0; /* Allow shrink so content fits viewport */
                 padding: 8px 14px;
                 margin: 5px 8px 8px 8px;
+            }
+            .tab-content {
+                max-width: none;
             }
 
             .practice-banner {
