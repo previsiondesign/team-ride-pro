@@ -1600,7 +1600,8 @@
             // Hide developer/read-only banners on assignment tabs (rider + coach assignments)
             const onAssignmentsTab = (tabName === 'assignments' || tabName === 'coach-assignments');
             document.body.classList.toggle('assignments-tabs-active', !!onAssignmentsTab);
-            
+            document.body.classList.toggle('rides-tab-active', tabName === 'rides');
+
             if (element) {
                 element.classList.add('active');
             }

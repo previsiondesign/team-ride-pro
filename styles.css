@@ -36,13 +36,25 @@
         .sticky-top {
             position: fixed;
             top: 10px;
-            left: 10px;
-            right: 10px;
+            left: 0;
+            right: 0;
+            max-width: 1220px;
+            margin-left: auto;
+            margin-right: auto;
             z-index: 500;
             background: #fff;
             padding: 10px;
             border-radius: 12px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+            transition: max-width 0.25s ease;
+        }
+
+        body.rides-tab-active .sticky-top {
+            max-width: none;
+            left: 10px;
+            right: 10px;
+            margin-left: 0;
+            margin-right: 0;
         }
 
 
@@ -89,14 +101,19 @@
         }
 
         .container {
-            max-width: 100%;
+            max-width: 1200px;
             min-width: 800px;
-            margin: 5px 10px 10px 10px;
+            margin: 5px auto 10px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.12);
             padding: 10px 20px;
-            transition: margin 0.25s ease;
+            transition: margin 0.25s ease, max-width 0.25s ease;
+        }
+
+        body.rides-tab-active .container {
+            max-width: 100%;
+            margin: 5px 10px 10px 10px;
         }
 
         .container.sidebars-active {
@@ -691,15 +708,6 @@
             display: block;
         }
 
-        .tab-content {
-            max-width: 1200px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        #rides-tab {
-            max-width: none;
-        }
 
         .section {
             margin-bottom: 14px;
@@ -3450,11 +3458,12 @@
                 right: 8px;
             }
             .container {
+                max-width: none;
                 min-width: 0; /* Allow shrink so content fits viewport */
                 padding: 8px 14px;
                 margin: 5px 8px 8px 8px;
             }
-            .tab-content {
+            .sticky-top {
                 max-width: none;
             }
 
