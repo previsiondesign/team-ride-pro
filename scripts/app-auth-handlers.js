@@ -7,6 +7,8 @@
         const TAKEOVER_POLL_MS = 1200;                  // lock holder: check for requests every 1.2s
         const REQUESTER_POLL_MS = 800;                  // requester: check for response every 0.8s
         const SESSION_REFRESH_INTERVAL_MS = 2 * 60 * 1000; // validate session with Supabase every 2 min
+        const LOCK_HEARTBEAT_MS = 30 * 1000;            // heartbeat every 30s to keep lock alive
+        const LOCK_STALE_MS = 50 * 1000;                // lock considered stale after 50s with no heartbeat
 
         // Authentication handlers
         function showAuthError(message, type = 'error') {
@@ -925,7 +927,7 @@
             const roReqBtn = document.getElementById('read-only-request-access-btn');
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
 
-            const isFreshLock = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) < 3 * 60 * 1000;
+            const isFreshLock = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) < LOCK_STALE_MS;
             const isOtherUser = lock && lock.user_id && currentUser && lock.user_id !== currentUser.id;
 
             if (isFreshLock && isOtherUser) {
@@ -953,7 +955,7 @@
                     return;
                 }
                 const lock = await getAdminEditLock();
-                const lockStale = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) >= 2 * 60 * 1000;
+                const lockStale = lock && lock.updated_at && (Date.now() - new Date(lock.updated_at).getTime()) >= LOCK_STALE_MS;
                 const otherUserHasLock = !!(lock && lock.user_id && currentUser && lock.user_id !== currentUser.id && !lockStale);
                 const lockNowFree = !lock || !lock.user_id || (currentUser && lock.user_id === currentUser.id) || lockStale;
 
@@ -1162,7 +1164,7 @@
                         user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
                         started_at: sessionStart
                     });
-                }, 60 * 1000);
+                }, LOCK_HEARTBEAT_MS);
                 if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);
                 takeOverCheckInterval = setInterval(async () => {
                     if (isReadOnlyMode) return;
@@ -1200,7 +1202,7 @@
                     // Countdown expired — check if lock holder is still active
                     try {
                         var currentLock = typeof getAdminEditLock === 'function' ? await getAdminEditLock() : null;
-                        var lockStale = currentLock && currentLock.updated_at && (Date.now() - new Date(currentLock.updated_at).getTime()) >= 2 * 60 * 1000;
+                        var lockStale = currentLock && currentLock.updated_at && (Date.now() - new Date(currentLock.updated_at).getTime()) >= LOCK_STALE_MS;
                         var lockGone = !currentLock || !currentLock.user_id;
                         if (lockStale || lockGone) {
                             // Holder is gone — auto-take the lock
@@ -1311,7 +1313,7 @@
                 const lock = await getAdminEditLock();
                 const now = new Date();
                 const lockUpdatedAt = lock?.updated_at ? new Date(lock.updated_at) : null;
-                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < 2 * 60 * 1000;
+                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < LOCK_STALE_MS;
                 if (lockFresh && lock.user_id && lock.user_id !== currentUser.id) {
                     showLockConflictDialog(lock);
                     return;
@@ -1337,7 +1339,7 @@
                         user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
                         started_at: _adminSessionStart
                     });
-                }, 60 * 1000);
+                }, LOCK_HEARTBEAT_MS);
                 if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);
                 takeOverCheckInterval = setInterval(async () => {
                     if (isReadOnlyMode) return;
@@ -1607,7 +1609,7 @@
             if (lockInfo) {
                 const now = new Date();
                 const lockUpdatedAt = lockInfo.updated_at ? new Date(lockInfo.updated_at) : null;
-                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < 2 * 60 * 1000;
+                const lockFresh = lockUpdatedAt && (now - lockUpdatedAt) < LOCK_STALE_MS;
                 const lockedByOther = lockFresh && lockInfo.user_id && lockInfo.user_id !== currentUser.id;
                 if (lockedByOther) {
                     const name = lockInfo.user_name || lockInfo.email || 'another admin';
