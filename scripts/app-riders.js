@@ -1587,60 +1587,81 @@
             }
         }
 
-        // Load column order from localStorage, reconciling with the full column pool
+        // Save a roster display field setting to Supabase (team-wide)
+        function _saveRosterDisplayFieldsToSupabase(key, value) {
+            if (!data.seasonSettings) return;
+            if (!data.seasonSettings.rosterDisplayFields) {
+                data.seasonSettings.rosterDisplayFields = {};
+            }
+            data.seasonSettings.rosterDisplayFields[key] = value;
+            if (typeof updateSeasonSettings === 'function') {
+                updateSeasonSettings(data.seasonSettings).catch(function(e) {
+                    console.warn('Failed to save roster display fields:', e);
+                });
+            }
+        }
+
+        // Load column order, reconciling with the full column pool
+        function _reconcileColumnOrder(savedOrder, pool) {
+            const poolKeys = new Set(pool.map(c => c.key));
+            const reconciledOrder = savedOrder.filter(k => poolKeys.has(k));
+            pool.forEach(c => {
+                if (!reconciledOrder.includes(c.key)) {
+                    const actionsIdx = reconciledOrder.indexOf('actions');
+                    if (actionsIdx !== -1) reconciledOrder.splice(actionsIdx, 0, c.key);
+                    else reconciledOrder.push(c.key);
+                }
+            });
+            return reconciledOrder;
+        }
+
         function getRiderColumnOrder() {
             const pool = getRiderColumnPool();
-            const poolKeys = new Set(pool.map(c => c.key));
+            // Team-wide setting from Supabase (preferred)
+            const teamSetting = data.seasonSettings?.rosterDisplayFields?.riderColumnOrder;
+            if (teamSetting && Array.isArray(teamSetting) && teamSetting.length > 0) {
+                return _reconcileColumnOrder(teamSetting, pool);
+            }
+            // Fallback: localStorage (legacy / offline)
             const saved = localStorage.getItem('riderColumnOrder');
             if (saved) {
                 try {
-                    const order = JSON.parse(saved);
-                    const reconciledOrder = order.filter(k => poolKeys.has(k));
-                    pool.forEach(c => {
-                        if (!reconciledOrder.includes(c.key)) {
-                            const actionsIdx = reconciledOrder.indexOf('actions');
-                            if (actionsIdx !== -1) reconciledOrder.splice(actionsIdx, 0, c.key);
-                            else reconciledOrder.push(c.key);
-                        }
-                    });
-                    return reconciledOrder;
+                    return _reconcileColumnOrder(JSON.parse(saved), pool);
                 } catch (e) {
                     console.error('Error parsing rider column order:', e);
                 }
             }
             return pool.map(c => c.key);
         }
-        
+
         function getCoachColumnOrder() {
             const pool = getCoachColumnPool();
-            const poolKeys = new Set(pool.map(c => c.key));
+            // Team-wide setting from Supabase (preferred)
+            const teamSetting = data.seasonSettings?.rosterDisplayFields?.coachColumnOrder;
+            if (teamSetting && Array.isArray(teamSetting) && teamSetting.length > 0) {
+                return _reconcileColumnOrder(teamSetting, pool);
+            }
+            // Fallback: localStorage (legacy / offline)
             const saved = localStorage.getItem('coachColumnOrder');
             if (saved) {
                 try {
-                    const order = JSON.parse(saved);
-                    const reconciledOrder = order.filter(k => poolKeys.has(k));
-                    pool.forEach(c => {
-                        if (!reconciledOrder.includes(c.key)) {
-                            const actionsIdx = reconciledOrder.indexOf('actions');
-                            if (actionsIdx !== -1) reconciledOrder.splice(actionsIdx, 0, c.key);
-                            else reconciledOrder.push(c.key);
-                        }
-                    });
-                    return reconciledOrder;
+                    return _reconcileColumnOrder(JSON.parse(saved), pool);
                 } catch (e) {
                     console.error('Error parsing coach column order:', e);
                 }
             }
             return pool.map(c => c.key);
         }
-        
-        // Save column order to localStorage
+
+        // Save column order to localStorage + Supabase
         function saveRiderColumnOrder(order) {
             localStorage.setItem('riderColumnOrder', JSON.stringify(order));
+            _saveRosterDisplayFieldsToSupabase('riderColumnOrder', order);
         }
-        
+
         function saveCoachColumnOrder(order) {
             localStorage.setItem('coachColumnOrder', JSON.stringify(order));
+            _saveRosterDisplayFieldsToSupabase('coachColumnOrder', order);
         }
         
         // Load column widths from localStorage
@@ -1730,6 +1751,12 @@
         // --- Visible columns persistence ---
 
         function getRiderVisibleColumns() {
+            // Team-wide setting from Supabase (preferred)
+            const teamSetting = data.seasonSettings?.rosterDisplayFields?.riderVisibleColumns;
+            if (teamSetting && Array.isArray(teamSetting) && teamSetting.length > 0) {
+                return new Set(teamSetting);
+            }
+            // Fallback: localStorage (legacy / offline)
             const saved = localStorage.getItem('riderVisibleColumns');
             if (saved) {
                 try { return new Set(JSON.parse(saved)); }
@@ -1740,9 +1767,16 @@
 
         function saveRiderVisibleColumns(visibleSet) {
             localStorage.setItem('riderVisibleColumns', JSON.stringify([...visibleSet]));
+            _saveRosterDisplayFieldsToSupabase('riderVisibleColumns', [...visibleSet]);
         }
 
         function getCoachVisibleColumns() {
+            // Team-wide setting from Supabase (preferred)
+            const teamSetting = data.seasonSettings?.rosterDisplayFields?.coachVisibleColumns;
+            if (teamSetting && Array.isArray(teamSetting) && teamSetting.length > 0) {
+                return new Set(teamSetting);
+            }
+            // Fallback: localStorage (legacy / offline)
             const saved = localStorage.getItem('coachVisibleColumns');
             if (saved) {
                 try { return new Set(JSON.parse(saved)); }
@@ -1753,6 +1787,7 @@
 
         function saveCoachVisibleColumns(visibleSet) {
             localStorage.setItem('coachVisibleColumns', JSON.stringify([...visibleSet]));
+            _saveRosterDisplayFieldsToSupabase('coachVisibleColumns', [...visibleSet]);
         }
 
         // --- Choose Display Fields dialog ---
