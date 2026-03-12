@@ -9133,8 +9133,13 @@
                 </div>
             ` : '';
 
+            // Scale minimum card width based on visible skill badges:
+            // 0 skills → 380px, 1 → 430px, 2 → 480px, 3 → 530px
+            const _skillCount = visibleSkills.length;
+            const _minCardWidth = 380 + (_skillCount * 50);
+
             const centerColumnHtml = `
-                <div id="groups-grid" class="assignment-column groups-column" style="width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(550px, 1fr)); gap: 16px; max-width: 100%; padding: 0; border: none; align-items: stretch;">
+                <div id="groups-grid" class="assignment-column groups-column" style="width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(${_minCardWidth}px, 1fr)); gap: 16px; max-width: 100%; padding: 0; border: none; align-items: stretch;">
                     ${groupsHtml}
                     ${addGroupHtml}
                 </div>
@@ -9169,11 +9174,12 @@
                         }
                     });
                     if (hasOverflow) {
-                        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(650px, 1fr))';
+                        // Widen by 100px beyond the current skill-based minimum
+                        const widerMin = _minCardWidth + 100;
+                        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(' + widerMin + 'px, 1fr))';
                         // Re-run truncation with wider cards — names may no longer need shortening
                         truncateOverflowingNames();
                     }
-                    // else leave as default 550px from inline style
                 });
             });
 
