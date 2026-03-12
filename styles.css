@@ -3230,6 +3230,29 @@
             flex-shrink: 0;
         }
 
+        /* Group card coach rows: force name+badges to respect card width */
+        .coach-inline-item .coach-name-with-bike {
+            display: flex;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .coach-inline-item .name-status-wrap {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .coach-inline-item .name-status-wrap strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: block;
+        }
+        .coach-inline-item .badge-level-inline,
+        .coach-inline-item .bike-badge {
+            flex-shrink: 0;
+        }
+
         .badge-row {
             margin-top: 3px;
             display: flex;

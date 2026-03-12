@@ -9148,6 +9148,27 @@
 
             container.innerHTML = centerColumnHtml;
             truncateOverflowingNames();
+
+            // After truncation completes (2 rAF frames), check if any coach rows
+            // still overflow. If so, widen the grid's min column size to give more room.
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const grid = document.getElementById('groups-grid');
+                    if (!grid) return;
+                    const items = grid.querySelectorAll('.coach-inline-item');
+                    let hasOverflow = false;
+                    items.forEach(item => {
+                        if (item.scrollWidth > item.clientWidth + 2) {
+                            hasOverflow = true;
+                        }
+                    });
+                    if (hasOverflow) {
+                        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(500px, 1fr))';
+                    }
+                    // else leave as default 400px from inline style
+                });
+            });
+
             updateDebugOutput();
             
             // Adjust "Add Group" placeholder: span full width if it's alone on its row
