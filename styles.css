@@ -38,7 +38,7 @@
             top: 10px;
             left: 0;
             right: 0;
-            max-width: 1220px;
+            max-width: 1200px;
             margin-left: auto;
             margin-right: auto;
             z-index: 500;
@@ -1184,9 +1184,13 @@
             bottom: 0;
             left: 0;
             right: 0;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
             z-index: 15;
             background: #f0f2f3;
             border-top: 1px solid #cfd8dc;
+            border-radius: 0 0 12px 12px;
         }
 
         .roster-scrollbar-proxy {
