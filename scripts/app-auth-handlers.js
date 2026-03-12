@@ -381,8 +381,8 @@
                 // Clear pending verification from localStorage
                 try { localStorage.removeItem('pendingVerification'); } catch (e) {}
 
-                // Route to assignments view
-                window.location.href = 'teamridepro_v3.html?view=assignments';
+                // Route to assignments view (use current pathname for multi-team support)
+                window.location.href = window.location.pathname + '?view=assignments';
                 
             } catch (error) {
                 console.error('Error verifying code:', error);
@@ -563,9 +563,9 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 const viewParam = urlParams.get('view');
                 if (viewParam === 'assignments' || viewParam === 'rider' || viewParam === 'coach') {
-                    window.location.href = 'teamridepro_v3.html?view=assignments';
+                    window.location.href = window.location.pathname + '?view=assignments';
                 } else {
-                    window.location.href = 'teamridepro_v3.html';
+                    window.location.href = window.location.pathname;
                 }
                 return;
                 }
