@@ -475,6 +475,7 @@
                 data.seasonSettings = buildDefaultSeasonSettings();
             }
 
+            console.log('[LOAD] Pre-normalization practices poll state:', JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled}))));
             const normalizedPractices = Array.isArray(data.seasonSettings.practices)
                 ? data.seasonSettings.practices
                     .map(practice => {
@@ -567,15 +568,19 @@
             const normalizedSeasonStr = JSON.stringify(normalizedSeason);
             if (normalizedSeasonStr !== previousSeasonState) {
                 changed = true;
+                console.log('[LOAD] Normalization detected changes — will save. Post-normalization poll state:', JSON.stringify(normalizedPractices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled}))));
                 // Preserve all existing fields in seasonSettings (like csvFieldMappings, fitnessScale, etc.)
                 data.seasonSettings = {
                     ...data.seasonSettings,
                     ...normalizedSeason
                 };
+            } else {
+                console.log('[LOAD] Normalization: no changes detected, skipping save');
             }
             // If unchanged, keep the original data.seasonSettings (preserves any extra fields)
 
             if (changed) {
+                console.log('[LOAD] Calling saveData() from normalization (this could overwrite DB)');
                 saveData();
             }
         }

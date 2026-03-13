@@ -1197,19 +1197,34 @@
             }
             
             // Save changes
-            console.log('[SAVE] savePracticeChanges calling saveData(). Practice:', JSON.stringify({id: practiceId, desc: practice.description, meetLocation: practice.meetLocation, pollEnabled: practice.pollEnabled}));
-            console.log('[SAVE] data.seasonSettings.practices has', data.seasonSettings.practices?.length, 'practices');
+            console.log('[SAVE] savePracticeChanges calling saveData(). Practice:', JSON.stringify({id: practiceId, desc: practice.description, meetLocation: practice.meetLocation, pollEnabled: practice.pollEnabled, pollDaysBefore: practice.pollDaysBefore, pollTime: practice.pollTime}));
+            console.log('[SAVE] data.seasonSettings.practices full poll state:', JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled}))));
             saveData();
-            
+
+            // Verify: read back from Supabase after a short delay to confirm save
+            setTimeout(async () => {
+                try {
+                    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+                    if (client) {
+                        const { data: row, error } = await client.from('season_settings').select('practices').eq('id', 'current').single();
+                        if (error) {
+                            console.error('[VERIFY] Read-back error:', error);
+                        } else {
+                            console.log('[VERIFY] Supabase practices after save:', JSON.stringify(row.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled, reminderDaysBefore: p.reminderDaysBefore}))));
+                        }
+                    }
+                } catch (e) { console.error('[VERIFY] exception:', e); }
+            }, 2000);
+
             // Update original state to reflect saved changes
             const key = String(practiceId);
             originalPracticeStates.set(key, JSON.parse(JSON.stringify(practice)));
-            
+
             // Re-render both containers
             renderPracticeRows('practice-rows');
             renderPracticeRows('practice-rows-modal');
             renderAllCalendars();
-            
+
             alert('Practice changes have been saved and applied to all practices in the series (excluding cancelled, rescheduled, and deleted practices).');
         }
         
