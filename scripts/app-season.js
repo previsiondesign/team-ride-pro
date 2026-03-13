@@ -673,7 +673,13 @@
                 practice.meetLocation !== original.meetLocation ||
                 practice.locationLat !== original.locationLat ||
                 practice.locationLng !== original.locationLng ||
-                rosterFilterChanged
+                rosterFilterChanged ||
+                (practice.pollEnabled !== false) !== (original.pollEnabled !== false) ||
+                (practice.pollDaysBefore ?? 1) !== (original.pollDaysBefore ?? 1) ||
+                (practice.pollTime || '15:00') !== (original.pollTime || '15:00') ||
+                (practice.reminderEnabled !== false) !== (original.reminderEnabled !== false) ||
+                (practice.reminderDaysBefore ?? 0) !== (original.reminderDaysBefore ?? 0) ||
+                (practice.reminderTime || '10:00') !== (original.reminderTime || '10:00')
             );
             
             const actionsDiv = document.getElementById(`practice-actions-${practiceId}`);
