@@ -610,10 +610,10 @@
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid #e0e0e0; margin-top: 10px;">
                                 <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-                                    <input type="checkbox" ${practice.pollEnabled !== false ? 'checked' : ''} onchange="updatePracticeDraft(${practice.id}, 'pollEnabled', this.checked)" style="margin: 0; cursor: pointer;">
+                                    <input type="checkbox" ${practice.pollEnabled !== false ? 'checked' : ''} onchange="console.log('[POLL-DEBUG] CHECKBOX onchange fired, checked='+this.checked); updatePracticeDraft(${practice.id}, 'pollEnabled', this.checked)" style="margin: 0; cursor: pointer;">
                                     <span style="font-size: 12px; color: #555; font-weight: 500;">Poll</span>
                                 </label>
-                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
+                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="console.log('[POLL-DEBUG] NUMBER INPUT onchange fired, value='+this.value); updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #666; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}">day(s) before at</span>
                                 <input type="time" value="${practice.pollTime || '15:00'}" onchange="updatePracticeDraft(${practice.id}, 'pollTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #999; margin: 0 4px;">|</span>
@@ -689,8 +689,9 @@
         }
 
         function updatePracticeDraft(id, field, value) {
+            console.log('[POLL-DEBUG] >>> updatePracticeDraft CALLED: id=' + id + ', field=' + field + ', value=' + value);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) return;
+            if (!seasonSettingsDraft) { console.log('[POLL-DEBUG] No seasonSettingsDraft, returning'); return; }
 
             const practiceIndex = seasonSettingsDraft.practices.findIndex(practice => String(practice.id) === String(id));
             if (practiceIndex === -1) return;
