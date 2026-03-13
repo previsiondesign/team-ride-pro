@@ -546,6 +546,11 @@
 
                 if (isReadOnly) {
                     const isExcluded = !!practice.excludeFromPlanner;
+                    const pPollDays = practice.pollDaysBefore ?? 1;
+                    const pPollTime = practice.pollTime || '15:00';
+                    const pRemDays = practice.reminderDaysBefore ?? 0;
+                    const pRemTime = practice.reminderTime || '10:00';
+                    const pollSummary = `Poll: ${pPollDays}d before @ ${formatTimeForDisplay(pPollTime)} · Remind: ${pRemDays}d before @ ${formatTimeForDisplay(pRemTime)}`;
                     return `
                         <div class="practice-row${isExcluded ? ' practice-row-excluded' : ''}" data-practice-id="${practice.id}" style="grid-template-columns: auto minmax(80px, 0.8fr) minmax(120px, 1fr) minmax(140px, 1.2fr) minmax(100px, 1fr);">
                             <div class="practice-row-field" style="display: flex; align-items: center; justify-content: center; min-width: 32px;">
@@ -568,6 +573,7 @@
                                 <div style="padding: 4px 6px; font-size: 12px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(practice.meetLocation || '')}">${escapeHtml(practice.meetLocation || '—')}</div>
                             </div>
                         </div>
+                        <div style="padding: 2px 6px 4px 36px; font-size: 10px; color: #999;" title="${pollSummary}">${pollSummary}</div>
                     `;
                 } else {
                     // Editable view for modal - buttons on separate line
@@ -598,6 +604,19 @@
                                     </div>
                                 </div>
                             </div>
+                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid #e0e0e0; margin-top: 10px;">
+                                <span style="font-size: 12px; color: #555; font-weight: 500;">Slack Poll:</span>
+                                <span style="font-size: 11px; color: #666;">Post</span>
+                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;">
+                                <span style="font-size: 11px; color: #666;">day(s) before at</span>
+                                <input type="time" value="${practice.pollTime || '15:00'}" onchange="updatePracticeDraft(${practice.id}, 'pollTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px;">
+                                <span style="font-size: 11px; color: #999; margin: 0 4px;">|</span>
+                                <span style="font-size: 11px; color: #666;">Remind</span>
+                                <input type="number" min="0" max="3" value="${practice.reminderDaysBefore ?? 0}" onchange="updatePracticeDraft(${practice.id}, 'reminderDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;">
+                                <span style="font-size: 11px; color: #666;">day(s) before at</span>
+                                <input type="time" value="${practice.reminderTime || '10:00'}" onchange="updatePracticeDraft(${practice.id}, 'reminderTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px;">
+                                <span style="font-size: 10px; color: #aaa; margin-left: 4px;">Pacific</span>
+                            </div>
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid #e0e0e0; margin-top: 12px;">
                                 <button type="button" class="btn-small secondary" onclick="openRosterRefinement(${practice.id})" style="white-space: nowrap;">Refine Roster...</button>
                                 ${(function(){ const ex = getPracticeExceptions(practice); return ex.length > 0 ? `<button type="button" class="btn-small secondary" onclick="openViewExceptionsDialog(${practice.id})" style="white-space: nowrap;">View Exceptions (${ex.length})</button>` : ''; })()}
@@ -620,22 +639,6 @@
                 checkPracticeChanges(practice.id);
             });
 
-            // Populate poll timing inputs when rendering the dashboard view
-            if (containerId === 'practice-rows') {
-                populatePollTimingInputs();
-            }
-        }
-        
-        function populatePollTimingInputs() {
-            const s = data.seasonSettings || {};
-            const pollDays = document.getElementById('poll-days-before');
-            const pollTime = document.getElementById('poll-time');
-            const reminderDays = document.getElementById('reminder-days-before');
-            const reminderTime = document.getElementById('reminder-time');
-            if (pollDays) pollDays.value = s.pollDaysBefore ?? 1;
-            if (pollTime) pollTime.value = s.pollTime || '15:00';
-            if (reminderDays) reminderDays.value = s.reminderDaysBefore ?? 0;
-            if (reminderTime) reminderTime.value = s.reminderTime || '10:00';
         }
 
         function checkPracticeChanges(practiceId) {
@@ -1277,13 +1280,21 @@
                     // Handle single practices (with specificDate) differently from recurring practices
                     const isSinglePractice = practice.specificDate !== null && practice.specificDate !== undefined && practice.specificDate !== '';
                     
+                    // Poll timing fields shared by both practice types
+                    const pollFields = {
+                        pollDaysBefore: practice.pollDaysBefore ?? 1,
+                        pollTime: practice.pollTime || '15:00',
+                        reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                        reminderTime: practice.reminderTime || '10:00'
+                    };
+
                     if (isSinglePractice) {
                         // Single practice: require specificDate and time
                         const time = normalizeTimeValue(practice.time || practice.startTime || '');
                         if (!time || !practice.specificDate) {
                             return null;
                         }
-                        
+
                         return {
                             id: practice.id || generateId(),
                             dayOfWeek: null,
@@ -1295,7 +1306,8 @@
                             locationLat: practice.locationLat || null,
                             locationLng: practice.locationLng || null,
                             rosterFilter: practice.rosterFilter || null,
-                            excludeFromPlanner: practice.excludeFromPlanner || false
+                            excludeFromPlanner: practice.excludeFromPlanner || false,
+                            ...pollFields
                         };
                     } else {
                         // Recurring practice: use normalizePracticeEntry
@@ -1308,7 +1320,8 @@
                             locationLat: practice.locationLat || null,
                             locationLng: practice.locationLng || null,
                             rosterFilter: practice.rosterFilter || null,
-                            excludeFromPlanner: practice.excludeFromPlanner || false
+                            excludeFromPlanner: practice.excludeFromPlanner || false,
+                            ...pollFields
                         };
                     }
                 })
@@ -1396,13 +1409,21 @@
                     // Handle single practices (with specificDate) differently from recurring practices
                     const isSinglePractice = practice.specificDate !== null && practice.specificDate !== undefined && practice.specificDate !== '';
                     
+                    // Poll timing fields shared by both practice types
+                    const pollFields = {
+                        pollDaysBefore: practice.pollDaysBefore ?? 1,
+                        pollTime: practice.pollTime || '15:00',
+                        reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                        reminderTime: practice.reminderTime || '10:00'
+                    };
+
                     if (isSinglePractice) {
                         // Single practice: require specificDate and time
                         const time = normalizeTimeValue(practice.time || practice.startTime || '');
                         if (!time || !practice.specificDate) {
                             return null;
                         }
-                        
+
                         return {
                             id: practice.id || generateId(),
                             dayOfWeek: null,
@@ -1414,7 +1435,8 @@
                             locationLat: practice.locationLat || null,
                             locationLng: practice.locationLng || null,
                             rosterFilter: practice.rosterFilter || null,
-                            excludeFromPlanner: practice.excludeFromPlanner || false
+                            excludeFromPlanner: practice.excludeFromPlanner || false,
+                            ...pollFields
                         };
                     } else {
                         // Recurring practice: use normalizePracticeEntry
@@ -1427,7 +1449,8 @@
                             locationLat: practice.locationLat || null,
                             locationLng: practice.locationLng || null,
                             rosterFilter: practice.rosterFilter || null,
-                            excludeFromPlanner: practice.excludeFromPlanner || false
+                            excludeFromPlanner: practice.excludeFromPlanner || false,
+                            ...pollFields
                         };
                     }
                 })
@@ -1446,16 +1469,6 @@
                 if (Number.isFinite(v) && v >= 2 && v <= 9) newScale = v;
             }
 
-            // Read Slack poll timing inputs
-            const pollDaysInput = document.getElementById('poll-days-before');
-            const pollTimeInput = document.getElementById('poll-time');
-            const reminderDaysInput = document.getElementById('reminder-days-before');
-            const reminderTimeInput = document.getElementById('reminder-time');
-            const pollDaysBefore = pollDaysInput ? parseInt(pollDaysInput.value, 10) : (data.seasonSettings?.pollDaysBefore ?? 1);
-            const pollTimeVal = pollTimeInput ? pollTimeInput.value : (data.seasonSettings?.pollTime || '15:00');
-            const reminderDaysBefore = reminderDaysInput ? parseInt(reminderDaysInput.value, 10) : (data.seasonSettings?.reminderDaysBefore ?? 0);
-            const reminderTimeVal = reminderTimeInput ? reminderTimeInput.value : (data.seasonSettings?.reminderTime || '10:00');
-
             data.seasonSettings = {
                 ...data.seasonSettings,
                 startDate: startDateValue || '',
@@ -1465,11 +1478,7 @@
                 skillsScale:   newScale,
                 climbingScale:  newScale,
                 paceScaleOrder: normalizePaceScaleOrder(paceScaleOrderInput?.value || data.seasonSettings?.paceScaleOrder),
-                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder),
-                pollDaysBefore: Number.isFinite(pollDaysBefore) ? pollDaysBefore : 1,
-                pollTime: pollTimeVal,
-                reminderDaysBefore: Number.isFinite(reminderDaysBefore) ? reminderDaysBefore : 0,
-                reminderTime: reminderTimeVal
+                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder)
             };
 
             if (newScale !== oldScale) {

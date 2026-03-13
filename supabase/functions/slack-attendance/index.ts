@@ -273,12 +273,13 @@ async function getUpcomingPlannedRides(
 }
 
 /** Check if a date matches a planned (non-excluded) practice */
-function isPlannedPractice(dateStr: string, practices: any[]): boolean {
+/** Find the matching practice definition for a given date string */
+function findMatchingPractice(dateStr: string, practices: any[]): any | null {
   // Check specific-date practices first
   const specificMatch = practices.find(
     (p: any) => p.specificDate === dateStr && !p.excludeFromPlanner
   );
-  if (specificMatch) return true;
+  if (specificMatch) return specificMatch;
 
   // Check recurring day-of-week practices
   const d = new Date(dateStr + "T12:00:00");
@@ -288,7 +289,11 @@ function isPlannedPractice(dateStr: string, practices: any[]): boolean {
     const hasSpecificDate = p.specificDate != null && p.specificDate !== undefined && p.specificDate !== "";
     return Number(pDow) === dayOfWeek && !hasSpecificDate && !p.excludeFromPlanner;
   });
-  return !!recurringMatch;
+  return recurringMatch || null;
+}
+
+function isPlannedPractice(dateStr: string, practices: any[]): boolean {
+  return findMatchingPractice(dateStr, practices) !== null;
 }
 
 async function getRideById(supabase: ReturnType<typeof createClient>, rideId: number) {
@@ -1518,15 +1523,16 @@ serve(async (req) => {
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ skipped: true, reason: "No upcoming practice found" });
 
-      // Load poll timing from season_settings.settings JSONB
+      // Load poll timing from the matching practice definition
       const { data: settingsRow } = await supabase
         .from("season_settings")
-        .select("settings")
+        .select("practices")
         .eq("id", "current")
         .single();
-      const blob = (settingsRow as any)?.settings ?? {};
-      const pollDaysBefore: number = typeof blob.pollDaysBefore === "number" ? blob.pollDaysBefore : 1;
-      const pollTime: string = blob.pollTime || "15:00";
+      const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
+      const matchedPractice = findMatchingPractice(ride.date, practices);
+      const pollDaysBefore: number = typeof matchedPractice?.pollDaysBefore === "number" ? matchedPractice.pollDaysBefore : 1;
+      const pollTime: string = matchedPractice?.pollTime || "15:00";
       const pollHour = parseInt(pollTime.split(":")[0], 10);
 
       // Calculate target date: practice_date - pollDaysBefore
@@ -1584,15 +1590,16 @@ serve(async (req) => {
         return jsonResponse({ skipped: true, reason: "Groups already published — reminders not needed", rideId: ride.id, date: ride.date });
       }
 
-      // Load reminder timing from season_settings.settings JSONB
+      // Load reminder timing from the matching practice definition
       const { data: settingsRow } = await supabase
         .from("season_settings")
-        .select("settings")
+        .select("practices")
         .eq("id", "current")
         .single();
-      const blob = (settingsRow as any)?.settings ?? {};
-      const reminderDaysBefore: number = typeof blob.reminderDaysBefore === "number" ? blob.reminderDaysBefore : 0;
-      const reminderTimeStr: string = blob.reminderTime || "10:00";
+      const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
+      const matchedPractice = findMatchingPractice(ride.date, practices);
+      const reminderDaysBefore: number = typeof matchedPractice?.reminderDaysBefore === "number" ? matchedPractice.reminderDaysBefore : 0;
+      const reminderTimeStr: string = matchedPractice?.reminderTime || "10:00";
       const reminderHour = parseInt(reminderTimeStr.split(":")[0], 10);
 
       // Calculate target date: practice_date - reminderDaysBefore
