@@ -745,6 +745,27 @@
                 seasonSettingsDraft.practices[practiceIndex].reminderEnabled = !!value;
             }
 
+            // Auto-save poll timing fields directly to Supabase (no "Save Changes" click needed)
+            const pollFields = ['pollDaysBefore', 'pollTime', 'reminderDaysBefore', 'reminderTime', 'pollEnabled', 'reminderEnabled'];
+            if (pollFields.includes(field)) {
+                const draftPractice = seasonSettingsDraft.practices[practiceIndex];
+                if (data.seasonSettings && Array.isArray(data.seasonSettings.practices)) {
+                    const idx = data.seasonSettings.practices.findIndex(p => String(p.id) === String(id));
+                    if (idx >= 0) {
+                        data.seasonSettings.practices[idx].pollEnabled = draftPractice.pollEnabled !== false;
+                        data.seasonSettings.practices[idx].pollDaysBefore = draftPractice.pollDaysBefore ?? 1;
+                        data.seasonSettings.practices[idx].pollTime = draftPractice.pollTime || '15:00';
+                        data.seasonSettings.practices[idx].reminderEnabled = draftPractice.reminderEnabled !== false;
+                        data.seasonSettings.practices[idx].reminderDaysBefore = draftPractice.reminderDaysBefore ?? 0;
+                        data.seasonSettings.practices[idx].reminderTime = draftPractice.reminderTime || '10:00';
+                    }
+                }
+                saveData();
+                // Update original state so change detection resets
+                const key = String(id);
+                originalPracticeStates.set(key, JSON.parse(JSON.stringify(draftPractice)));
+            }
+
             // Re-render both containers if they exist
             renderPracticeRows('practice-rows');
             renderPracticeRows('practice-rows-modal');
