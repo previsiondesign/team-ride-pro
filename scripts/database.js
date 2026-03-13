@@ -1925,7 +1925,7 @@ async function upsertAdminEditLock(lockInfo) {
         user_name: lockInfo.user_name || null,
         updated_at: new Date().toISOString()
     };
-    if (lockInfo.started_at) row.started_at = lockInfo.started_at;
+    // Note: started_at column does not exist in admin_edit_locks table; use updated_at only
     const { error } = await client
         .from('admin_edit_locks')
         .upsert([row], { onConflict: 'id' });

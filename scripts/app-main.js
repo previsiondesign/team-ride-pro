@@ -609,8 +609,9 @@
         }
 
         async function saveData() {
+            console.log('[SAVE] saveData() called. readOnly:', isReadOnlyMode, 'devMode:', isDeveloperMode);
             if (isReadOnlyMode) {
-                console.warn('Read-only mode: saveData blocked.');
+                console.warn('[SAVE] Read-only mode: saveData blocked.');
                 return;
             }
             if (isDeveloperMode) {
@@ -640,8 +641,10 @@
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             
+            console.log('[SAVE] client:', !!client, 'currentUser:', !!currentUser, 'updateSeasonSettings:', typeof updateSeasonSettings, 'updateAutoAssignSettings:', typeof updateAutoAssignSettings);
             if (client && currentUser && typeof updateSeasonSettings === 'function' && typeof updateAutoAssignSettings === 'function') {
                 // Authenticated user - save to Supabase only (no localStorage fallback)
+                console.log('[SAVE] Saving to Supabase... practices count:', data.seasonSettings?.practices?.length);
                 try {
                     // Coach-admin and admin can save; if role not loaded yet, attempt save and let RLS allow/deny
                     const role = typeof getCurrentUserRole === 'function' ? getCurrentUserRole() : null;
@@ -674,7 +677,9 @@
                                     lengthAdjustmentFactor: 0.1
                                 }
                             };
-                            const result = await updateSeasonSettings(seasonData);
+                                    console.log('[SAVE] Sending to updateSeasonSettings, practices:', JSON.stringify(seasonData.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, desc: p.description?.substring(0,20)}))));
+                    const result = await updateSeasonSettings(seasonData);
+                            console.log('[SAVE] updateSeasonSettings succeeded');
                         } catch (error) {
                             // Handle RLS errors gracefully - user may not have admin/coach-admin role yet
                             if (error.message && error.message.includes('row-level security')) {

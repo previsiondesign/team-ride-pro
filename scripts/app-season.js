@@ -650,6 +650,7 @@
 
             // Attach poll timing event listeners (programmatic — more reliable than inline onchange)
             const pollRows = container.querySelectorAll('.poll-timing-row');
+            console.log('[POLL] Attaching poll listeners. Container:', containerId, 'Found', pollRows.length, 'poll rows');
             pollRows.forEach(row => {
                 const practiceId = row.dataset.practiceId;
                 row.querySelectorAll('[data-poll-field]').forEach(input => {
@@ -710,8 +711,9 @@
         }
 
         function updatePracticeDraft(id, field, value) {
+            console.log('[DRAFT] updatePracticeDraft called:', id, field, value);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) return;
+            if (!seasonSettingsDraft) { console.warn('[DRAFT] no seasonSettingsDraft!'); return; }
 
             const practiceIndex = seasonSettingsDraft.practices.findIndex(practice => String(practice.id) === String(id));
             if (practiceIndex === -1) return;
@@ -1025,8 +1027,9 @@
         }
 
         function savePracticeChanges(practiceId) {
+            console.log('[SAVE] savePracticeChanges called for practice:', practiceId);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) return;
+            if (!seasonSettingsDraft) { console.warn('[SAVE] no seasonSettingsDraft!'); return; }
             
             const practice = seasonSettingsDraft.practices.find(p => String(p.id) === String(practiceId));
             if (!practice) return;
@@ -1194,6 +1197,8 @@
             }
             
             // Save changes
+            console.log('[SAVE] savePracticeChanges calling saveData(). Practice:', JSON.stringify({id: practiceId, desc: practice.description, meetLocation: practice.meetLocation, pollEnabled: practice.pollEnabled}));
+            console.log('[SAVE] data.seasonSettings.practices has', data.seasonSettings.practices?.length, 'practices');
             saveData();
             
             // Update original state to reflect saved changes

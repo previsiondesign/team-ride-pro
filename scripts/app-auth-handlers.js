@@ -1152,7 +1152,7 @@
                     user_id: currentUser.id,
                     email: currentUser.email || null,
                     user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
-                    started_at: sessionStart
+                    updated_at: sessionStart
                 });
                 setReadOnlyMode(false, null);
                 if (adminEditLockInterval) clearInterval(adminEditLockInterval);
@@ -1162,7 +1162,7 @@
                         user_id: currentUser.id,
                         email: currentUser.email || null,
                         user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
-                        started_at: sessionStart
+                        updated_at: sessionStart
                     });
                 }, LOCK_HEARTBEAT_MS);
                 if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);
