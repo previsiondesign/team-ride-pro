@@ -1324,7 +1324,7 @@
                     user_id: currentUser.id,
                     email: currentUser.email || null,
                     user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
-                    started_at: _adminSessionStart
+                    updated_at: _adminSessionStart
                 });
                 setReadOnlyMode(false, null);
 
@@ -1337,7 +1337,7 @@
                         user_id: currentUser.id,
                         email: currentUser.email || null,
                         user_name: currentUser.user_metadata?.name || currentUser.email || 'Admin',
-                        started_at: _adminSessionStart
+                        updated_at: _adminSessionStart
                     });
                 }, LOCK_HEARTBEAT_MS);
                 if (takeOverCheckInterval) clearInterval(takeOverCheckInterval);

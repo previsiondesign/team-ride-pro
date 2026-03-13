@@ -1,5 +1,4 @@
 // app-season.js — Season setup modal, practice rows, date range/time range pickers, poll timing
-console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color: red; font-size: 16px; font-weight: bold;');
 
         function openSeasonSetupModal() {
             // Switch to settings tab instead of opening modal
@@ -434,10 +433,9 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
         // originalPracticeStates in app-state.js
 
         function renderPracticeRows(containerId = 'practice-rows') {
-            console.log('[POLL-DEBUG] renderPracticeRows called, containerId=' + containerId);
             ensureSeasonDraft();
             const container = document.getElementById(containerId);
-            if (!container) { console.log('[POLL-DEBUG] container not found: ' + containerId); return; }
+            if (!container) return;
 
             if (!seasonSettingsDraft || seasonSettingsDraft.practices.length === 0) {
                 container.innerHTML = `
@@ -652,10 +650,8 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
 
             // Attach poll timing event listeners (programmatic — more reliable than inline onchange)
             const pollRows = container.querySelectorAll('.poll-timing-row');
-            console.log('[POLL-DEBUG] Found ' + pollRows.length + ' .poll-timing-row elements in ' + containerId);
             pollRows.forEach(row => {
                 const practiceId = row.dataset.practiceId;
-                console.log('[POLL-DEBUG] Attaching listeners for practiceId=' + practiceId + ', inputs=' + row.querySelectorAll('[data-poll-field]').length);
                 row.querySelectorAll('[data-poll-field]').forEach(input => {
                     const field = input.dataset.pollField;
                     const eventType = input.type === 'checkbox' ? 'change' : 'change';
@@ -668,7 +664,6 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
                         } else {
                             val = input.value;
                         }
-                        console.log('[POLL-DEBUG] Event listener fired: practiceId=' + practiceId + ', field=' + field + ', value=' + val);
                         updatePracticeDraft(Number(practiceId), field, val);
                     });
                 });
@@ -715,9 +710,8 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
         }
 
         function updatePracticeDraft(id, field, value) {
-            console.log('[POLL-DEBUG] >>> updatePracticeDraft CALLED: id=' + id + ', field=' + field + ', value=' + value);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) { console.log('[POLL-DEBUG] No seasonSettingsDraft, returning'); return; }
+            if (!seasonSettingsDraft) return;
 
             const practiceIndex = seasonSettingsDraft.practices.findIndex(practice => String(practice.id) === String(id));
             if (practiceIndex === -1) return;
@@ -772,42 +766,10 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
                 seasonSettingsDraft.practices[practiceIndex].reminderEnabled = !!value;
             }
 
-            // Auto-save poll timing fields directly to Supabase (no "Save Changes" click needed)
-            const pollFields = ['pollDaysBefore', 'pollTime', 'reminderDaysBefore', 'reminderTime', 'pollEnabled', 'reminderEnabled'];
-            if (pollFields.includes(field)) {
-                console.log(`[POLL-DEBUG] updatePracticeDraft: field=${field}, value=${value}, practiceId=${id}`);
-                const draftPractice = seasonSettingsDraft.practices[practiceIndex];
-                console.log('[POLL-DEBUG] Draft practice poll fields:', JSON.stringify({
-                    pollEnabled: draftPractice.pollEnabled,
-                    pollDaysBefore: draftPractice.pollDaysBefore,
-                    pollTime: draftPractice.pollTime,
-                    reminderEnabled: draftPractice.reminderEnabled,
-                    reminderDaysBefore: draftPractice.reminderDaysBefore,
-                    reminderTime: draftPractice.reminderTime
-                }));
-                if (data.seasonSettings && Array.isArray(data.seasonSettings.practices)) {
-                    const idx = data.seasonSettings.practices.findIndex(p => String(p.id) === String(id));
-                    console.log(`[POLL-DEBUG] data.seasonSettings.practices match idx=${idx}, practices count=${data.seasonSettings.practices.length}`);
-                    if (idx >= 0) {
-                        data.seasonSettings.practices[idx].pollEnabled = draftPractice.pollEnabled !== false;
-                        data.seasonSettings.practices[idx].pollDaysBefore = draftPractice.pollDaysBefore ?? 1;
-                        data.seasonSettings.practices[idx].pollTime = draftPractice.pollTime || '15:00';
-                        data.seasonSettings.practices[idx].reminderEnabled = draftPractice.reminderEnabled !== false;
-                        data.seasonSettings.practices[idx].reminderDaysBefore = draftPractice.reminderDaysBefore ?? 0;
-                        data.seasonSettings.practices[idx].reminderTime = draftPractice.reminderTime || '10:00';
-                        console.log('[POLL-DEBUG] Written to data.seasonSettings.practices[' + idx + ']:', JSON.stringify(data.seasonSettings.practices[idx]));
-                    } else {
-                        console.warn('[POLL-DEBUG] Practice ID not found in data.seasonSettings.practices! IDs:', data.seasonSettings.practices.map(p => p.id));
-                    }
-                } else {
-                    console.warn('[POLL-DEBUG] data.seasonSettings.practices missing!', { hasSS: !!data.seasonSettings, isArray: Array.isArray(data.seasonSettings?.practices) });
-                }
-                console.log('[POLL-DEBUG] Calling saveData()...');
-                saveData();
-                console.log('[POLL-DEBUG] saveData() returned');
-                // Update original state so change detection resets
-                const key = String(id);
-                originalPracticeStates.set(key, JSON.parse(JSON.stringify(draftPractice)));
+            // Auto-save poll timing fields directly to Supabase via dedicated function
+            const pollFieldNames = ['pollDaysBefore', 'pollTime', 'reminderDaysBefore', 'reminderTime', 'pollEnabled', 'reminderEnabled'];
+            if (pollFieldNames.includes(field)) {
+                savePollTimingToSupabase();
             }
 
             // Re-render both containers if they exist
@@ -815,6 +777,54 @@ console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color:
             renderPracticeRows('practice-rows-modal');
             // Check for changes after update
             checkPracticeChanges(id);
+        }
+
+        // Save poll timing directly to Supabase by reading current practices,
+        // merging poll fields from the draft, and PATCHing the practices JSONB column.
+        // This bypasses saveData() entirely for reliability.
+        async function savePollTimingToSupabase() {
+            try {
+                const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+                if (!client) { console.warn('savePollTimingToSupabase: no Supabase client'); return; }
+
+                // Read current practices from DB
+                const { data: row, error: readErr } = await client
+                    .from('season_settings')
+                    .select('practices')
+                    .eq('id', 'current')
+                    .single();
+                if (readErr) { console.error('savePollTimingToSupabase read error:', readErr); return; }
+
+                const dbPractices = Array.isArray(row?.practices) ? row.practices : [];
+                const draftPractices = seasonSettingsDraft?.practices || [];
+
+                // Merge poll timing fields from draft into DB practices
+                for (const dp of draftPractices) {
+                    const dbp = dbPractices.find(p => String(p.id) === String(dp.id));
+                    if (dbp) {
+                        dbp.pollEnabled = dp.pollEnabled !== false;
+                        dbp.pollDaysBefore = dp.pollDaysBefore ?? 1;
+                        dbp.pollTime = dp.pollTime || '15:00';
+                        dbp.reminderEnabled = dp.reminderEnabled !== false;
+                        dbp.reminderDaysBefore = dp.reminderDaysBefore ?? 0;
+                        dbp.reminderTime = dp.reminderTime || '10:00';
+                    }
+                }
+
+                // Write back
+                const { error: writeErr } = await client
+                    .from('season_settings')
+                    .update({ practices: dbPractices })
+                    .eq('id', 'current');
+                if (writeErr) {
+                    console.error('savePollTimingToSupabase write error:', writeErr);
+                    alert('Failed to save poll timing: ' + writeErr.message);
+                } else {
+                    console.log('Poll timing saved to Supabase');
+                }
+            } catch (e) {
+                console.error('savePollTimingToSupabase exception:', e);
+            }
         }
 
         function addPracticeRow() {
