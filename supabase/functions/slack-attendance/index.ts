@@ -1531,6 +1531,12 @@ serve(async (req) => {
         .single();
       const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
       const matchedPractice = findMatchingPractice(ride.date, practices);
+
+      // Check if poll is enabled for this practice (default: true for backward compat)
+      if (matchedPractice?.pollEnabled === false) {
+        return jsonResponse({ skipped: true, reason: "Poll disabled for this practice", rideId: ride.id, date: ride.date });
+      }
+
       const pollDaysBefore: number = typeof matchedPractice?.pollDaysBefore === "number" ? matchedPractice.pollDaysBefore : 1;
       const pollTime: string = matchedPractice?.pollTime || "15:00";
       const pollHour = parseInt(pollTime.split(":")[0], 10);
@@ -1598,6 +1604,12 @@ serve(async (req) => {
         .single();
       const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
       const matchedPractice = findMatchingPractice(ride.date, practices);
+
+      // Check if reminders are enabled for this practice (default: true for backward compat)
+      if (matchedPractice?.reminderEnabled === false) {
+        return jsonResponse({ skipped: true, reason: "Reminders disabled for this practice", rideId: ride.id, date: ride.date });
+      }
+
       const reminderDaysBefore: number = typeof matchedPractice?.reminderDaysBefore === "number" ? matchedPractice.reminderDaysBefore : 0;
       const reminderTimeStr: string = matchedPractice?.reminderTime || "10:00";
       const reminderHour = parseInt(reminderTimeStr.split(":")[0], 10);

@@ -546,11 +546,15 @@
 
                 if (isReadOnly) {
                     const isExcluded = !!practice.excludeFromPlanner;
+                    const pPollOn = practice.pollEnabled !== false;
+                    const pRemOn = practice.reminderEnabled !== false;
                     const pPollDays = practice.pollDaysBefore ?? 1;
                     const pPollTime = practice.pollTime || '15:00';
                     const pRemDays = practice.reminderDaysBefore ?? 0;
                     const pRemTime = practice.reminderTime || '10:00';
-                    const pollSummary = `Poll: ${pPollDays}d before @ ${formatTimeForDisplay(pPollTime)} · Remind: ${pRemDays}d before @ ${formatTimeForDisplay(pRemTime)}`;
+                    const pollPart = pPollOn ? `Poll: ${pPollDays}d before @ ${formatTimeForDisplay(pPollTime)}` : 'Poll: off';
+                    const remPart = pRemOn ? `Remind: ${pRemDays}d before @ ${formatTimeForDisplay(pRemTime)}` : 'Remind: off';
+                    const pollSummary = `${pollPart} · ${remPart}`;
                     return `
                         <div class="practice-row${isExcluded ? ' practice-row-excluded' : ''}" data-practice-id="${practice.id}" style="grid-template-columns: auto minmax(80px, 0.8fr) minmax(120px, 1fr) minmax(140px, 1.2fr) minmax(100px, 1fr);">
                             <div class="practice-row-field" style="display: flex; align-items: center; justify-content: center; min-width: 32px;">
@@ -605,16 +609,21 @@
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid #e0e0e0; margin-top: 10px;">
-                                <span style="font-size: 12px; color: #555; font-weight: 500;">Slack Poll:</span>
-                                <span style="font-size: 11px; color: #666;">Post</span>
-                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;">
-                                <span style="font-size: 11px; color: #666;">day(s) before at</span>
-                                <input type="time" value="${practice.pollTime || '15:00'}" onchange="updatePracticeDraft(${practice.id}, 'pollTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px;">
+                                <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+                                    <input type="checkbox" ${practice.pollEnabled !== false ? 'checked' : ''} onchange="updatePracticeDraft(${practice.id}, 'pollEnabled', this.checked)" style="margin: 0; cursor: pointer;">
+                                    <span style="font-size: 12px; color: #555; font-weight: 500;">Poll</span>
+                                </label>
+                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
+                                <span style="font-size: 11px; color: #666; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}">day(s) before at</span>
+                                <input type="time" value="${practice.pollTime || '15:00'}" onchange="updatePracticeDraft(${practice.id}, 'pollTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #999; margin: 0 4px;">|</span>
-                                <span style="font-size: 11px; color: #666;">Remind</span>
-                                <input type="number" min="0" max="3" value="${practice.reminderDaysBefore ?? 0}" onchange="updatePracticeDraft(${practice.id}, 'reminderDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;">
-                                <span style="font-size: 11px; color: #666;">day(s) before at</span>
-                                <input type="time" value="${practice.reminderTime || '10:00'}" onchange="updatePracticeDraft(${practice.id}, 'reminderTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px;">
+                                <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+                                    <input type="checkbox" ${practice.reminderEnabled !== false ? 'checked' : ''} onchange="updatePracticeDraft(${practice.id}, 'reminderEnabled', this.checked)" style="margin: 0; cursor: pointer;">
+                                    <span style="font-size: 12px; color: #555; font-weight: 500;">Remind</span>
+                                </label>
+                                <input type="number" min="0" max="3" value="${practice.reminderDaysBefore ?? 0}" onchange="updatePracticeDraft(${practice.id}, 'reminderDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
+                                <span style="font-size: 11px; color: #666; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}">day(s) before at</span>
+                                <input type="time" value="${practice.reminderTime || '10:00'}" onchange="updatePracticeDraft(${practice.id}, 'reminderTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 10px; color: #aaa; margin-left: 4px;">Pacific</span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid #e0e0e0; margin-top: 12px;">
@@ -714,6 +723,20 @@
             } else if (field === 'locationLng') {
                 const lng = parseFloat(value);
                 seasonSettingsDraft.practices[practiceIndex].locationLng = Number.isFinite(lng) ? lng : null;
+            } else if (field === 'pollDaysBefore') {
+                const v = parseInt(value, 10);
+                seasonSettingsDraft.practices[practiceIndex].pollDaysBefore = Number.isFinite(v) ? v : 1;
+            } else if (field === 'pollTime') {
+                seasonSettingsDraft.practices[practiceIndex].pollTime = value || '15:00';
+            } else if (field === 'reminderDaysBefore') {
+                const v = parseInt(value, 10);
+                seasonSettingsDraft.practices[practiceIndex].reminderDaysBefore = Number.isFinite(v) ? v : 0;
+            } else if (field === 'reminderTime') {
+                seasonSettingsDraft.practices[practiceIndex].reminderTime = value || '10:00';
+            } else if (field === 'pollEnabled') {
+                seasonSettingsDraft.practices[practiceIndex].pollEnabled = !!value;
+            } else if (field === 'reminderEnabled') {
+                seasonSettingsDraft.practices[practiceIndex].reminderEnabled = !!value;
             }
 
             // Re-render both containers if they exist
@@ -1282,8 +1305,10 @@
                     
                     // Poll timing fields shared by both practice types
                     const pollFields = {
+                        pollEnabled: practice.pollEnabled !== false,
                         pollDaysBefore: practice.pollDaysBefore ?? 1,
                         pollTime: practice.pollTime || '15:00',
+                        reminderEnabled: practice.reminderEnabled !== false,
                         reminderDaysBefore: practice.reminderDaysBefore ?? 0,
                         reminderTime: practice.reminderTime || '10:00'
                     };
@@ -1411,8 +1436,10 @@
                     
                     // Poll timing fields shared by both practice types
                     const pollFields = {
+                        pollEnabled: practice.pollEnabled !== false,
                         pollDaysBefore: practice.pollDaysBefore ?? 1,
                         pollTime: practice.pollTime || '15:00',
+                        reminderEnabled: practice.reminderEnabled !== false,
                         reminderDaysBefore: practice.reminderDaysBefore ?? 0,
                         reminderTime: practice.reminderTime || '10:00'
                     };
