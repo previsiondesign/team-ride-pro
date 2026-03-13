@@ -608,22 +608,22 @@
                                     </div>
                                 </div>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid #e0e0e0; margin-top: 10px;">
+                            <div class="poll-timing-row" data-practice-id="${practice.id}" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid #e0e0e0; margin-top: 10px;">
                                 <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-                                    <input type="checkbox" ${practice.pollEnabled !== false ? 'checked' : ''} onchange="console.log('[POLL-DEBUG] CHECKBOX onchange fired, checked='+this.checked); updatePracticeDraft(${practice.id}, 'pollEnabled', this.checked)" style="margin: 0; cursor: pointer;">
+                                    <input type="checkbox" data-poll-field="pollEnabled" ${practice.pollEnabled !== false ? 'checked' : ''} style="margin: 0; cursor: pointer;">
                                     <span style="font-size: 12px; color: #555; font-weight: 500;">Poll</span>
                                 </label>
-                                <input type="number" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" onchange="console.log('[POLL-DEBUG] NUMBER INPUT onchange fired, value='+this.value); updatePracticeDraft(${practice.id}, 'pollDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
+                                <input type="number" data-poll-field="pollDaysBefore" min="0" max="7" value="${practice.pollDaysBefore ?? 1}" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #666; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}">day(s) before at</span>
-                                <input type="time" value="${practice.pollTime || '15:00'}" onchange="updatePracticeDraft(${practice.id}, 'pollTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
+                                <input type="time" data-poll-field="pollTime" value="${practice.pollTime || '15:00'}" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.pollEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.pollEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #999; margin: 0 4px;">|</span>
                                 <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-                                    <input type="checkbox" ${practice.reminderEnabled !== false ? 'checked' : ''} onchange="updatePracticeDraft(${practice.id}, 'reminderEnabled', this.checked)" style="margin: 0; cursor: pointer;">
+                                    <input type="checkbox" data-poll-field="reminderEnabled" ${practice.reminderEnabled !== false ? 'checked' : ''} style="margin: 0; cursor: pointer;">
                                     <span style="font-size: 12px; color: #555; font-weight: 500;">Remind</span>
                                 </label>
-                                <input type="number" min="0" max="3" value="${practice.reminderDaysBefore ?? 0}" onchange="updatePracticeDraft(${practice.id}, 'reminderDaysBefore', parseInt(this.value,10))" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
+                                <input type="number" data-poll-field="reminderDaysBefore" min="0" max="3" value="${practice.reminderDaysBefore ?? 0}" style="width: 40px; padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 11px; color: #666; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}">day(s) before at</span>
-                                <input type="time" value="${practice.reminderTime || '10:00'}" onchange="updatePracticeDraft(${practice.id}, 'reminderTime', this.value)" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
+                                <input type="time" data-poll-field="reminderTime" value="${practice.reminderTime || '10:00'}" style="padding: 3px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; ${practice.reminderEnabled === false ? 'opacity: 0.4;' : ''}" ${practice.reminderEnabled === false ? 'disabled' : ''}>
                                 <span style="font-size: 10px; color: #aaa; margin-left: 4px;">Pacific</span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid #e0e0e0; margin-top: 12px;">
@@ -642,10 +642,31 @@
             }).join('');
             
             container.innerHTML = rowsHtml;
-            
+
             // Check for changes and show/hide buttons
             seasonSettingsDraft.practices.forEach(practice => {
                 checkPracticeChanges(practice.id);
+            });
+
+            // Attach poll timing event listeners (programmatic — more reliable than inline onchange)
+            container.querySelectorAll('.poll-timing-row').forEach(row => {
+                const practiceId = row.dataset.practiceId;
+                row.querySelectorAll('[data-poll-field]').forEach(input => {
+                    const field = input.dataset.pollField;
+                    const eventType = input.type === 'checkbox' ? 'change' : 'change';
+                    input.addEventListener(eventType, function() {
+                        let val;
+                        if (input.type === 'checkbox') {
+                            val = input.checked;
+                        } else if (input.type === 'number') {
+                            val = parseInt(input.value, 10);
+                        } else {
+                            val = input.value;
+                        }
+                        console.log('[POLL-DEBUG] Event listener fired: practiceId=' + practiceId + ', field=' + field + ', value=' + val);
+                        updatePracticeDraft(Number(practiceId), field, val);
+                    });
+                });
             });
 
         }
