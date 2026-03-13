@@ -1,4 +1,5 @@
 // app-season.js — Season setup modal, practice rows, date range/time range pickers, poll timing
+console.log('%c[POLL-DEBUG] app-season.js LOADED — version 20260313y', 'color: red; font-size: 16px; font-weight: bold;');
 
         function openSeasonSetupModal() {
             // Switch to settings tab instead of opening modal
