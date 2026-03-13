@@ -1080,6 +1080,7 @@
             practice.locationLng = updatedLocationLng;
             // Preserve rosterFilter from draft (it's already there from saveRosterRefinement)
             const rosterFilter = practice.rosterFilter || null;
+            // Poll timing fields are already on the draft from updatePracticeDraft calls
             
             // Save to data.seasonSettings.practices
             if (!data.seasonSettings) {
@@ -1103,6 +1104,12 @@
                 data.seasonSettings.practices[settingsPracticeIndex].locationLat = practice.locationLat;
                 data.seasonSettings.practices[settingsPracticeIndex].locationLng = practice.locationLng;
                 data.seasonSettings.practices[settingsPracticeIndex].rosterFilter = rosterFilter;
+                data.seasonSettings.practices[settingsPracticeIndex].pollEnabled = practice.pollEnabled !== false;
+                data.seasonSettings.practices[settingsPracticeIndex].pollDaysBefore = practice.pollDaysBefore ?? 1;
+                data.seasonSettings.practices[settingsPracticeIndex].pollTime = practice.pollTime || '15:00';
+                data.seasonSettings.practices[settingsPracticeIndex].reminderEnabled = practice.reminderEnabled !== false;
+                data.seasonSettings.practices[settingsPracticeIndex].reminderDaysBefore = practice.reminderDaysBefore ?? 0;
+                data.seasonSettings.practices[settingsPracticeIndex].reminderTime = practice.reminderTime || '10:00';
             }
             
             // Save changes
@@ -1141,7 +1148,13 @@
             practice.meetLocation = original.meetLocation;
             practice.locationLat = original.locationLat;
             practice.locationLng = original.locationLng;
-            
+            practice.pollEnabled = original.pollEnabled;
+            practice.pollDaysBefore = original.pollDaysBefore;
+            practice.pollTime = original.pollTime;
+            practice.reminderEnabled = original.reminderEnabled;
+            practice.reminderDaysBefore = original.reminderDaysBefore;
+            practice.reminderTime = original.reminderTime;
+
             // Re-render both containers to show original values
             renderPracticeRows('practice-rows');
             renderPracticeRows('practice-rows-modal');
