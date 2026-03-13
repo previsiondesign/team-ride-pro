@@ -503,7 +503,13 @@
                                 locationLat: practice.locationLat || null,
                                 locationLng: practice.locationLng || null,
                                 rosterFilter: practice.rosterFilter || null,
-                                excludeFromPlanner: practice.excludeFromPlanner || false
+                                excludeFromPlanner: practice.excludeFromPlanner || false,
+                                pollEnabled: practice.pollEnabled !== false,
+                                pollDaysBefore: practice.pollDaysBefore ?? 1,
+                                pollTime: practice.pollTime || '15:00',
+                                reminderEnabled: practice.reminderEnabled !== false,
+                                reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                                reminderTime: practice.reminderTime || '10:00'
                             };
                         } else {
                             // Recurring practice: require dayOfWeek and time
@@ -522,7 +528,13 @@
                                 locationLat: practice.locationLat || null,
                                 locationLng: practice.locationLng || null,
                                 rosterFilter: practice.rosterFilter || null,
-                                excludeFromPlanner: practice.excludeFromPlanner || false
+                                excludeFromPlanner: practice.excludeFromPlanner || false,
+                                pollEnabled: practice.pollEnabled !== false,
+                                pollDaysBefore: practice.pollDaysBefore ?? 1,
+                                pollTime: practice.pollTime || '15:00',
+                                reminderEnabled: practice.reminderEnabled !== false,
+                                reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                                reminderTime: practice.reminderTime || '10:00'
                             };
                         }
                     })
