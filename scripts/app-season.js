@@ -712,6 +712,9 @@
 
         function updatePracticeDraft(id, field, value) {
             console.log('[DRAFT] updatePracticeDraft called:', id, field, value);
+            if (['pollEnabled','pollDaysBefore','pollTime','reminderEnabled','reminderDaysBefore','reminderTime'].includes(field)) {
+                alert('POLL FIELD CHANGED: ' + field + ' = ' + value);
+            }
             ensureSeasonDraft();
             if (!seasonSettingsDraft) { console.warn('[DRAFT] no seasonSettingsDraft!'); return; }
 
