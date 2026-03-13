@@ -1509,18 +1509,44 @@ serve(async (req) => {
       return jsonResponse({ success: true, results, rideId: ride.id, date: ride.date });
     }
 
-    // --- post_poll_if_tomorrow: only post if next practice is tomorrow (for daily cron) ---
-    if (body.action === "post_poll_if_tomorrow") {
+    // --- post_poll_if_due / post_poll_if_tomorrow: post poll at configured day+time before practice ---
+    // Reads pollDaysBefore (default 1) and pollTime (default "15:00" Pacific) from season_settings.settings JSONB.
+    // Self-gates: only posts when current Pacific date+hour matches the configured schedule.
+    // Called hourly by GitHub Actions cron alongside send_reminders.
+    if (body.action === "post_poll_if_due" || body.action === "post_poll_if_tomorrow") {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ skipped: true, reason: "No upcoming practice found" });
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // Load poll timing from season_settings.settings JSONB
+      const { data: settingsRow } = await supabase
+        .from("season_settings")
+        .select("settings")
+        .eq("id", "current")
+        .single();
+      const blob = (settingsRow as any)?.settings ?? {};
+      const pollDaysBefore: number = typeof blob.pollDaysBefore === "number" ? blob.pollDaysBefore : 1;
+      const pollTime: string = blob.pollTime || "15:00";
+      const pollHour = parseInt(pollTime.split(":")[0], 10);
 
-      if (ride.date !== tomorrowStr) {
-        return jsonResponse({ skipped: true, reason: `Next practice is ${ride.date}, not tomorrow (${tomorrowStr})` });
+      // Calculate target date: practice_date - pollDaysBefore
+      const practiceDate = new Date(ride.date + "T12:00:00");
+      practiceDate.setDate(practiceDate.getDate() - pollDaysBefore);
+      const targetDate = practiceDate.toISOString().slice(0, 10);
+
+      const now = getCurrentPacificTime();
+      console.log(`[post_poll_if_due] ride=${ride.id} date=${ride.date} targetDate=${targetDate} targetHour=${pollHour} now=${now.date} ${now.hour}`);
+
+      // Self-gate: only post when current Pacific date+hour matches
+      const isManualTrigger = !!body.force;
+      if (!isManualTrigger && (now.date !== targetDate || now.hour !== pollHour)) {
+        return jsonResponse({
+          skipped: true,
+          reason: "Not poll posting time",
+          nextRide: { id: ride.id, date: ride.date },
+          targetPostTime: `${targetDate} ${pollTime} Pacific`,
+          currentTime: `${now.date} ${now.hour}:${String(now.minute).padStart(2, "0")} Pacific`,
+        });
       }
 
       // Check if a poll was already posted for this ride (prevent duplicates)
@@ -1544,9 +1570,10 @@ serve(async (req) => {
     }
 
     // --- send_reminders: DM non-responders for the next practice ---
-    // Smart timing: only sends when current Pacific hour matches the calculated
-    // reminder time (N notification-hours before practice, within 9 AM – 8 PM window).
-    // Called hourly by GitHub Actions cron; self-gates to avoid wrong-hour sends.
+    // Reads reminderDaysBefore (default 0 = day of) and reminderTime (default "10:00" Pacific)
+    // from season_settings.settings JSONB.
+    // Self-gates: only sends when current Pacific date+hour matches the configured schedule.
+    // Called hourly by GitHub Actions cron.
     if (body.action === "send_reminders") {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const ride = await getNextRide(supabase);
@@ -1557,33 +1584,35 @@ serve(async (req) => {
         return jsonResponse({ skipped: true, reason: "Groups already published — reminders not needed", rideId: ride.id, date: ride.date });
       }
 
-      // Load configurable lead time from season_settings (default: 4 hours)
+      // Load reminder timing from season_settings.settings JSONB
       const { data: settingsRow } = await supabase
         .from("season_settings")
-        .select("reminder_lead_hours")
+        .select("settings")
         .eq("id", "current")
         .single();
-      const leadHours: number = (settingsRow as any)?.reminder_lead_hours ?? 4;
+      const blob = (settingsRow as any)?.settings ?? {};
+      const reminderDaysBefore: number = typeof blob.reminderDaysBefore === "number" ? blob.reminderDaysBefore : 0;
+      const reminderTimeStr: string = blob.reminderTime || "10:00";
+      const reminderHour = parseInt(reminderTimeStr.split(":")[0], 10);
 
-      // Get practice start time for the next ride
-      const practiceTimes = await getPracticeTimes(supabase, ride.date);
+      // Calculate target date: practice_date - reminderDaysBefore
+      const practiceDate = new Date(ride.date + "T12:00:00");
+      practiceDate.setDate(practiceDate.getDate() - reminderDaysBefore);
+      const targetDate = practiceDate.toISOString().slice(0, 10);
 
-      // Calculate ideal reminder time in Pacific
-      const idealTime = calculateReminderTime(ride.date, practiceTimes.startTime, leadHours);
       const now = getCurrentPacificTime();
 
-      console.log(`[send_reminders] ride=${ride.id} date=${ride.date} practiceStart=${practiceTimes.startTime} leadHours=${leadHours}`);
-      console.log(`[send_reminders] idealTime=${idealTime.date} ${idealTime.hour}:${String(idealTime.minute).padStart(2,"0")} | now=${now.date} ${now.hour}:${String(now.minute).padStart(2,"0")}`);
+      console.log(`[send_reminders] ride=${ride.id} date=${ride.date} targetDate=${targetDate} targetHour=${reminderHour} now=${now.date} ${now.hour}`);
 
-      // Gate check: only send if current Pacific date+hour matches the calculated reminder date+hour
+      // Gate check: only send if current Pacific date+hour matches the configured reminder date+hour
       // For manual workflow_dispatch, bypass the timing gate (allow immediate send)
       const isManualTrigger = !!body.force;
-      if (!isManualTrigger && (now.date !== idealTime.date || now.hour !== idealTime.hour)) {
+      if (!isManualTrigger && (now.date !== targetDate || now.hour !== reminderHour)) {
         return jsonResponse({
           skipped: true,
           reason: "Not reminder time",
-          nextRide: { id: ride.id, date: ride.date, practiceStart: practiceTimes.startTime },
-          idealReminderTime: `${idealTime.date} ${idealTime.hour}:${String(idealTime.minute).padStart(2, "0")} Pacific`,
+          nextRide: { id: ride.id, date: ride.date },
+          targetReminderTime: `${targetDate} ${reminderTimeStr} Pacific`,
           currentTime: `${now.date} ${now.hour}:${String(now.minute).padStart(2, "0")} Pacific`,
         });
       }

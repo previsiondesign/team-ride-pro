@@ -1,11 +1,11 @@
 # .github/workflows/attendance-poll.yml
 # Automated Slack attendance polls for Tam High MTB TeamRide Pro
 #
-# Scheduled triggers:
-#   1. 10 PM UTC (~3 PM Pacific) — post poll IF next practice is tomorrow
-#   2. Hourly during 9 AM – 8 PM Pacific — check if it's time to send reminders
-#      (send_reminders self-gates: only sends when current hour matches the
-#       calculated reminder time for the next practice)
+# Runs hourly during 9 AM – 9 PM Pacific. Each run calls both:
+#   1. post_poll_if_due — posts poll at configured day+time before practice
+#   2. send_reminders   — DMs non-responders at configured day+time before practice
+# Both actions self-gate: they only fire when the current Pacific hour matches
+# the configured schedule in season_settings, so extra calls are harmless.
 #
 # Manual trigger available via workflow_dispatch (Actions tab → Run workflow).
 #
@@ -17,18 +17,17 @@ name: Attendance Poll
 
 on:
   schedule:
-    - cron: '0 22 * * *'        # 10 PM UTC ≈ 3 PM Pacific → post poll day before practice
-    - cron: '0 16-21,23 * * *'  # Hourly 9 AM – 2 PM, 4 PM Pacific → reminder check
-    - cron: '0 0-4 * * *'       # Hourly 5 PM – 9 PM Pacific → reminder check
+    - cron: '0 16-23 * * *'  # Hourly 9 AM – 4 PM Pacific (UTC 16-23)
+    - cron: '0 0-4 * * *'    # Hourly 5 PM – 9 PM Pacific (UTC 0-4)
   workflow_dispatch:
     inputs:
       action:
         description: 'Action to run'
         required: true
-        default: 'post_poll_if_tomorrow'
+        default: 'post_poll_if_due'
         type: choice
         options:
-          - post_poll_if_tomorrow
+          - post_poll_if_due
           - post_poll
           - send_reminders
           - import_coach_availability
@@ -39,38 +38,32 @@ jobs:
   attendance:
     runs-on: ubuntu-latest
     steps:
-      - name: Determine action
+      - name: Determine actions
         id: action
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
+            echo "actions=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
           else
-            # Scheduled run — pick action based on current UTC hour
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" = "22" ]; then
-              echo "action=post_poll_if_tomorrow" >> $GITHUB_OUTPUT
-            else
-              # All other hours: check if it's time to send reminders
-              # (the edge function self-gates based on practice time)
-              echo "action=send_reminders" >> $GITHUB_OUTPUT
-            fi
+            # Scheduled run — call both self-gating actions
+            echo "actions=post_poll_if_due,send_reminders" >> $GITHUB_OUTPUT
           fi
-          echo "Selected action: $(cat $GITHUB_OUTPUT)"
 
-      - name: Run ${{ steps.action.outputs.action }}
+      - name: Run actions
         run: |
-          ACTION="${{ steps.action.outputs.action }}"
-          echo "Calling edge function with action: $ACTION"
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
-            -H "Content-Type: application/json" \
-            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
-            -d "{\"action\": \"$ACTION\"}")
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-          echo "HTTP $HTTP_CODE"
-          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
-          if [ "$HTTP_CODE" -ge 400 ]; then
-            echo "::error::Request failed with HTTP $HTTP_CODE"
-            exit 1
-          fi
+          IFS=',' read -ra ACTIONS <<< "${{ steps.action.outputs.actions }}"
+          for ACTION in "${ACTIONS[@]}"; do
+            echo "--- Calling edge function with action: $ACTION ---"
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
+              -H "Content-Type: application/json" \
+              -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+              -d "{\"action\": \"$ACTION\"}")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+            echo "HTTP $HTTP_CODE"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+            if [ "$HTTP_CODE" -ge 400 ]; then
+              echo "::error::$ACTION failed with HTTP $HTTP_CODE"
+              exit 1
+            fi
+          done

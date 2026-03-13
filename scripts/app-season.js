@@ -619,8 +619,25 @@
             seasonSettingsDraft.practices.forEach(practice => {
                 checkPracticeChanges(practice.id);
             });
+
+            // Populate poll timing inputs when rendering the dashboard view
+            if (containerId === 'practice-rows') {
+                populatePollTimingInputs();
+            }
         }
         
+        function populatePollTimingInputs() {
+            const s = data.seasonSettings || {};
+            const pollDays = document.getElementById('poll-days-before');
+            const pollTime = document.getElementById('poll-time');
+            const reminderDays = document.getElementById('reminder-days-before');
+            const reminderTime = document.getElementById('reminder-time');
+            if (pollDays) pollDays.value = s.pollDaysBefore ?? 1;
+            if (pollTime) pollTime.value = s.pollTime || '15:00';
+            if (reminderDays) reminderDays.value = s.reminderDaysBefore ?? 0;
+            if (reminderTime) reminderTime.value = s.reminderTime || '10:00';
+        }
+
         function checkPracticeChanges(practiceId) {
             const key = String(practiceId);
             const original = originalPracticeStates.get(key);
@@ -1429,6 +1446,16 @@
                 if (Number.isFinite(v) && v >= 2 && v <= 9) newScale = v;
             }
 
+            // Read Slack poll timing inputs
+            const pollDaysInput = document.getElementById('poll-days-before');
+            const pollTimeInput = document.getElementById('poll-time');
+            const reminderDaysInput = document.getElementById('reminder-days-before');
+            const reminderTimeInput = document.getElementById('reminder-time');
+            const pollDaysBefore = pollDaysInput ? parseInt(pollDaysInput.value, 10) : (data.seasonSettings?.pollDaysBefore ?? 1);
+            const pollTimeVal = pollTimeInput ? pollTimeInput.value : (data.seasonSettings?.pollTime || '15:00');
+            const reminderDaysBefore = reminderDaysInput ? parseInt(reminderDaysInput.value, 10) : (data.seasonSettings?.reminderDaysBefore ?? 0);
+            const reminderTimeVal = reminderTimeInput ? reminderTimeInput.value : (data.seasonSettings?.reminderTime || '10:00');
+
             data.seasonSettings = {
                 ...data.seasonSettings,
                 startDate: startDateValue || '',
@@ -1438,7 +1465,11 @@
                 skillsScale:   newScale,
                 climbingScale:  newScale,
                 paceScaleOrder: normalizePaceScaleOrder(paceScaleOrderInput?.value || data.seasonSettings?.paceScaleOrder),
-                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder)
+                groupPaceOrder: normalizeGroupPaceOrder(data.seasonSettings?.groupPaceOrder),
+                pollDaysBefore: Number.isFinite(pollDaysBefore) ? pollDaysBefore : 1,
+                pollTime: pollTimeVal,
+                reminderDaysBefore: Number.isFinite(reminderDaysBefore) ? reminderDaysBefore : 0,
+                reminderTime: reminderTimeVal
             };
 
             if (newScale !== oldScale) {

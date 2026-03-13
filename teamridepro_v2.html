@@ -135,6 +135,25 @@
                     </div>
                     <div id="practice-rows" class="practice-rows"></div>
                 </div>
+                <!-- Slack Poll Timing -->
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+                    <label class="field-label" style="margin: 0 0 10px 0;">Slack Poll Timing</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: #555;">Post poll</span>
+                            <input type="number" id="poll-days-before" min="0" max="7" value="1" style="width: 48px; padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; text-align: center; font-size: 13px;">
+                            <span style="font-size: 13px; color: #555;">day(s) before practice at</span>
+                            <input type="time" id="poll-time" value="15:00" style="padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: #555;">Send reminder to non-respondents</span>
+                            <input type="number" id="reminder-days-before" min="0" max="3" value="0" style="width: 48px; padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; text-align: center; font-size: 13px;">
+                            <span style="font-size: 13px; color: #555;">day(s) before practice at</span>
+                            <input type="time" id="reminder-time" value="10:00" style="padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                        </div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">All times are Pacific. Reminders are sent to coaches and riders who haven't responded to the poll.</div>
+                    </div>
+                </div>
                 <!-- Site Settings Collapsible Section -->
                 <div class="section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                     <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px 0;" onclick="toggleSiteSettings()">
