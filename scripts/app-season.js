@@ -748,9 +748,19 @@
             // Auto-save poll timing fields directly to Supabase (no "Save Changes" click needed)
             const pollFields = ['pollDaysBefore', 'pollTime', 'reminderDaysBefore', 'reminderTime', 'pollEnabled', 'reminderEnabled'];
             if (pollFields.includes(field)) {
+                console.log(`[POLL-DEBUG] updatePracticeDraft: field=${field}, value=${value}, practiceId=${id}`);
                 const draftPractice = seasonSettingsDraft.practices[practiceIndex];
+                console.log('[POLL-DEBUG] Draft practice poll fields:', JSON.stringify({
+                    pollEnabled: draftPractice.pollEnabled,
+                    pollDaysBefore: draftPractice.pollDaysBefore,
+                    pollTime: draftPractice.pollTime,
+                    reminderEnabled: draftPractice.reminderEnabled,
+                    reminderDaysBefore: draftPractice.reminderDaysBefore,
+                    reminderTime: draftPractice.reminderTime
+                }));
                 if (data.seasonSettings && Array.isArray(data.seasonSettings.practices)) {
                     const idx = data.seasonSettings.practices.findIndex(p => String(p.id) === String(id));
+                    console.log(`[POLL-DEBUG] data.seasonSettings.practices match idx=${idx}, practices count=${data.seasonSettings.practices.length}`);
                     if (idx >= 0) {
                         data.seasonSettings.practices[idx].pollEnabled = draftPractice.pollEnabled !== false;
                         data.seasonSettings.practices[idx].pollDaysBefore = draftPractice.pollDaysBefore ?? 1;
@@ -758,9 +768,16 @@
                         data.seasonSettings.practices[idx].reminderEnabled = draftPractice.reminderEnabled !== false;
                         data.seasonSettings.practices[idx].reminderDaysBefore = draftPractice.reminderDaysBefore ?? 0;
                         data.seasonSettings.practices[idx].reminderTime = draftPractice.reminderTime || '10:00';
+                        console.log('[POLL-DEBUG] Written to data.seasonSettings.practices[' + idx + ']:', JSON.stringify(data.seasonSettings.practices[idx]));
+                    } else {
+                        console.warn('[POLL-DEBUG] Practice ID not found in data.seasonSettings.practices! IDs:', data.seasonSettings.practices.map(p => p.id));
                     }
+                } else {
+                    console.warn('[POLL-DEBUG] data.seasonSettings.practices missing!', { hasSS: !!data.seasonSettings, isArray: Array.isArray(data.seasonSettings?.practices) });
                 }
+                console.log('[POLL-DEBUG] Calling saveData()...');
                 saveData();
+                console.log('[POLL-DEBUG] saveData() returned');
                 // Update original state so change detection resets
                 const key = String(id);
                 originalPracticeStates.set(key, JSON.parse(JSON.stringify(draftPractice)));

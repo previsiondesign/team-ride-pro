@@ -609,6 +609,7 @@
         }
 
         async function saveData() {
+            console.log('[POLL-DEBUG] saveData() called. isReadOnlyMode=' + isReadOnlyMode + ', isDeveloperMode=' + isDeveloperMode);
             if (isReadOnlyMode) {
                 console.warn('Read-only mode: saveData blocked.');
                 return;
@@ -640,6 +641,7 @@
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             
+            console.log('[POLL-DEBUG] saveData auth check: client=' + !!client + ', currentUser=' + !!currentUser + ', hasUpdateSS=' + (typeof updateSeasonSettings === 'function'));
             if (client && currentUser && typeof updateSeasonSettings === 'function' && typeof updateAutoAssignSettings === 'function') {
                 // Authenticated user - save to Supabase only (no localStorage fallback)
                 try {
@@ -674,7 +676,19 @@
                                     lengthAdjustmentFactor: 0.1
                                 }
                             };
+                            // DEBUG: log poll fields being sent to Supabase
+                            if (seasonData.practices && seasonData.practices.length > 0) {
+                                console.log('[POLL-DEBUG] saveData → updateSeasonSettings, practices poll fields:',
+                                    seasonData.practices.map(p => ({ id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled, reminderDaysBefore: p.reminderDaysBefore, reminderTime: p.reminderTime }))
+                                );
+                            }
                             const result = await updateSeasonSettings(seasonData);
+                            console.log('[POLL-DEBUG] updateSeasonSettings result:', result ? 'success' : 'null result');
+                            if (result && result.practices) {
+                                console.log('[POLL-DEBUG] Returned practices poll fields:',
+                                    result.practices.map(p => ({ id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime }))
+                                );
+                            }
                         } catch (error) {
                             // Handle RLS errors gracefully - user may not have admin/coach-admin role yet
                             if (error.message && error.message.includes('row-level security')) {
