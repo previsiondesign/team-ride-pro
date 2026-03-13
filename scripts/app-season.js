@@ -1,4 +1,4 @@
-// app-season.js — Season setup modal, practice rows, date range/time range pickers
+// app-season.js — Season setup modal, practice rows, date range/time range pickers, poll timing
 
         function openSeasonSetupModal() {
             // Switch to settings tab instead of opening modal
