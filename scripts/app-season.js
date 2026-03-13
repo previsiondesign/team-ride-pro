@@ -433,9 +433,10 @@
         // originalPracticeStates in app-state.js
 
         function renderPracticeRows(containerId = 'practice-rows') {
+            console.log('[POLL-DEBUG] renderPracticeRows called, containerId=' + containerId);
             ensureSeasonDraft();
             const container = document.getElementById(containerId);
-            if (!container) return;
+            if (!container) { console.log('[POLL-DEBUG] container not found: ' + containerId); return; }
 
             if (!seasonSettingsDraft || seasonSettingsDraft.practices.length === 0) {
                 container.innerHTML = `
@@ -649,8 +650,11 @@
             });
 
             // Attach poll timing event listeners (programmatic — more reliable than inline onchange)
-            container.querySelectorAll('.poll-timing-row').forEach(row => {
+            const pollRows = container.querySelectorAll('.poll-timing-row');
+            console.log('[POLL-DEBUG] Found ' + pollRows.length + ' .poll-timing-row elements in ' + containerId);
+            pollRows.forEach(row => {
                 const practiceId = row.dataset.practiceId;
+                console.log('[POLL-DEBUG] Attaching listeners for practiceId=' + practiceId + ', inputs=' + row.querySelectorAll('[data-poll-field]').length);
                 row.querySelectorAll('[data-poll-field]').forEach(input => {
                     const field = input.dataset.pollField;
                     const eventType = input.type === 'checkbox' ? 'change' : 'change';
