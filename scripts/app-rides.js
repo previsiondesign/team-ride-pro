@@ -1254,8 +1254,14 @@
                         meetLocation: practice.meetLocation || '',
                         locationLat: practice.locationLat || null,
                         locationLng: practice.locationLng || null,
-                        rosterFilter: practice.rosterFilter || null, // Preserve rosterFilter when loading
-                        excludeFromPlanner: practice.excludeFromPlanner || false
+                        rosterFilter: practice.rosterFilter || null,
+                        excludeFromPlanner: practice.excludeFromPlanner || false,
+                        pollEnabled: practice.pollEnabled !== false,
+                        pollDaysBefore: practice.pollDaysBefore ?? 1,
+                        pollTime: practice.pollTime || '15:00',
+                        reminderEnabled: practice.reminderEnabled !== false,
+                        reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                        reminderTime: practice.reminderTime || '10:00'
                     }))
                     : []
             };
@@ -9144,6 +9150,8 @@
                     ${addGroupHtml}
                 </div>
                 <div id="publish-groups-container" style="display: flex; justify-content: center; gap: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; flex-wrap: wrap;">
+                    <button id="preview-rider-view-btn" class="btn-small" onclick="openAssignmentPreview('rider')" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #7B1FA2; color: white; border: none; border-radius: 4px; cursor: pointer;">Preview Rider View</button>
+                    <button id="preview-coach-view-btn" class="btn-small" onclick="openAssignmentPreview('coach')" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #7B1FA2; color: white; border: none; border-radius: 4px; cursor: pointer;">Preview Coach View</button>
                     <button id="publish-groups-btn" class="btn-small" onclick="publishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Publish Group Assignments</button>
                     <button id="unpublish-groups-btn" class="btn-small" onclick="unpublishGroupAssignments()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Unpublish Group Assignments</button>
                     <button id="send-notification-btn" class="btn-small" onclick="sendGroupAssignmentNotification()" style="padding: 12px 24px; font-size: 16px; font-weight: 600; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Send Notification</button>
