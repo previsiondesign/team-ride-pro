@@ -475,9 +475,7 @@
                 data.seasonSettings = buildDefaultSeasonSettings();
             }
 
-            const _pollLoadState = JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDays: p.pollDaysBefore, pollTime: p.pollTime})));
-            console.log('[LOAD] Pre-normalization poll state:', _pollLoadState);
-            alert('LOAD: Poll state from DB: ' + _pollLoadState);
+            console.log('[LOAD] Pre-normalization poll state:', JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDays: p.pollDaysBefore, pollTime: p.pollTime}))));
             const normalizedPractices = Array.isArray(data.seasonSettings.practices)
                 ? data.seasonSettings.practices
                     .map(practice => {

@@ -423,7 +423,13 @@
                             locationLat: practice.locationLat || null,
                             locationLng: practice.locationLng || null,
                             rosterFilter: practice.rosterFilter || null,
-                            excludeFromPlanner: practice.excludeFromPlanner || false
+                            excludeFromPlanner: practice.excludeFromPlanner || false,
+                            pollEnabled: practice.pollEnabled !== false,
+                            pollDaysBefore: practice.pollDaysBefore ?? 1,
+                            pollTime: practice.pollTime || '15:00',
+                            reminderEnabled: practice.reminderEnabled !== false,
+                            reminderDaysBefore: practice.reminderDaysBefore ?? 0,
+                            reminderTime: practice.reminderTime || '10:00'
                         }))
                         : []
                 };
@@ -712,9 +718,6 @@
 
         function updatePracticeDraft(id, field, value) {
             console.log('[DRAFT] updatePracticeDraft called:', id, field, value);
-            if (['pollEnabled','pollDaysBefore','pollTime','reminderEnabled','reminderDaysBefore','reminderTime'].includes(field)) {
-                alert('POLL FIELD CHANGED: ' + field + ' = ' + value);
-            }
             ensureSeasonDraft();
             if (!seasonSettingsDraft) { console.warn('[DRAFT] no seasonSettingsDraft!'); return; }
 
@@ -790,7 +793,7 @@
         async function savePollTimingToSupabase() {
             try {
                 const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-                if (!client) { alert('SAVE FAIL: no Supabase client'); return; }
+                if (!client) { console.warn('savePollTimingToSupabase: no Supabase client'); return; }
 
                 // Read current practices from DB
                 const { data: row, error: readErr } = await client
@@ -798,7 +801,7 @@
                     .select('practices')
                     .eq('id', 'current')
                     .single();
-                if (readErr) { alert('SAVE FAIL: DB read error: ' + readErr.message); return; }
+                if (readErr) { console.error('savePollTimingToSupabase read error:', readErr); return; }
 
                 const dbPractices = Array.isArray(row?.practices) ? row.practices : [];
                 const draftPractices = seasonSettingsDraft?.practices || [];
@@ -824,12 +827,12 @@
                     .update({ practices: dbPractices })
                     .eq('id', 'current');
                 if (writeErr) {
-                    alert('SAVE FAIL: DB write error: ' + writeErr.message);
+                    console.error('savePollTimingToSupabase write error:', writeErr);
                 } else {
-                    alert('SAVE OK: merged ' + mergeCount + ' practices. Poll states: ' + JSON.stringify(dbPractices.map(p => ({id: p.id, poll: p.pollEnabled}))));
+                    console.log('Poll timing saved to Supabase:', mergeCount, 'practices merged');
                 }
             } catch (e) {
-                alert('SAVE EXCEPTION: ' + e.message);
+                console.error('savePollTimingToSupabase exception:', e);
             }
         }
 
