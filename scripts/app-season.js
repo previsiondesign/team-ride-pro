@@ -656,7 +656,6 @@
 
             // Attach poll timing event listeners (programmatic — more reliable than inline onchange)
             const pollRows = container.querySelectorAll('.poll-timing-row');
-            console.log('[POLL] Attaching poll listeners. Container:', containerId, 'Found', pollRows.length, 'poll rows');
             pollRows.forEach(row => {
                 const practiceId = row.dataset.practiceId;
                 row.querySelectorAll('[data-poll-field]').forEach(input => {
@@ -717,9 +716,8 @@
         }
 
         function updatePracticeDraft(id, field, value) {
-            console.log('[DRAFT] updatePracticeDraft called:', id, field, value);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) { console.warn('[DRAFT] no seasonSettingsDraft!'); return; }
+            if (!seasonSettingsDraft) return;
 
             const practiceIndex = seasonSettingsDraft.practices.findIndex(practice => String(practice.id) === String(id));
             if (practiceIndex === -1) return;
@@ -829,7 +827,6 @@
                 if (writeErr) {
                     console.error('savePollTimingToSupabase write error:', writeErr);
                 } else {
-                    console.log('Poll timing saved to Supabase:', mergeCount, 'practices merged');
                 }
             } catch (e) {
                 console.error('savePollTimingToSupabase exception:', e);
@@ -1034,9 +1031,8 @@
         }
 
         function savePracticeChanges(practiceId) {
-            console.log('[SAVE] savePracticeChanges called for practice:', practiceId);
             ensureSeasonDraft();
-            if (!seasonSettingsDraft) { console.warn('[SAVE] no seasonSettingsDraft!'); return; }
+            if (!seasonSettingsDraft) return;
             
             const practice = seasonSettingsDraft.practices.find(p => String(p.id) === String(practiceId));
             if (!practice) return;
@@ -1204,24 +1200,7 @@
             }
             
             // Save changes
-            console.log('[SAVE] savePracticeChanges calling saveData(). Practice:', JSON.stringify({id: practiceId, desc: practice.description, meetLocation: practice.meetLocation, pollEnabled: practice.pollEnabled, pollDaysBefore: practice.pollDaysBefore, pollTime: practice.pollTime}));
-            console.log('[SAVE] data.seasonSettings.practices full poll state:', JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled}))));
             saveData();
-
-            // Verify: read back from Supabase after a short delay to confirm save
-            setTimeout(async () => {
-                try {
-                    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-                    if (client) {
-                        const { data: row, error } = await client.from('season_settings').select('practices').eq('id', 'current').single();
-                        if (error) {
-                            console.error('[VERIFY] Read-back error:', error);
-                        } else {
-                            console.log('[VERIFY] Supabase practices after save:', JSON.stringify(row.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled, reminderDaysBefore: p.reminderDaysBefore}))));
-                        }
-                    }
-                } catch (e) { console.error('[VERIFY] exception:', e); }
-            }, 2000);
 
             // Update original state to reflect saved changes
             const key = String(practiceId);

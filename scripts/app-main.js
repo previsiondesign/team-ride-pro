@@ -475,7 +475,6 @@
                 data.seasonSettings = buildDefaultSeasonSettings();
             }
 
-            console.log('[LOAD] Pre-normalization poll state:', JSON.stringify(data.seasonSettings.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDays: p.pollDaysBefore, pollTime: p.pollTime}))));
             const normalizedPractices = Array.isArray(data.seasonSettings.practices)
                 ? data.seasonSettings.practices
                     .map(practice => {
@@ -568,19 +567,16 @@
             const normalizedSeasonStr = JSON.stringify(normalizedSeason);
             if (normalizedSeasonStr !== previousSeasonState) {
                 changed = true;
-                console.log('[LOAD] Normalization detected changes — will save. Post-normalization poll state:', JSON.stringify(normalizedPractices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, pollDaysBefore: p.pollDaysBefore, pollTime: p.pollTime, reminderEnabled: p.reminderEnabled}))));
                 // Preserve all existing fields in seasonSettings (like csvFieldMappings, fitnessScale, etc.)
                 data.seasonSettings = {
                     ...data.seasonSettings,
                     ...normalizedSeason
                 };
             } else {
-                console.log('[LOAD] Normalization: no changes detected, skipping save');
             }
             // If unchanged, keep the original data.seasonSettings (preserves any extra fields)
 
             if (changed) {
-                console.log('[LOAD] Calling saveData() from normalization (this could overwrite DB)');
                 saveData();
             }
         }
@@ -626,9 +622,7 @@
         }
 
         async function saveData() {
-            console.log('[SAVE] saveData() called. readOnly:', isReadOnlyMode, 'devMode:', isDeveloperMode);
             if (isReadOnlyMode) {
-                console.warn('[SAVE] Read-only mode: saveData blocked.');
                 return;
             }
             if (isDeveloperMode) {
@@ -658,10 +652,8 @@
             const client = getSupabaseClient();
             const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
             
-            console.log('[SAVE] client:', !!client, 'currentUser:', !!currentUser, 'updateSeasonSettings:', typeof updateSeasonSettings, 'updateAutoAssignSettings:', typeof updateAutoAssignSettings);
             if (client && currentUser && typeof updateSeasonSettings === 'function' && typeof updateAutoAssignSettings === 'function') {
                 // Authenticated user - save to Supabase only (no localStorage fallback)
-                console.log('[SAVE] Saving to Supabase... practices count:', data.seasonSettings?.practices?.length);
                 try {
                     // Coach-admin and admin can save; if role not loaded yet, attempt save and let RLS allow/deny
                     const role = typeof getCurrentUserRole === 'function' ? getCurrentUserRole() : null;
@@ -694,9 +686,7 @@
                                     lengthAdjustmentFactor: 0.1
                                 }
                             };
-                                    console.log('[SAVE] Sending to updateSeasonSettings, practices:', JSON.stringify(seasonData.practices?.map(p => ({id: p.id, pollEnabled: p.pollEnabled, desc: p.description?.substring(0,20)}))));
                     const result = await updateSeasonSettings(seasonData);
-                            console.log('[SAVE] updateSeasonSettings succeeded');
                         } catch (error) {
                             // Handle RLS errors gracefully - user may not have admin/coach-admin role yet
                             if (error.message && error.message.includes('row-level security')) {
