@@ -790,7 +790,7 @@
         async function savePollTimingToSupabase() {
             try {
                 const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-                if (!client) { console.warn('savePollTimingToSupabase: no Supabase client'); return; }
+                if (!client) { alert('SAVE FAIL: no Supabase client'); return; }
 
                 // Read current practices from DB
                 const { data: row, error: readErr } = await client
@@ -798,12 +798,13 @@
                     .select('practices')
                     .eq('id', 'current')
                     .single();
-                if (readErr) { console.error('savePollTimingToSupabase read error:', readErr); return; }
+                if (readErr) { alert('SAVE FAIL: DB read error: ' + readErr.message); return; }
 
                 const dbPractices = Array.isArray(row?.practices) ? row.practices : [];
                 const draftPractices = seasonSettingsDraft?.practices || [];
 
                 // Merge poll timing fields from draft into DB practices
+                let mergeCount = 0;
                 for (const dp of draftPractices) {
                     const dbp = dbPractices.find(p => String(p.id) === String(dp.id));
                     if (dbp) {
@@ -813,6 +814,7 @@
                         dbp.reminderEnabled = dp.reminderEnabled !== false;
                         dbp.reminderDaysBefore = dp.reminderDaysBefore ?? 0;
                         dbp.reminderTime = dp.reminderTime || '10:00';
+                        mergeCount++;
                     }
                 }
 
@@ -822,13 +824,12 @@
                     .update({ practices: dbPractices })
                     .eq('id', 'current');
                 if (writeErr) {
-                    console.error('savePollTimingToSupabase write error:', writeErr);
-                    alert('Failed to save poll timing: ' + writeErr.message);
+                    alert('SAVE FAIL: DB write error: ' + writeErr.message);
                 } else {
-                    console.log('Poll timing saved to Supabase');
+                    alert('SAVE OK: merged ' + mergeCount + ' practices. Poll states: ' + JSON.stringify(dbPractices.map(p => ({id: p.id, poll: p.pollEnabled}))));
                 }
             } catch (e) {
-                console.error('savePollTimingToSupabase exception:', e);
+                alert('SAVE EXCEPTION: ' + e.message);
             }
         }
 
