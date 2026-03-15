@@ -1708,7 +1708,7 @@ serve(async (req) => {
       // Send DM reminders
       const allTargets = [...riderTargets, ...coachTargets];
       const friendlyDate = formatDate(ride.date);
-      const timeDisplay = formatTimeRange(practiceTimes.startTime, practiceTimes.endTime);
+      const timeDisplay = formatTimeRange(matchedPractice?.time || null, matchedPractice?.endTime || null);
       let sent = 0;
 
       for (const userId of allTargets) {
