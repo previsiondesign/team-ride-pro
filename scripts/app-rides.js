@@ -4775,13 +4775,36 @@
                 clearAssignmentHistory();
                 return;
             }
-            
+
             // Clear undo/redo history when loading a new ride
             clearAssignmentHistory();
-            
+
             // Save initial state so first undo works
             saveAssignmentState(ride);
-            
+
+            // Refresh attendance arrays from DB to pick up any Slack poll changes
+            // that arrived while viewing a different practice (realtime events update
+            // local data for all rides, but a page reload or initial load may be stale).
+            if (ride.isPersisted && typeof getRideById === 'function') {
+                getRideById(ride.id).then(freshRide => {
+                    if (!freshRide) return;
+                    // Guard: user may have navigated away while the fetch was in flight
+                    if (data.currentRide !== ride.id) return;
+                    const freshCoaches = freshRide.availableCoaches || [];
+                    const freshRiders = freshRide.availableRiders || [];
+                    const coachesChanged = JSON.stringify(ride.availableCoaches || []) !== JSON.stringify(freshCoaches);
+                    const ridersChanged = JSON.stringify(ride.availableRiders || []) !== JSON.stringify(freshRiders);
+                    if (coachesChanged || ridersChanged) {
+                        console.log(`[loadCurrentRide] Refreshed attendance from DB for ride ${ride.id}: coaches=${coachesChanged}, riders=${ridersChanged}`);
+                        if (coachesChanged) ride.availableCoaches = freshCoaches;
+                        if (ridersChanged) ride.availableRiders = freshRiders;
+                        if (typeof renderSidebars === 'function') renderSidebars();
+                        if (typeof renderAssignments === 'function') renderAssignments(ride);
+                        if (typeof renderPracticeAttendanceLists === 'function') renderPracticeAttendanceLists();
+                    }
+                }).catch(e => console.warn('[loadCurrentRide] Could not refresh ride from DB:', e));
+            }
+
             // Ensure default attendance selection for this practice
             ensureRideAttendanceDefaults(ride);
             

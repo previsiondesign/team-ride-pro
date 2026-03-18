@@ -851,9 +851,9 @@
         function handleRealtimeRideChange(payload) {
             if (!payload.new) return;
             const rideId = payload.new.id;
-            // Only process changes for the currently viewed ride
-            if (rideId !== data.currentRide) return;
 
+            // Update local data for ANY ride (not just current) so attendance stays fresh
+            // when the user navigates to a different practice.
             const localRide = data.rides ? data.rides.find(r => r.id === rideId) : null;
             if (!localRide) return;
 
@@ -872,9 +872,11 @@
                 if (ridersChanged) localRide.availableRiders = newRiders;
                 if (groupsChanged && newGroups !== undefined) localRide.groups = Array.isArray(newGroups) ? newGroups : [];
 
-                // Re-render the UI
-                if (typeof renderSidebars === 'function') renderSidebars();
-                if (typeof renderAssignments === 'function') renderAssignments(localRide);
+                // Only re-render if the changed ride is the currently viewed one
+                if (rideId === data.currentRide) {
+                    if (typeof renderSidebars === 'function') renderSidebars();
+                    if (typeof renderAssignments === 'function') renderAssignments(localRide);
+                }
             }
         }
 
