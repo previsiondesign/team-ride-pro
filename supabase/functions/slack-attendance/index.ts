@@ -449,13 +449,13 @@ async function postAttendeeSummary(
     // Group by status
     const attending: string[] = [];
     const ifNeeded: string[] = [];
-    const absent: string[] = [];
     for (const r of channelResponses) {
       const mention = r.slack_user_id ? `<@${r.slack_user_id}>` : "Unknown";
       if (r.attendance_status === "attending") attending.push(mention);
       else if (r.attendance_status === "if_needed") ifNeeded.push(mention);
-      else if (r.attendance_status === "absent") absent.push(mention);
     }
+
+    if (attending.length === 0 && ifNeeded.length === 0) return; // Nothing positive to show
 
     // Build the summary blocks
     const headerLine = `:mountain_biking: *MTB TEAM PRACTICE: ${friendlyDate}${timeDisplay ? ` @ ${timeDisplay}` : ""}*${location ? ` — ${location}` : ""}`;
@@ -467,9 +467,7 @@ async function postAttendeeSummary(
     if (ifNeeded.length > 0) {
       lines.push(`:raised_hand: *IF NEEDED (${ifNeeded.length}):* ${ifNeeded.join(" ")}`);
     }
-    if (absent.length > 0) {
-      lines.push(`:x: *NOT ATTENDING (${absent.length}):* ${absent.join(" ")}`);
-    }
+    // Intentionally omit absent list — only show positive commitments
 
     const text = lines.join("\n");
     const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN") || "";
@@ -1579,6 +1577,37 @@ serve(async (req) => {
     const body = JSON.parse(rawBody);
     const jsonResponse = (obj: Record<string, unknown>, status = 200) =>
       new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+
+    // --- test_poll: post poll + summary to a test channel (does NOT affect production channels) ---
+    if (body.action === "test_poll") {
+      const TEST_CHANNEL_ID = body.channel || "C0AMK6L6Z5J";
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const ride = await getNextRide(supabase);
+      if (!ride) return jsonResponse({ error: "No upcoming practice found" });
+
+      const { data: settingsRow } = await supabase.from("season_settings").select("practices").eq("id", "current").single();
+      const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
+      const mp = findMatchingPractice(ride.date, practices);
+
+      const posted = await postPollToChannel(supabase, TEST_CHANNEL_ID, ride.id, ride.date, mp);
+      return jsonResponse({ success: posted, testChannel: TEST_CHANNEL_ID, rideId: ride.id, date: ride.date, practice: mp?.description || "unknown" });
+    }
+
+    // --- test_reminder: post summary + send reminder DMs to test channel only ---
+    if (body.action === "test_reminder") {
+      const TEST_CHANNEL_ID = body.channel || "C0AMK6L6Z5J";
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const ride = await getNextRide(supabase);
+      if (!ride) return jsonResponse({ error: "No upcoming practice found" });
+
+      const { data: settingsRow } = await supabase.from("season_settings").select("practices").eq("id", "current").single();
+      const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
+      const mp = findMatchingPractice(ride.date, practices);
+
+      // Post attendee summary to test channel
+      await postAttendeeSummary(supabase, TEST_CHANNEL_ID, ride.id, ride.date, mp);
+      return jsonResponse({ success: true, testChannel: TEST_CHANNEL_ID, rideId: ride.id, date: ride.date, note: "Summary posted to test channel. DM reminders NOT sent (use send_reminders for that)." });
+    }
 
     // --- post_poll: post immediately for the next upcoming practice ---
     if (body.action === "post_poll") {

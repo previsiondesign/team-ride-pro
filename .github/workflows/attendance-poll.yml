@@ -30,6 +30,8 @@ on:
           - post_poll_if_due
           - post_poll
           - send_reminders
+          - test_poll
+          - test_reminder
           - import_coach_availability
           - cleanup_duplicate_rides
           - run_migrations
