@@ -412,6 +412,83 @@ function formatNowTimestamp(): string {
   return `${get("weekday")} ${get("month")}/${get("day")} @ ${get("hour")}:${get("minute")}${get("dayPeriod").toLowerCase()}`;
 }
 
+/**
+ * Post an attendee summary message to a Slack channel for a given ride.
+ * Shows confirmed attendees (with @mentions) and non-responders.
+ * Posted just before polls and reminders so mobile users can see their status.
+ */
+async function postAttendeeSummary(
+  supabase: ReturnType<typeof createClient>,
+  channelId: string,
+  rideId: number,
+  dateStr: string,
+  matchedPractice: any | null
+): Promise<void> {
+  try {
+    const friendlyDate = formatDate(dateStr);
+    const timeDisplay = formatTimeRangeParens(matchedPractice?.time || null, matchedPractice?.endTime || null);
+    const location = matchedPractice?.meetLocation || "";
+
+    // Get all poll responses for this ride
+    const { data: responses } = await supabase
+      .from("slack_poll_responses")
+      .select("slack_user_id, rider_id, coach_id, attendance_status")
+      .eq("ride_id", rideId);
+
+    // Determine channel role (rider channel vs coach channel)
+    const SLACK_COACH_CHANNEL_ID = Deno.env.get("SLACK_COACH_CHANNEL_ID") || "";
+    const isCoachChannel = channelId === SLACK_COACH_CHANNEL_ID;
+
+    // Filter responses by role for this channel
+    const channelResponses = (responses ?? []).filter((r: any) =>
+      isCoachChannel ? r.coach_id != null : r.rider_id != null
+    );
+
+    if (channelResponses.length === 0) return; // No prior responses — skip summary
+
+    // Group by status
+    const attending: string[] = [];
+    const ifNeeded: string[] = [];
+    const absent: string[] = [];
+    for (const r of channelResponses) {
+      const mention = r.slack_user_id ? `<@${r.slack_user_id}>` : "Unknown";
+      if (r.attendance_status === "attending") attending.push(mention);
+      else if (r.attendance_status === "if_needed") ifNeeded.push(mention);
+      else if (r.attendance_status === "absent") absent.push(mention);
+    }
+
+    // Build the summary blocks
+    const headerLine = `:mountain_biking: *MTB TEAM PRACTICE: ${friendlyDate}${timeDisplay ? ` @ ${timeDisplay}` : ""}*${location ? ` — ${location}` : ""}`;
+    const lines: string[] = [headerLine, ""];
+
+    if (attending.length > 0) {
+      lines.push(`:white_check_mark: *CONFIRMED (${attending.length}):* ${attending.join(" ")}`);
+    }
+    if (ifNeeded.length > 0) {
+      lines.push(`:raised_hand: *IF NEEDED (${ifNeeded.length}):* ${ifNeeded.join(" ")}`);
+    }
+    if (absent.length > 0) {
+      lines.push(`:x: *NOT ATTENDING (${absent.length}):* ${absent.join(" ")}`);
+    }
+
+    const text = lines.join("\n");
+    const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN") || "";
+
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel: channelId,
+        text,
+        blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
+      }),
+    });
+    console.log(`[attendeeSummary] Posted summary to ${channelId} for ride ${rideId}: ${attending.length} attending, ${ifNeeded.length} if-needed, ${absent.length} absent`);
+  } catch (e) {
+    console.error("[attendeeSummary] Error posting summary:", e);
+  }
+}
+
 /** Get current date, hour, and minute in Pacific time */
 function getCurrentPacificTime(): { date: string; hour: number; minute: number } {
   const now = new Date();
@@ -1164,12 +1241,17 @@ async function postPollToChannel(
   supabase: ReturnType<typeof createClient>,
   channelId: string,
   rideId: number,
-  dateStr: string
+  dateStr: string,
+  matchedPractice?: any
 ): Promise<boolean> {
   if (!SLACK_BOT_TOKEN || !channelId) {
     console.error("Missing SLACK_BOT_TOKEN or channel ID");
     return false;
   }
+
+  // Post attendee summary (prior commitments) before the poll
+  await postAttendeeSummary(supabase, channelId, rideId, dateStr, matchedPractice || null);
+
   const times = await getPracticeTimes(supabase, dateStr);
   const role = channelRole(channelId);
   const roleColumn = role === "coach" ? "coach_id" : "rider_id";
@@ -1504,12 +1586,17 @@ serve(async (req) => {
       const ride = await getNextRide(supabase);
       if (!ride) return jsonResponse({ error: "No upcoming practice found" });
 
+      // Load practice definition for attendee summary
+      const { data: settingsRow } = await supabase.from("season_settings").select("practices").eq("id", "current").single();
+      const practices: any[] = Array.isArray((settingsRow as any)?.practices) ? (settingsRow as any).practices : [];
+      const mp = findMatchingPractice(ride.date, practices);
+
       const results: string[] = [];
       if (SLACK_ATTENDANCE_CHANNEL_ID) {
-        results.push((await postPollToChannel(supabase, SLACK_ATTENDANCE_CHANNEL_ID, ride.id, ride.date)) ? "Rider poll posted" : "Rider poll failed");
+        results.push((await postPollToChannel(supabase, SLACK_ATTENDANCE_CHANNEL_ID, ride.id, ride.date, mp)) ? "Rider poll posted" : "Rider poll failed");
       }
       if (SLACK_COACH_CHANNEL_ID && SLACK_COACH_CHANNEL_ID !== SLACK_ATTENDANCE_CHANNEL_ID) {
-        results.push((await postPollToChannel(supabase, SLACK_COACH_CHANNEL_ID, ride.id, ride.date)) ? "Coach poll posted" : "Coach poll failed");
+        results.push((await postPollToChannel(supabase, SLACK_COACH_CHANNEL_ID, ride.id, ride.date, mp)) ? "Coach poll posted" : "Coach poll failed");
       }
       return jsonResponse({ success: true, results, rideId: ride.id, date: ride.date });
     }
@@ -1573,10 +1660,10 @@ serve(async (req) => {
 
       const results: string[] = [];
       if (SLACK_ATTENDANCE_CHANNEL_ID) {
-        results.push((await postPollToChannel(supabase, SLACK_ATTENDANCE_CHANNEL_ID, ride.id, ride.date)) ? "Rider poll posted" : "Rider poll failed");
+        results.push((await postPollToChannel(supabase, SLACK_ATTENDANCE_CHANNEL_ID, ride.id, ride.date, matchedPractice)) ? "Rider poll posted" : "Rider poll failed");
       }
       if (SLACK_COACH_CHANNEL_ID && SLACK_COACH_CHANNEL_ID !== SLACK_ATTENDANCE_CHANNEL_ID) {
-        results.push((await postPollToChannel(supabase, SLACK_COACH_CHANNEL_ID, ride.id, ride.date)) ? "Coach poll posted" : "Coach poll failed");
+        results.push((await postPollToChannel(supabase, SLACK_COACH_CHANNEL_ID, ride.id, ride.date, matchedPractice)) ? "Coach poll posted" : "Coach poll failed");
       }
       return jsonResponse({ success: true, results, rideId: ride.id, date: ride.date });
     }
@@ -1703,6 +1790,14 @@ serve(async (req) => {
 
       if (riderTargets.length === 0 && coachTargets.length === 0) {
         return jsonResponse({ success: true, reminders_sent: 0, skippedOptedOut, reason: "Everyone has responded (or no Slack IDs on file)" });
+      }
+
+      // Post attendee summary to channel(s) before sending DM reminders
+      if (SLACK_ATTENDANCE_CHANNEL_ID) {
+        await postAttendeeSummary(supabase, SLACK_ATTENDANCE_CHANNEL_ID, ride.id, ride.date, matchedPractice);
+      }
+      if (SLACK_COACH_CHANNEL_ID && SLACK_COACH_CHANNEL_ID !== SLACK_ATTENDANCE_CHANNEL_ID) {
+        await postAttendeeSummary(supabase, SLACK_COACH_CHANNEL_ID, ride.id, ride.date, matchedPractice);
       }
 
       // Send DM reminders
