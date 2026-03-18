@@ -1,0 +1,31 @@
+{
+  "name": "Team Ride Pro",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "forwardPorts": [3001, 5500],
+  "postCreateCommand": "cd server && npm install",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.fontSize": 16,
+        "editor.wordWrap": "on",
+        "editor.minimap.enabled": false,
+        "workbench.activityBar.location": "top",
+        "editor.tabSize": 2
+      },
+      "extensions": [
+        "ritwickdey.LiveServer",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "portsAttributes": {
+    "3001": {
+      "label": "Strava Proxy Server",
+      "onAutoForward": "notify"
+    },
+    "5500": {
+      "label": "Live Server (Frontend)",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}
