@@ -1,7 +1,7 @@
 {
-  "name": "Fort Ord Race Warmup Timer",
+  "name": "Exchequer Race Warmup Timer",
   "short_name": "Warmup Timer",
-  "description": "30-minute structured race warmup timer with voice announcements",
+  "description": "Structured race warmup timer with voice announcements",
   "start_url": "./warmup-timer.html",
   "display": "fullscreen",
   "orientation": "portrait",
