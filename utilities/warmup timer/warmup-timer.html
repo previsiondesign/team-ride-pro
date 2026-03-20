@@ -380,6 +380,11 @@
         <h1>Exchequer Race Warmup Timer</h1>
 
         <div class="setup-screen active">
+            <div class="duration-controls">
+                <button class="button button-primary duration-btn active" id="dur30" onclick="setDuration(30)">30 min</button>
+                <button class="button button-secondary duration-btn" id="dur25" onclick="setDuration(25)">25 min</button>
+                <button class="button button-secondary duration-btn" id="dur20" onclick="setDuration(20)">20 min</button>
+            </div>
             <div class="warmup-steps">
                 <table>
                     <thead><tr><th class="time-col">Time</th><th>Step</th></tr></thead>
@@ -404,11 +409,6 @@
                 </table>
             </div>
             <button class="button button-primary" onclick="startTimer()" style="max-width: 400px;">Start Warmup</button>
-            <div class="duration-controls">
-                <button class="button button-primary duration-btn active" id="dur30" onclick="setDuration(30)">30 min</button>
-                <button class="button button-secondary duration-btn" id="dur25" onclick="setDuration(25)">25 min</button>
-                <button class="button button-secondary duration-btn" id="dur20" onclick="setDuration(20)">20 min</button>
-            </div>
         </div>
 
         <div class="countdown-screen">
@@ -496,7 +496,7 @@
             var steps;
             if (minutes === 20) {
                 steps = [
-                    { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 6 minutes' },
+                    { duration: 300, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 5 minutes' },
                     { duration: 90,  label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
                     { duration: 90,  label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
                     { duration: 90,  label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
@@ -509,7 +509,7 @@
                     { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
                     { duration: 10,  label: 'Interval 4: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 4. Race pace! 10 seconds' },
                     { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
-                    { duration: 240, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 4 minutes to cool down' }
+                    { duration: 300, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 5 minutes to cool down' }
                 ];
                 PHASE_DESCRIPTIONS.build = "Over the next 4 and a half minutes gradually increase effort every 90 seconds. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.";
             } else if (minutes === 25) {

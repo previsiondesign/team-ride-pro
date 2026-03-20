@@ -1,0 +1,26 @@
+# Copies warmup timer to tamhighmtb/ so it's available at
+# teamridepro.com/tamhighmtb/exchequer-warmup.html
+name: Sync warmup timer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'utilities/warmup timer/warmup-timer.html'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy warmup timer
+        run: cp "utilities/warmup timer/warmup-timer.html" tamhighmtb/exchequer-warmup.html
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tamhighmtb/exchequer-warmup.html
+          git diff --cached --quiet || git commit -m "Sync exchequer-warmup.html from warmup timer source"
+          git push
