@@ -30,6 +30,7 @@ on:
           - post_poll_if_due
           - post_poll
           - send_reminders
+          - force_send_reminders
           - test_poll
           - test_reminder
           - import_coach_availability
@@ -55,11 +56,18 @@ jobs:
           IFS=',' read -ra ACTIONS <<< "${{ steps.action.outputs.actions }}"
           for ACTION in "${ACTIONS[@]}"; do
             echo "--- Calling edge function with action: $ACTION ---"
+            # force_send_reminders → send_reminders with force flag
+            ACTUAL_ACTION="$ACTION"
+            EXTRA_JSON=""
+            if [ "$ACTION" = "force_send_reminders" ]; then
+              ACTUAL_ACTION="send_reminders"
+              EXTRA_JSON=', "force": true'
+            fi
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
               -H "Content-Type: application/json" \
               -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
-              -d "{\"action\": \"$ACTION\"}")
+              -d "{\"action\": \"$ACTUAL_ACTION\"$EXTRA_JSON}")
             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
             echo "HTTP $HTTP_CODE"
