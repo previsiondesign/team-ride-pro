@@ -768,14 +768,17 @@ function exportPDF() {
                 }
                 const rl = doc.splitTextToSize(routeLabel, maxW);
                 doc.text(rl, margin, y);
-                // Draw underline for link-style routes
+                // Draw underline and add clickable link for link-style routes
                 if (isCustomRouteInPdf || (route && route.stravaUrl)) {
+                    const linkUrl = isCustomRouteInPdf ? 'https://www.youtube.com/watch?v=oHg5SJYRHA0' : route.stravaUrl;
                     rl.forEach((line, li) => {
                         const tw = doc.getTextWidth(line);
-                        const lineY = y + li * 4.4 + 0.8;
+                        const lineY = y + li * 4.4;
                         doc.setDrawColor(25, 118, 210);
                         doc.setLineWidth(0.2);
-                        doc.line(margin, lineY, margin + tw, lineY);
+                        doc.line(margin, lineY + 0.8, margin + tw, lineY + 0.8);
+                        // Make text a clickable link
+                        doc.link(margin, lineY - 3.5, tw, 5, { url: linkUrl });
                     });
                     doc.setTextColor(0, 0, 0);
                 }
