@@ -1149,3 +1149,33 @@
                 window.currentMoveOverlay = null;
             }
         }
+
+        // ============ PHONE PREVIEW ============
+
+        async function openAssignmentPreview(type) {
+            var overlay = document.getElementById('phone-preview-overlay');
+            var title = document.getElementById('phone-preview-title');
+            var content = document.getElementById('phone-preview-content');
+            if (!overlay || !content) return;
+
+            title.textContent = type === 'coach' ? 'Coach View' : 'Rider View';
+
+            // Render assignments into their hidden containers first
+            if (type === 'coach') {
+                await renderCoachAssignments();
+            } else {
+                await renderRideAssignments();
+            }
+
+            // Clone rendered content into the phone frame
+            var sourceId = type === 'coach' ? 'coach-assignments-container' : 'ride-assignments-container';
+            var source = document.getElementById(sourceId);
+            content.innerHTML = source ? source.innerHTML : '<p style="padding:20px;color:#999;">No assignment data.</p>';
+
+            overlay.style.display = 'flex';
+        }
+
+        function closeAssignmentPreview() {
+            var overlay = document.getElementById('phone-preview-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }

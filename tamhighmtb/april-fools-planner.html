@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Practice Planner — April 1 Special Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+
+        /* Login */
+        #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #1a3a2a 0%, #2d5a3d 100%); }
+        #login-screen h1 { color: #fff; font-size: 24px; margin-bottom: 8px; }
+        #login-screen p { color: rgba(255,255,255,0.7); margin-bottom: 24px; font-size: 14px; }
+        #login-form { background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 340px; }
+        #login-form label { display: block; font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        #login-form input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 16px; }
+        #login-form button { width: 100%; padding: 12px; background: #1976d2; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        #login-form button:hover { background: #1565c0; }
+        #login-error { color: #d32f2f; font-size: 13px; margin-top: 8px; display: none; }
+
+        /* Header */
+        .header { background: #1976d2; color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header-info { font-size: 14px; opacity: 0.9; }
+
+        /* Main */
+        .main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .ride-info { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+        .ride-info h2 { font-size: 20px; color: #1976d2; margin-bottom: 8px; }
+        .ride-info .meta { font-size: 14px; color: #666; line-height: 1.6; }
+        .ride-info .goals { margin-top: 12px; padding: 12px; background: #f9f9f9; border-radius: 6px; font-size: 14px; }
+
+        /* Groups grid */
+        .groups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+
+        /* Group card */
+        .group-card { background: #b8b8b8; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        .group-header { background: #2196F3; color: #fff; padding: 8px 12px; font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
+        .group-body { padding: 8px 12px; flex: 1; display: flex; flex-direction: column; }
+
+        /* Section headers */
+        .section-header { cursor: pointer; padding: 2px 0; display: flex; align-items: center; justify-content: space-between; user-select: none; border-bottom: 1px solid #ddd; margin-bottom: 2px; }
+        .section-header span:first-child { font-weight: 600; font-size: 13px; color: #555; }
+        .section-header span:last-child { font-size: 11px; color: #999; }
+
+        /* Coach inline item */
+        .coach-inline-item { display: flex; align-items: center; padding: 0 4px 2px 4px; border-radius: 4px; background: #535353; width: 100%; height: 30px; flex-shrink: 0; margin-bottom: 1px; }
+        .coach-name-wrap { flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden; }
+        .coach-name { color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+        .coach-name[contenteditable="true"] { cursor: text; background: rgba(255,255,255,0.15); border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
+        .coach-role-badge { background: #e3f2fd; color: #535353; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; white-space: nowrap; flex-shrink: 0; }
+        .coach-level-badge { font-size: 11px; padding: 2px 6px; font-weight: 600; margin-left: 4px; border-radius: 4px; flex-shrink: 0; }
+        .bike-badge { font-size: 11px; margin-left: 2px; flex-shrink: 0; }
+
+        /* Rider item */
+        .rider-item { display: flex; align-items: center; padding: 3px 6px; background: #fff; border-radius: 4px; margin-bottom: 1px; font-size: 13px; min-height: 26px; }
+        .rider-item.unavailable { color: #999; font-style: italic; text-decoration: line-through; opacity: 0.75; }
+        .rider-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rider-badges { display: flex; gap: 3px; margin-left: 4px; flex-shrink: 0; }
+        .skill-badge { font-size: 11px; padding: 1px 5px; border-radius: 10px; background: #e3f2fd; color: #1976d2; font-weight: 500; white-space: nowrap; }
+
+        /* Route bar */
+        .route-bar { margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0; }
+        .route-display { padding: 6px 10px; background: #1976d2; border-radius: 4px; font-weight: 600; font-size: 15px; color: #fff; }
+
+        /* Buttons */
+        .actions { display: flex; justify-content: center; gap: 12px; margin-top: 32px; padding-top: 20px; border-top: 1px solid #e0e0e0; flex-wrap: wrap; }
+        .btn { padding: 12px 24px; font-size: 16px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
+        .btn-pdf { background: #FF9800; }
+        .btn-pdf:hover { background: #F57C00; }
+
+        /* No-ride state */
+        .no-ride { text-align: center; padding: 60px 20px; color: #666; }
+        .no-ride h2 { font-size: 22px; margin-bottom: 8px; }
+
+        /* Loading */
+        #loading { text-align: center; padding: 60px; color: #666; font-size: 16px; }
+
+        /* Edit hint */
+        .edit-hint { text-align: center; margin-bottom: 16px; padding: 10px; background: #fff3e0; border-radius: 8px; font-size: 13px; color: #e65100; }
+    </style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+    <h1>Tam High MTB Team</h1>
+    <p>Practice Planner — Sign in to continue</p>
+    <form id="login-form" onsubmit="handleLogin(event)">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="your@email.com" required>
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Password" required>
+        <button type="submit">Sign In</button>
+        <div id="login-error"></div>
+    </form>
+</div>
+
+<!-- App (hidden until login) -->
+<div id="app" style="display: none;">
+    <div class="header">
+        <h1>🚴 Practice Planner — Wednesday April 1</h1>
+        <div class="header-info" id="header-user"></div>
+    </div>
+    <div class="main">
+        <div id="loading">Loading practice data…</div>
+        <div id="content" style="display: none;"></div>
+    </div>
+</div>
+
+<script>
+// ─── Config ───
+const SUPABASE_URL = 'https://kweharxfvvjwrnswrooo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3ZWhhcnhmdnZqd3Juc3dyb29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzE4MjMsImV4cCI6MjA4Mjk0NzgyM30.Iavt0VPPppAZGJQci_1jdIeV16MuCOkF-4zKvR3XgiY';
+const TARGET_DATE = '2026-04-01';
+
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true }
+});
+
+// ─── State ───
+let allCoaches = [];
+let allRiders = [];
+let allRoutes = [];
+let ride = null;
+// Track custom coach names (keyed by coach ID) — visual only
+const customCoachNames = {};
+
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+}
+
+function getCoach(id) {
+    const c = allCoaches.find(c => c.id === id);
+    if (!c) return null;
+    // Return with custom name override if set
+    if (customCoachNames[id]) return { ...c, name: customCoachNames[id] };
+    return c;
+}
+function getRider(id) { return allRiders.find(r => r.id === id) || null; }
+function getRoute(id) { return allRoutes.find(r => String(r.id) === String(id)) || null; }
+
+// ─── Login ───
+async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) {
+        errEl.textContent = error.message;
+        errEl.style.display = 'block';
+        return;
+    }
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadData();
+}
+
+// Check existing session
+client.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        loadData();
+    }
+});
+
+// ─── Data Loading ───
+async function loadData() {
+    try {
+        const [ridesRes, coachesRes, ridersRes, routesRes, userRes] = await Promise.all([
+            client.from('rides').select('*').eq('date', TARGET_DATE),
+            client.from('coaches').select('*').order('name'),
+            client.from('riders').select('*').order('name'),
+            client.from('routes').select('*').order('name'),
+            client.auth.getUser()
+        ]);
+
+        if (userRes.data?.user) {
+            document.getElementById('header-user').textContent = userRes.data.user.email;
+        }
+
+        allCoaches = (coachesRes.data || []).map(c => {
+            const extra = c.extra_data && typeof c.extra_data === 'object' ? c.extra_data : {};
+            return {
+                ...extra, id: c.id, name: c.name, nickname: c.nickname || '',
+                phone: c.phone, email: c.email,
+                level: c.level, coachingLicenseLevel: c.level,
+                fitness: c.endurance || c.fitness, climbing: c.climbing || '3',
+                skills: c.descending || c.skills, photo: c.photo, notes: c.notes,
+                user_id: c.user_id,
+                bikeManual: c.bike_manual !== false,
+                bikeElectric: !!c.bike_electric,
+                bikePrimary: c.bike_primary || 'manual',
+                archived: c.archived || false
+            };
+        });
+
+        allRiders = (ridersRes.data || []).map(r => {
+            const extra = r.extra_data && typeof r.extra_data === 'object' ? r.extra_data : {};
+            return {
+                ...extra, id: r.id, name: r.name, nickname: r.nickname || '',
+                phone: r.phone, email: r.email, grade: r.grade, gender: r.gender,
+                racingGroup: r.racing_group,
+                fitness: r.endurance || r.fitness, climbing: r.climbing || '3',
+                skills: r.descending || r.skills, photo: r.photo, notes: r.notes,
+                archived: r.archived || false
+            };
+        });
+
+        allRoutes = (routesRes.data || []).map(r => ({
+            id: r.id, name: r.name, description: r.description,
+            distance: r.distance, elevation: r.elevation,
+            estimatedTime: r.estimated_time,
+            fitnessMin: r.fitness_min, fitnessMax: r.fitness_max,
+            stravaUrl: r.strava_url, startLocation: r.start_location
+        }));
+
+        // Find ride for target date
+        const rideRow = (ridesRes.data || []).find(r => !r.deleted);
+        if (rideRow) {
+            ride = mapRide(rideRow);
+        }
+
+        renderPage();
+    } catch (err) {
+        console.error('Load error:', err);
+        document.getElementById('loading').textContent = 'Error loading data. Check console.';
+    }
+}
+
+function mapRide(row) {
+    const r = {
+        id: row.id, date: row.date, time: row.start_time || '',
+        endTime: row.end_time || '', description: row.description || '',
+        meetLocation: row.meet_location || '', goals: row.goals || '',
+        groups: Array.isArray(row.groups) ? row.groups : [],
+        availableCoaches: row.available_coaches || [],
+        availableRiders: row.available_riders || [],
+        cancelled: row.cancelled || false,
+        publishedGroups: row.published_groups || false,
+        visibleSkills: null,
+        globalGroupSort: 'pace'
+    };
+    // Merge settings
+    if (row.settings && typeof row.settings === 'object') {
+        for (const [k, v] of Object.entries(row.settings)) {
+            if (k === 'availableRiders' || k === 'availableCoaches') continue;
+            r[k] = v;
+        }
+    }
+    // Restore color names
+    if (Array.isArray(r.groups) && row.settings) {
+        const colorMap = row.settings._groupColorNames || null;
+        const colorByIndex = Array.isArray(row.settings._groupColorNamesByIndex) ? row.settings._groupColorNamesByIndex : null;
+        r.groups.forEach((g, i) => {
+            if (!g || g.colorName) return;
+            if (colorMap && g.id != null && colorMap[g.id]) g.colorName = colorMap[g.id];
+            else if (colorByIndex && i < colorByIndex.length && colorByIndex[i]) g.colorName = colorByIndex[i];
+        });
+    }
+    return r;
+}
+
+// ─── Rendering ───
+function renderPage() {
+    document.getElementById('loading').style.display = 'none';
+    const content = document.getElementById('content');
+    content.style.display = 'block';
+
+    if (!ride || ride.cancelled) {
+        content.innerHTML = '<div class="no-ride"><h2>No practice planned for April 1</h2><p>Check the main Practice Planner to create a ride for this date.</p></div>';
+        return;
+    }
+
+    if (!ride.groups || ride.groups.length === 0) {
+        content.innerHTML = '<div class="no-ride"><h2>Practice found but no groups created yet</h2><p>Use the main Practice Planner to create groups for this ride.</p></div>';
+        return;
+    }
+
+    const rideDate = new Date(ride.date + 'T12:00:00');
+    const dateDisplay = rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    let timeDisplay = '';
+    if (ride.time) {
+        timeDisplay = formatTime(ride.time);
+        if (ride.endTime) timeDisplay += ' - ' + formatTime(ride.endTime);
+    }
+    const goals = (ride.goals || '').trim();
+
+    let html = `
+        <div class="ride-info">
+            <h2>${esc(dateDisplay)}</h2>
+            <div class="meta">
+                ${timeDisplay ? '<div>🕐 ' + esc(timeDisplay) + '</div>' : ''}
+                ${ride.meetLocation ? '<div>📍 ' + esc(ride.meetLocation) + '</div>' : ''}
+            </div>
+            ${goals ? '<div class="goals"><strong>Goals:</strong> ' + esc(goals) + '</div>' : ''}
+        </div>
+        <div class="edit-hint">💡 Double-click any coach name to rename them (visual only — changes are NOT saved)</div>
+        <div class="groups-grid" id="groups-grid">
+            ${ride.groups.map((g, i) => renderGroupCard(g, i)).join('')}
+        </div>
+        <div class="actions">
+            <button class="btn btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
+        </div>
+    `;
+
+    content.innerHTML = html;
+}
+
+function renderGroupCard(group, index) {
+    const groupLabel = group.colorName
+        ? group.colorName + ' Group' + (group.label ? ' (' + group.label.replace(/\D/g, '') + ')' : '')
+        : (group.label || 'Group ' + (index + 1)) + (group.customName ? ' (' + esc(group.customName) + ')' : '');
+
+    // Coaches
+    const coachesList = [];
+    if (group.coaches) {
+        if (group.coaches.leader) { const c = getCoach(group.coaches.leader); if (c) coachesList.push({ coach: c, role: 'Leader' }); }
+        if (group.coaches.sweep) { const c = getCoach(group.coaches.sweep); if (c) coachesList.push({ coach: c, role: 'Sweep' }); }
+        if (group.coaches.roam) { const c = getCoach(group.coaches.roam); if (c) coachesList.push({ coach: c, role: 'Roam' }); }
+        if (Array.isArray(group.coaches.extraRoam)) {
+            group.coaches.extraRoam.forEach(id => { const c = getCoach(id); if (c) coachesList.push({ coach: c, role: 'Roam' }); });
+        }
+    }
+
+    const coachFirstNames = coachesList.map(({ coach }) => (coach.name || '').split(/\s+/)[0]).filter(Boolean).join(', ');
+
+    const coachesHtml = coachesList.length > 0
+        ? coachesList.map(({ coach, role }) => {
+            const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
+            const levelNum = parseInt(levelRaw || '1', 10);
+            const levelDisplay = levelRaw === 'N/A' ? 'N/A' : 'L' + levelNum;
+            let levelBg = '#777', levelFg = '#fff';
+            if (levelNum === 2) { levelBg = '#ccc'; levelFg = '#333'; }
+            else if (levelNum >= 3) { levelBg = '#f9a825'; levelFg = '#333'; }
+
+            const bikeMode = ride.coachBikeMode && ride.coachBikeMode[coach.id];
+            const isEbike = bikeMode === 'electric' || (!bikeMode && coach.bikePrimary === 'electric');
+            const bikeBadge = isEbike ? '<span class="bike-badge">⚡</span>' : '';
+
+            return `<div class="coach-inline-item">
+                <div class="coach-name-wrap">
+                    <span class="coach-name" data-coach-id="${coach.id}" ondblclick="editCoachName(this)" title="Double-click to rename">${esc(coach.name)}</span>
+                    <span class="coach-level-badge" style="background:${levelBg};color:${levelFg};">${levelDisplay}</span>
+                    ${bikeBadge}
+                </div>
+                <span class="coach-role-badge">${role}</span>
+            </div>`;
+        }).join('')
+        : '<div style="color:#999;font-size:12px;padding:4px;">No coaches assigned</div>';
+
+    // Riders
+    const availableSet = new Set((ride.availableRiders || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id));
+    const riderObjects = (group.riders || []).map(id => getRider(id)).filter(Boolean)
+        .sort((a, b) => {
+            const ap = parseInt(a.fitness || '5', 10);
+            const bp = parseInt(b.fitness || '5', 10);
+            if (bp !== ap) return bp - ap;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+
+    const visibleSkills = ride.visibleSkills || ['pace'];
+    const attendingCount = riderObjects.filter(r => availableSet.has(r.id)).length;
+
+    // Fitness range
+    const fitnesses = riderObjects.filter(r => availableSet.has(r.id)).map(r => parseInt(r.fitness || '5', 10));
+    let fitnessRange = '';
+    if (fitnesses.length > 0) {
+        const min = Math.min(...fitnesses);
+        const max = Math.max(...fitnesses);
+        fitnessRange = min === max ? ' ❤' + min : ' ❤' + min + '-' + max;
+    }
+
+    const ridersHtml = riderObjects.length > 0
+        ? riderObjects.map(rider => {
+            const isAvail = availableSet.has(rider.id);
+            const cls = isAvail ? 'rider-item' : 'rider-item unavailable';
+            const badges = [];
+            if (visibleSkills.includes('pace') && rider.fitness) badges.push('❤' + rider.fitness);
+            if (visibleSkills.includes('climbing') && rider.climbing) badges.push('◢' + rider.climbing);
+            if (visibleSkills.includes('skills') && rider.skills) badges.push('◣' + rider.skills);
+            const badgesHtml = badges.map(b => '<span class="skill-badge">' + b + '</span>').join('');
+            const name = rider.nickname || rider.name || 'Rider';
+            return `<div class="${cls}"><span class="rider-name">${esc(name)}</span><div class="rider-badges">${badgesHtml}</div></div>`;
+        }).join('')
+        : '<div style="color:#999;font-size:12px;padding:4px;">No riders assigned</div>';
+
+    // Route
+    const route = group.routeId ? getRoute(group.routeId) : null;
+    const routeName = route ? esc(route.name) : (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : '— No route —');
+
+    return `
+        <div class="group-card" data-group-id="${group.id}">
+            <div class="group-header">
+                <span>${esc(groupLabel)}</span>
+            </div>
+            <div class="group-body">
+                <div style="margin-bottom:4px;">
+                    <div class="section-header">
+                        <span>Coaches${coachFirstNames ? ': ' + esc(coachFirstNames) : ''}</span>
+                    </div>
+                    <div style="margin-top:2px;">${coachesHtml}</div>
+                </div>
+                <div style="margin-bottom:4px;flex:1;">
+                    <div class="section-header">
+                        <span>Riders: ${attendingCount}${fitnessRange}</span>
+                    </div>
+                    <div style="margin-top:2px;">${ridersHtml}</div>
+                </div>
+                <div class="route-bar">
+                    <div class="route-display">${routeName}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ─── Coach Name Editing ───
+function editCoachName(el) {
+    el.setAttribute('contenteditable', 'true');
+    el.focus();
+    // Select all text
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    function finishEdit() {
+        el.removeAttribute('contenteditable');
+        el.removeEventListener('blur', finishEdit);
+        el.removeEventListener('keydown', onKey);
+        const coachId = parseInt(el.dataset.coachId, 10);
+        const newName = el.textContent.trim();
+        if (newName && coachId) {
+            customCoachNames[coachId] = newName;
+        }
+        // Re-render to update coach first names in section headers
+        renderPage();
+    }
+
+    function onKey(e) {
+        if (e.key === 'Enter') { e.preventDefault(); finishEdit(); }
+        if (e.key === 'Escape') { el.removeAttribute('contenteditable'); el.removeEventListener('blur', finishEdit); el.removeEventListener('keydown', onKey); }
+    }
+
+    el.addEventListener('blur', finishEdit);
+    el.addEventListener('keydown', onKey);
+}
+
+// ─── PDF Export ───
+function exportPDF() {
+    if (!ride || !ride.groups || ride.groups.length === 0) {
+        alert('No groups to export.');
+        return;
+    }
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const rideDate = new Date(ride.date + 'T12:00:00');
+        const dateDisplay = rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        let timeDisplay = '';
+        if (ride.time) {
+            timeDisplay = formatTime(ride.time);
+            if (ride.endTime) timeDisplay += ' - ' + formatTime(ride.endTime);
+        }
+        const goals = (ride.goals || '').trim();
+
+        // Mobile-friendly single-page PDF
+        const pw = 90, margin = 8, maxW = pw - margin * 2;
+
+        // Measure height
+        const tmp = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pw, 5000] });
+        let h = margin + 6 + 7 + 5;
+        if (timeDisplay) h += 5;
+        if (ride.meetLocation) h += 5;
+        if (goals) { h += 8; tmp.setFontSize(9); h += tmp.splitTextToSize(goals, maxW).length * 5; }
+        h += 5;
+
+        ride.groups.forEach(group => {
+            h += 6;
+            const coaches = getGroupCoachesList(group);
+            h += 5 + Math.max(coaches.length, 1) * 5 + 2;
+            const riders = (group.riders || []).map(id => getRider(id)).filter(Boolean);
+            h += 5 + Math.max(riders.length, 1) * 5;
+            const route = group.routeId ? getRoute(group.routeId) : null;
+            if (route || group.routeId === 'leader-choice') { h += 7; tmp.setFontSize(11); h += tmp.splitTextToSize(route ? route.name : "Ride Leader's Choice", maxW).length * 4.4 + 2; }
+            h += 8;
+        });
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pw, h + 10] });
+        let y = margin;
+
+        doc.setFontSize(16); doc.setFont(undefined, 'bold');
+        doc.text('Tam High MTB Team', margin, y); y += 6;
+        doc.setFontSize(14);
+        doc.text('Group Assignments', margin, y); y += 7;
+        doc.setFontSize(10); doc.setFont(undefined, 'normal');
+        doc.text('Date: ' + dateDisplay, margin, y); y += 5;
+        if (timeDisplay) { doc.text('Time: ' + timeDisplay, margin, y); y += 5; }
+        if (ride.meetLocation) { doc.text('Location: ' + ride.meetLocation, margin, y); y += 5; }
+        if (goals) {
+            y += 3; doc.setFont(undefined, 'bold'); doc.text('Practice Goals:', margin, y); y += 5;
+            doc.setFont(undefined, 'normal'); doc.setFontSize(9);
+            const gl = doc.splitTextToSize(goals, maxW); doc.text(gl, margin, y); y += gl.length * 5;
+            doc.setFontSize(10);
+        }
+        y += 5;
+
+        ride.groups.forEach((group, i) => {
+            const label = group.colorName
+                ? group.colorName + ' Group'
+                : (group.label || 'Group ' + (i + 1));
+
+            doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.setTextColor(33, 150, 243);
+            doc.text(label, margin, y); y += 6;
+
+            const coaches = getGroupCoachesList(group);
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
+            doc.text('Ride Leaders:', margin, y); y += 5;
+            doc.setFont(undefined, 'normal'); doc.setFontSize(11);
+            if (coaches.length > 0) {
+                coaches.forEach(({ coach, role }) => {
+                    const bikeMode = ride.coachBikeMode && ride.coachBikeMode[coach.id];
+                    const isEbike = bikeMode === 'electric' || (!bikeMode && coach.bikePrimary === 'electric');
+                    doc.text((coach.name || 'Coach') + (isEbike ? ' (e-bike)' : '') + ' (' + role + ')', margin, y);
+                    y += 5;
+                });
+            } else { doc.text('No coaches assigned', margin, y); y += 5; }
+            y += 2;
+
+            const riders = (group.riders || []).map(id => getRider(id)).filter(Boolean);
+            doc.setFontSize(9); doc.setFont(undefined, 'bold');
+            doc.text('Riders (' + riders.length + '):', margin, y); y += 5;
+            doc.setFont(undefined, 'normal'); doc.setFontSize(11);
+            if (riders.length > 0) {
+                riders.forEach(r => { doc.text(r.nickname || r.name || 'Rider', margin, y); y += 5; });
+            } else { doc.text('No riders assigned', margin, y); y += 5; }
+
+            const route = group.routeId ? getRoute(group.routeId) : null;
+            const routeLabel = route ? route.name : (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
+            if (routeLabel) {
+                y += 2; doc.setFontSize(9); doc.setFont(undefined, 'bold');
+                doc.text('Route:', margin, y); y += 5;
+                doc.setFont(undefined, 'normal'); doc.setFontSize(11);
+                const rl = doc.splitTextToSize(routeLabel, maxW); doc.text(rl, margin, y); y += rl.length * 4.4 + 2;
+            }
+
+            y += 8;
+        });
+
+        doc.save('practice-groups-april-1.pdf');
+    } catch (err) {
+        console.error('PDF error:', err);
+        alert('Error generating PDF: ' + err.message);
+    }
+}
+
+function getGroupCoachesList(group) {
+    const list = [];
+    if (group.coaches) {
+        if (group.coaches.leader) { const c = getCoach(group.coaches.leader); if (c) list.push({ coach: c, role: 'Leader' }); }
+        if (group.coaches.sweep) { const c = getCoach(group.coaches.sweep); if (c) list.push({ coach: c, role: 'Sweep' }); }
+        if (group.coaches.roam) { const c = getCoach(group.coaches.roam); if (c) list.push({ coach: c, role: 'Roam' }); }
+        if (Array.isArray(group.coaches.extraRoam)) {
+            group.coaches.extraRoam.forEach(id => { const c = getCoach(id); if (c) list.push({ coach: c, role: 'Roam' }); });
+        }
+    }
+    return list;
+}
+
+// ─── Helpers ───
+function formatTime(t) {
+    if (!t) return '';
+    const parts = t.split(':');
+    let h = parseInt(parts[0], 10);
+    const m = parts[1] || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return h + ':' + m + ' ' + ampm;
+}
+</script>
+</body>
+</html>
