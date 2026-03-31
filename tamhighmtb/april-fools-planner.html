@@ -79,6 +79,8 @@
         .coach-slot .coach-name-wrap { flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden; }
         .coach-slot .coach-name { color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
         .coach-slot .coach-name[contenteditable="true"] { cursor: text; background: rgba(255,255,255,0.15); border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
+        .group-title[contenteditable="true"] { cursor: text; background: rgba(255,255,255,0.2); border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
+        .rider-name[contenteditable="true"] { cursor: text; background: #e3f2fd; border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
         .coach-role-badge { background: #e3f2fd; color: #535353; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; white-space: nowrap; flex-shrink: 0; }
         .coach-level-badge { font-size: 11px; padding: 2px 6px; font-weight: 600; margin-left: 4px; border-radius: 4px; flex-shrink: 0; }
         .coach-remove { background: none; border: none; color: rgba(255,255,255,0.6); font-size: 16px; cursor: pointer; padding: 0 4px; margin-left: 4px; flex-shrink: 0; }
@@ -163,7 +165,7 @@
                 </div>
             </div>
             <div class="center">
-                <div class="edit-hint">💡 Double-click any coach name to rename them (visual only — changes are NOT saved to the database)</div>
+                <div class="edit-hint">💡 Double-click any group name, coach name, or rider name to rename them — changes auto-save and persist across sessions</div>
                 <div class="groups-grid" id="groups-grid"></div>
             </div>
         </div>
@@ -186,7 +188,10 @@ let allRoutes = [];
 let groups = [];          // Array of group objects
 let nextGroupId = 1;
 const customCoachNames = {};   // coachId → display name override
+const customRiderNames = {};   // riderId → display name override
+const customGroupNames = {};   // groupId → display name override
 let dragData = null;           // { type: 'coach'|'rider', id: number }
+const SAVE_KEY = 'april_fools_planner';  // Supabase season_settings key
 
 function esc(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
 function getCoach(id) {
@@ -195,7 +200,12 @@ function getCoach(id) {
     if (customCoachNames[id]) return { ...c, name: customCoachNames[id] };
     return c;
 }
-function getRider(id) { return allRiders.find(r => r.id === id) || null; }
+function getRider(id) {
+    const r = allRiders.find(r => r.id === id);
+    if (!r) return null;
+    if (customRiderNames[id]) return { ...r, name: customRiderNames[id], nickname: '' };
+    return r;
+}
 function getRoute(id) { return allRoutes.find(r => String(r.id) === String(id)) || null; }
 function coachFirstName(c) { return (c.name || '').split(/\s+/)[0]; }
 function formatTime(t) {
@@ -272,12 +282,79 @@ async function loadData() {
             stravaUrl: r.strava_url, startLocation: r.start_location
         }));
 
+        // Load saved planner state from Supabase
+        await loadSavedState();
+
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
         render();
     } catch (err) {
         console.error('Load error:', err);
         document.getElementById('loading').textContent = 'Error loading data. Check console.';
+    }
+}
+
+// ─── Save/Load from Supabase (season_settings.settings._aprilFoolsPlanner) ───
+let _saveTimeout = null;
+
+function autoSave() {
+    // Debounce: save 1s after last change
+    if (_saveTimeout) clearTimeout(_saveTimeout);
+    _saveTimeout = setTimeout(() => { saveState(); }, 1000);
+}
+
+async function saveState() {
+    try {
+        // Read current season_settings row
+        const { data: row, error: readErr } = await client
+            .from('season_settings')
+            .select('id, settings')
+            .single();
+        if (readErr) { console.warn('Could not read season_settings for save:', readErr.message); return; }
+
+        const settings = (row && row.settings && typeof row.settings === 'object') ? { ...row.settings } : {};
+        settings._aprilFoolsPlanner = {
+            groups: groups,
+            nextGroupId: nextGroupId,
+            customCoachNames: customCoachNames,
+            customRiderNames: customRiderNames,
+            customGroupNames: customGroupNames,
+            savedAt: new Date().toISOString()
+        };
+
+        const { error: writeErr } = await client
+            .from('season_settings')
+            .update({ settings: settings })
+            .eq('id', row.id);
+
+        if (writeErr) console.warn('Save failed:', writeErr.message);
+        else console.log('April Fools planner state saved');
+    } catch (e) {
+        console.warn('Save error:', e);
+    }
+}
+
+async function loadSavedState() {
+    try {
+        const { data: row, error } = await client
+            .from('season_settings')
+            .select('settings')
+            .single();
+        if (error || !row || !row.settings) return;
+
+        const saved = row.settings._aprilFoolsPlanner;
+        if (!saved) return;
+
+        if (Array.isArray(saved.groups) && saved.groups.length > 0) {
+            groups = saved.groups;
+            nextGroupId = saved.nextGroupId || (Math.max(...groups.map(g => g.id)) + 1);
+            Object.assign(customCoachNames, saved.customCoachNames || {});
+            Object.assign(customRiderNames, saved.customRiderNames || {});
+            Object.assign(customGroupNames, saved.customGroupNames || {});
+            console.log('Restored April Fools planner state from', saved.savedAt);
+        }
+    } catch (e) {
+        console.warn('Load saved state error:', e);
     }
 }
 
@@ -290,23 +367,21 @@ function addGroup() {
         riders: [],
         routeId: null
     });
-    // Fix label
     groups[groups.length - 1].label = 'Group ' + groups.length;
-    render();
+    render(); autoSave();
 }
 
 function deleteGroup(groupId) {
     groups = groups.filter(g => g.id !== groupId);
-    // Re-label
     groups.forEach((g, i) => { g.label = 'Group ' + (i + 1); });
-    render();
+    render(); autoSave();
 }
 
 function clearAll() {
     if (groups.length === 0) return;
     if (!confirm('Clear all groups? Riders and coaches will return to the sidebar.')) return;
     groups = [];
-    render();
+    render(); autoSave();
 }
 
 // ─── Auto-Generate ───
@@ -348,7 +423,7 @@ function autoGenerate() {
         groups[i].coaches.roam = sortedCoaches[coachIdx++].id;
     }
 
-    render();
+    render(); autoSave();
 }
 
 // ─── Which coaches/riders are assigned? ───
@@ -395,38 +470,37 @@ function dropCoach(e, groupId, role) {
     // Assign to new slot
     const group = groups.find(g => g.id === groupId);
     if (group) group.coaches[role] = coachId;
-    render();
+    render(); autoSave();
 }
 
 function dropRider(e, groupId) {
     e.preventDefault(); e.currentTarget.classList.remove('drag-over');
     if (!dragData || dragData.type !== 'rider') return;
     const riderId = dragData.id;
-    // Remove from any existing group
     groups.forEach(g => { g.riders = g.riders.filter(id => id !== riderId); });
-    // Add to new group
     const group = groups.find(g => g.id === groupId);
     if (group) group.riders.push(riderId);
-    render();
+    render(); autoSave();
 }
 
 function removeCoach(groupId, role) {
     const group = groups.find(g => g.id === groupId);
     if (group) group.coaches[role] = null;
-    render();
+    render(); autoSave();
 }
 function removeRider(groupId, riderId) {
     const group = groups.find(g => g.id === groupId);
     if (group) group.riders = group.riders.filter(id => id !== riderId);
-    render();
+    render(); autoSave();
 }
 function setRoute(groupId, routeId) {
     const group = groups.find(g => g.id === groupId);
     if (group) group.routeId = routeId || null;
+    autoSave();
 }
 
 // ─── Coach Name Editing ───
-function editCoachName(el) {
+function makeEditable(el, onSave) {
     el.setAttribute('contenteditable', 'true');
     el.focus();
     const range = document.createRange();
@@ -438,10 +512,9 @@ function editCoachName(el) {
         el.removeAttribute('contenteditable');
         el.removeEventListener('blur', finish);
         el.removeEventListener('keydown', onKey);
-        const coachId = parseInt(el.dataset.coachId, 10);
-        const newName = el.textContent.trim();
-        if (newName && coachId) customCoachNames[coachId] = newName;
+        onSave(el.textContent.trim());
         render();
+        autoSave();
     }
     function onKey(e) {
         if (e.key === 'Enter') { e.preventDefault(); finish(); }
@@ -449,6 +522,25 @@ function editCoachName(el) {
     }
     el.addEventListener('blur', finish);
     el.addEventListener('keydown', onKey);
+}
+
+function editCoachName(el) {
+    makeEditable(el, function(name) {
+        const id = parseInt(el.dataset.coachId, 10);
+        if (name && id) customCoachNames[id] = name;
+    });
+}
+function editRiderName(el) {
+    makeEditable(el, function(name) {
+        const id = parseInt(el.dataset.riderId, 10);
+        if (name && id) customRiderNames[id] = name;
+    });
+}
+function editGroupName(el) {
+    makeEditable(el, function(name) {
+        const id = parseInt(el.dataset.groupId, 10);
+        if (name && id) customGroupNames[id] = name;
+    });
 }
 
 // ─── Rendering ───
@@ -552,7 +644,7 @@ function renderGroups() {
             ? riderObjects.map(r => {
                 const name = r.nickname || r.name || 'Rider';
                 return `<div class="rider-item" draggable="true" ondragstart="onDragStart(event,'rider',${r.id})" ondragend="onDragEnd(event)">
-                    <span class="rider-name">${esc(name)}</span>
+                    <span class="rider-name" data-rider-id="${r.id}" ondblclick="editRiderName(this)" title="Double-click to rename" style="cursor:default;">${esc(name)}</span>
                     <div class="rider-badges">
                         ${r.fitness ? '<span class="skill-badge">❤' + r.fitness + '</span>' : ''}
                         ${r.climbing ? '<span class="skill-badge">◢' + r.climbing + '</span>' : ''}
@@ -566,9 +658,10 @@ function renderGroups() {
         const routeOptions = '<option value="">— Select Route —</option><option value="leader-choice"' + (g.routeId === 'leader-choice' ? ' selected' : '') + '>Ride Leader\'s Choice</option>'
             + allRoutes.map(r => '<option value="' + r.id + '"' + (String(g.routeId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
 
+        const groupDisplayName = customGroupNames[g.id] || g.label;
         return `<div class="group-card" data-group-id="${g.id}">
             <div class="group-header">
-                <span>${esc(g.label)}</span>
+                <span class="group-title" data-group-id="${g.id}" ondblclick="editGroupName(this)" title="Double-click to rename" style="cursor:default;">${esc(groupDisplayName)}</span>
                 <div class="group-actions">
                     <button onclick="deleteGroup(${g.id})" title="Delete group">🗑</button>
                 </div>
@@ -626,7 +719,7 @@ function exportPDF() {
 
         groups.forEach((g, i) => {
             doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.setTextColor(33, 150, 243);
-            doc.text(g.label, margin, y); y += 6;
+            doc.text(customGroupNames[g.id] || g.label, margin, y); y += 6;
 
             const coaches = getGroupCoachesList(g);
             doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
