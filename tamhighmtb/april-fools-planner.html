@@ -22,65 +22,98 @@
         #login-error { color: #d32f2f; font-size: 13px; margin-top: 8px; display: none; }
 
         /* Header */
-        .header { background: #1976d2; color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .header { background: #1976d2; color: #fff; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
         .header h1 { font-size: 20px; font-weight: 600; }
-        .header-info { font-size: 14px; opacity: 0.9; }
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .header-actions button { padding: 8px 16px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.15); color: #fff; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .header-actions button:hover { background: rgba(255,255,255,0.25); }
+        .header-actions .btn-add { background: #4CAF50; border-color: #4CAF50; }
+        .header-actions .btn-add:hover { background: #43A047; }
+        .header-actions .btn-auto { background: #FF9800; border-color: #FF9800; }
+        .header-actions .btn-auto:hover { background: #F57C00; }
+        .header-actions .btn-pdf { background: #7B1FA2; border-color: #7B1FA2; }
+        .header-actions .btn-pdf:hover { background: #6A1B9A; }
+        .header-actions .btn-clear { background: #f44336; border-color: #f44336; }
+        .header-actions .btn-clear:hover { background: #e53935; }
 
-        /* Main */
-        .main { max-width: 1400px; margin: 0 auto; padding: 24px; }
-        .ride-info { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-        .ride-info h2 { font-size: 20px; color: #1976d2; margin-bottom: 8px; }
-        .ride-info .meta { font-size: 14px; color: #666; line-height: 1.6; }
-        .ride-info .goals { margin-top: 12px; padding: 12px; background: #f9f9f9; border-radius: 6px; font-size: 14px; }
+        /* Layout */
+        .layout { display: flex; gap: 16px; padding: 16px; max-width: 1800px; margin: 0 auto; }
+        .sidebar { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+        .center { flex: 1; min-width: 0; }
+
+        /* Sidebar panels */
+        .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+        .panel-header { padding: 10px 12px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; font-weight: 600; font-size: 13px; color: #555; display: flex; align-items: center; justify-content: space-between; }
+        .panel-body { padding: 4px; max-height: 45vh; overflow-y: auto; }
+
+        /* Sidebar coach/rider items */
+        .sidebar-item { display: flex; align-items: center; padding: 5px 8px; margin: 2px 0; border-radius: 4px; font-size: 13px; cursor: grab; user-select: none; transition: background 0.15s; }
+        .sidebar-item:hover { background: #e3f2fd; }
+        .sidebar-item.dragging { opacity: 0.4; }
+        .sidebar-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-item .badge { font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: 4px; white-space: nowrap; flex-shrink: 0; }
+        .badge-pace { background: #e3f2fd; color: #1976d2; }
+        .badge-level { background: #777; color: #fff; font-weight: 600; }
+        .badge-level.l2 { background: #ccc; color: #333; }
+        .badge-level.l3 { background: #f9a825; color: #333; }
 
         /* Groups grid */
-        .groups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+        .groups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
 
         /* Group card */
         .group-card { background: #b8b8b8; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .group-header { background: #2196F3; color: #fff; padding: 8px 12px; font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
+        .group-header .group-actions { display: flex; gap: 4px; }
+        .group-header button { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: #fff; border-radius: 4px; cursor: pointer; padding: 2px 8px; font-size: 14px; font-weight: 700; }
         .group-body { padding: 8px 12px; flex: 1; display: flex; flex-direction: column; }
 
         /* Section headers */
-        .section-header { cursor: pointer; padding: 2px 0; display: flex; align-items: center; justify-content: space-between; user-select: none; border-bottom: 1px solid #ddd; margin-bottom: 2px; }
+        .section-header { padding: 2px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #ddd; margin-bottom: 2px; }
         .section-header span:first-child { font-weight: 600; font-size: 13px; color: #555; }
-        .section-header span:last-child { font-size: 11px; color: #999; }
 
-        /* Coach inline item */
-        .coach-inline-item { display: flex; align-items: center; padding: 0 4px 2px 4px; border-radius: 4px; background: #535353; width: 100%; height: 30px; flex-shrink: 0; margin-bottom: 1px; }
-        .coach-name-wrap { flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden; }
-        .coach-name { color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
-        .coach-name[contenteditable="true"] { cursor: text; background: rgba(255,255,255,0.15); border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
+        /* Coach slot */
+        .coach-slot { display: flex; align-items: center; margin-bottom: 1px; min-height: 30px; }
+        .coach-slot.filled { padding: 0 4px; border-radius: 4px; background: #535353; width: 100%; height: 30px; }
+        .coach-slot.empty { padding: 4px 8px; border-radius: 4px; border: 2px dashed #ccc; background: #fff; width: 100%; }
+        .coach-slot.empty.drag-over { border-color: #2196F3; background: #e3f2fd; }
+        .coach-slot .coach-name-wrap { flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden; }
+        .coach-slot .coach-name { color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+        .coach-slot .coach-name[contenteditable="true"] { cursor: text; background: rgba(255,255,255,0.15); border-radius: 3px; padding: 0 4px; outline: none; min-width: 60px; }
         .coach-role-badge { background: #e3f2fd; color: #535353; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; white-space: nowrap; flex-shrink: 0; }
         .coach-level-badge { font-size: 11px; padding: 2px 6px; font-weight: 600; margin-left: 4px; border-radius: 4px; flex-shrink: 0; }
-        .bike-badge { font-size: 11px; margin-left: 2px; flex-shrink: 0; }
+        .coach-remove { background: none; border: none; color: rgba(255,255,255,0.6); font-size: 16px; cursor: pointer; padding: 0 4px; margin-left: 4px; flex-shrink: 0; }
+        .coach-remove:hover { color: #ff5252; }
+        .empty-slot-label { color: #999; font-size: 12px; font-style: italic; }
 
-        /* Rider item */
-        .rider-item { display: flex; align-items: center; padding: 3px 6px; background: #fff; border-radius: 4px; margin-bottom: 1px; font-size: 13px; min-height: 26px; }
-        .rider-item.unavailable { color: #999; font-style: italic; text-decoration: line-through; opacity: 0.75; }
+        /* Rider drop zone */
+        .rider-zone { min-height: 40px; padding: 2px 0; }
+        .rider-zone.drag-over { background: rgba(33,150,243,0.08); border-radius: 4px; }
+        .rider-item { display: flex; align-items: center; padding: 3px 6px; background: #fff; border-radius: 4px; margin-bottom: 1px; font-size: 13px; min-height: 26px; cursor: grab; user-select: none; }
+        .rider-item:hover { background: #f0f0f0; }
+        .rider-item.dragging { opacity: 0.4; }
         .rider-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .rider-badges { display: flex; gap: 3px; margin-left: 4px; flex-shrink: 0; }
         .skill-badge { font-size: 11px; padding: 1px 5px; border-radius: 10px; background: #e3f2fd; color: #1976d2; font-weight: 500; white-space: nowrap; }
+        .rider-remove { background: none; border: none; color: #999; font-size: 14px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+        .rider-remove:hover { color: #f44336; }
 
         /* Route bar */
         .route-bar { margin-top: auto; padding-top: 8px; border-top: 1px solid #e0e0e0; }
-        .route-display { padding: 6px 10px; background: #1976d2; border-radius: 4px; font-weight: 600; font-size: 15px; color: #fff; }
+        .route-select { width: 100%; padding: 6px 10px; background: #1976d2; color: #fff; border: none; border-radius: 4px; font-weight: 600; font-size: 14px; cursor: pointer; appearance: none; -webkit-appearance: none; }
+        .route-select option { color: #333; background: #fff; }
 
-        /* Buttons */
-        .actions { display: flex; justify-content: center; gap: 12px; margin-top: 32px; padding-top: 20px; border-top: 1px solid #e0e0e0; flex-wrap: wrap; }
-        .btn { padding: 12px 24px; font-size: 16px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
-        .btn-pdf { background: #FF9800; }
-        .btn-pdf:hover { background: #F57C00; }
+        /* Edit hint */
+        .edit-hint { text-align: center; padding: 8px; background: #fff3e0; border-radius: 8px; font-size: 13px; color: #e65100; margin-bottom: 12px; }
 
-        /* No-ride state */
-        .no-ride { text-align: center; padding: 60px 20px; color: #666; }
-        .no-ride h2 { font-size: 22px; margin-bottom: 8px; }
+        /* Empty state */
+        .empty-groups { text-align: center; padding: 60px 20px; color: #999; }
+        .empty-groups h3 { margin-bottom: 8px; }
 
         /* Loading */
         #loading { text-align: center; padding: 60px; color: #666; font-size: 16px; }
 
-        /* Edit hint */
-        .edit-hint { text-align: center; margin-bottom: 16px; padding: 10px; background: #fff3e0; border-radius: 8px; font-size: 13px; color: #e65100; }
+        /* Bike badge */
+        .bike-badge { font-size: 11px; margin-left: 2px; flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -99,15 +132,41 @@
     </form>
 </div>
 
-<!-- App (hidden until login) -->
+<!-- App -->
 <div id="app" style="display: none;">
     <div class="header">
         <h1>🚴 Practice Planner — Wednesday April 1</h1>
-        <div class="header-info" id="header-user"></div>
+        <div class="header-actions">
+            <button class="btn-add" onclick="addGroup()">+ Add Group</button>
+            <button class="btn-auto" onclick="autoGenerate()">⚡ Auto-Generate</button>
+            <button class="btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
+            <button class="btn-clear" onclick="clearAll()">🗑 Clear All</button>
+        </div>
     </div>
-    <div class="main">
-        <div id="loading">Loading practice data…</div>
-        <div id="content" style="display: none;"></div>
+    <div id="loading">Loading roster data…</div>
+    <div id="content" style="display: none;">
+        <div class="layout">
+            <div class="sidebar" id="sidebar">
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>Coaches</span>
+                        <span id="unassigned-coach-count"></span>
+                    </div>
+                    <div class="panel-body" id="coach-pool"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>Riders</span>
+                        <span id="unassigned-rider-count"></span>
+                    </div>
+                    <div class="panel-body" id="rider-pool"></div>
+                </div>
+            </div>
+            <div class="center">
+                <div class="edit-hint">💡 Double-click any coach name to rename them (visual only — changes are NOT saved to the database)</div>
+                <div class="groups-grid" id="groups-grid"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -115,56 +174,53 @@
 // ─── Config ───
 const SUPABASE_URL = 'https://kweharxfvvjwrnswrooo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3ZWhhcnhmdnZqd3Juc3dyb29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzE4MjMsImV4cCI6MjA4Mjk0NzgyM30.Iavt0VPPppAZGJQci_1jdIeV16MuCOkF-4zKvR3XgiY';
-const TARGET_DATE = '2026-04-01';
 
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true }
 });
 
-// ─── State ───
+// ─── State (all local, never written to DB) ───
 let allCoaches = [];
 let allRiders = [];
 let allRoutes = [];
-let ride = null;
-// Track custom coach names (keyed by coach ID) — visual only
-const customCoachNames = {};
+let groups = [];          // Array of group objects
+let nextGroupId = 1;
+const customCoachNames = {};   // coachId → display name override
+let dragData = null;           // { type: 'coach'|'rider', id: number }
 
-function esc(str) {
-    const d = document.createElement('div');
-    d.textContent = str || '';
-    return d.innerHTML;
-}
-
+function esc(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
 function getCoach(id) {
     const c = allCoaches.find(c => c.id === id);
     if (!c) return null;
-    // Return with custom name override if set
     if (customCoachNames[id]) return { ...c, name: customCoachNames[id] };
     return c;
 }
 function getRider(id) { return allRiders.find(r => r.id === id) || null; }
 function getRoute(id) { return allRoutes.find(r => String(r.id) === String(id)) || null; }
+function coachFirstName(c) { return (c.name || '').split(/\s+/)[0]; }
+function formatTime(t) {
+    if (!t) return '';
+    const parts = t.split(':');
+    let h = parseInt(parts[0], 10), m = parts[1] || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12; if (h === 0) h = 12;
+    return h + ':' + m + ' ' + ampm;
+}
 
 // ─── Login ───
 async function handleLogin(e) {
     e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
     const errEl = document.getElementById('login-error');
     errEl.style.display = 'none';
-
-    const { error } = await client.auth.signInWithPassword({ email, password });
-    if (error) {
-        errEl.textContent = error.message;
-        errEl.style.display = 'block';
-        return;
-    }
+    const { error } = await client.auth.signInWithPassword({
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+    });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     loadData();
 }
-
-// Check existing session
 client.auth.getSession().then(({ data: { session } }) => {
     if (session) {
         document.getElementById('login-screen').style.display = 'none';
@@ -173,22 +229,16 @@ client.auth.getSession().then(({ data: { session } }) => {
     }
 });
 
-// ─── Data Loading ───
+// ─── Data Loading (READ-ONLY) ───
 async function loadData() {
     try {
-        const [ridesRes, coachesRes, ridersRes, routesRes, userRes] = await Promise.all([
-            client.from('rides').select('*').eq('date', TARGET_DATE),
+        const [coachesRes, ridersRes, routesRes] = await Promise.all([
             client.from('coaches').select('*').order('name'),
             client.from('riders').select('*').order('name'),
-            client.from('routes').select('*').order('name'),
-            client.auth.getUser()
+            client.from('routes').select('*').order('name')
         ]);
 
-        if (userRes.data?.user) {
-            document.getElementById('header-user').textContent = userRes.data.user.email;
-        }
-
-        allCoaches = (coachesRes.data || []).map(c => {
+        allCoaches = (coachesRes.data || []).filter(c => !c.archived).map(c => {
             const extra = c.extra_data && typeof c.extra_data === 'object' ? c.extra_data : {};
             return {
                 ...extra, id: c.id, name: c.name, nickname: c.nickname || '',
@@ -197,17 +247,16 @@ async function loadData() {
                 fitness: c.endurance || c.fitness, climbing: c.climbing || '3',
                 skills: c.descending || c.skills, photo: c.photo, notes: c.notes,
                 user_id: c.user_id,
-                bikeManual: c.bike_manual !== false,
-                bikeElectric: !!c.bike_electric,
-                bikePrimary: c.bike_primary || 'manual',
-                archived: c.archived || false
+                bikeManual: c.bike_manual !== false, bikeElectric: !!c.bike_electric,
+                bikePrimary: c.bike_primary || 'manual', archived: c.archived || false
             };
         });
 
-        allRiders = (ridersRes.data || []).map(r => {
+        allRiders = (ridersRes.data || []).filter(r => !r.archived).map(r => {
             const extra = r.extra_data && typeof r.extra_data === 'object' ? r.extra_data : {};
             return {
                 ...extra, id: r.id, name: r.name, nickname: r.nickname || '',
+                firstName: r.name ? r.name.trim().split(/\s+/)[0] : '',
                 phone: r.phone, email: r.email, grade: r.grade, gender: r.gender,
                 racingGroup: r.racing_group,
                 fitness: r.endurance || r.fitness, climbing: r.climbing || '3',
@@ -219,281 +268,348 @@ async function loadData() {
         allRoutes = (routesRes.data || []).map(r => ({
             id: r.id, name: r.name, description: r.description,
             distance: r.distance, elevation: r.elevation,
-            estimatedTime: r.estimated_time,
             fitnessMin: r.fitness_min, fitnessMax: r.fitness_max,
             stravaUrl: r.strava_url, startLocation: r.start_location
         }));
 
-        // Find ride for target date
-        const rideRow = (ridesRes.data || []).find(r => !r.deleted);
-        if (rideRow) {
-            ride = mapRide(rideRow);
-        }
-
-        renderPage();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        render();
     } catch (err) {
         console.error('Load error:', err);
         document.getElementById('loading').textContent = 'Error loading data. Check console.';
     }
 }
 
-function mapRide(row) {
-    const r = {
-        id: row.id, date: row.date, time: row.start_time || '',
-        endTime: row.end_time || '', description: row.description || '',
-        meetLocation: row.meet_location || '', goals: row.goals || '',
-        groups: Array.isArray(row.groups) ? row.groups : [],
-        availableCoaches: row.available_coaches || [],
-        availableRiders: row.available_riders || [],
-        cancelled: row.cancelled || false,
-        publishedGroups: row.published_groups || false,
-        visibleSkills: null,
-        globalGroupSort: 'pace'
-    };
-    // Merge settings
-    if (row.settings && typeof row.settings === 'object') {
-        for (const [k, v] of Object.entries(row.settings)) {
-            if (k === 'availableRiders' || k === 'availableCoaches') continue;
-            r[k] = v;
-        }
-    }
-    // Restore color names
-    if (Array.isArray(r.groups) && row.settings) {
-        const colorMap = row.settings._groupColorNames || null;
-        const colorByIndex = Array.isArray(row.settings._groupColorNamesByIndex) ? row.settings._groupColorNamesByIndex : null;
-        r.groups.forEach((g, i) => {
-            if (!g || g.colorName) return;
-            if (colorMap && g.id != null && colorMap[g.id]) g.colorName = colorMap[g.id];
-            else if (colorByIndex && i < colorByIndex.length && colorByIndex[i]) g.colorName = colorByIndex[i];
-        });
-    }
-    return r;
+// ─── Group Management ───
+function addGroup() {
+    groups.push({
+        id: nextGroupId++,
+        label: 'Group ' + groups.length + 1,
+        coaches: { leader: null, sweep: null, roam: null },
+        riders: [],
+        routeId: null
+    });
+    // Fix label
+    groups[groups.length - 1].label = 'Group ' + groups.length;
+    render();
 }
 
-// ─── Rendering ───
-function renderPage() {
-    document.getElementById('loading').style.display = 'none';
-    const content = document.getElementById('content');
-    content.style.display = 'block';
-
-    if (!ride || ride.cancelled) {
-        content.innerHTML = '<div class="no-ride"><h2>No practice planned for April 1</h2><p>Check the main Practice Planner to create a ride for this date.</p></div>';
-        return;
-    }
-
-    if (!ride.groups || ride.groups.length === 0) {
-        content.innerHTML = '<div class="no-ride"><h2>Practice found but no groups created yet</h2><p>Use the main Practice Planner to create groups for this ride.</p></div>';
-        return;
-    }
-
-    const rideDate = new Date(ride.date + 'T12:00:00');
-    const dateDisplay = rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-    let timeDisplay = '';
-    if (ride.time) {
-        timeDisplay = formatTime(ride.time);
-        if (ride.endTime) timeDisplay += ' - ' + formatTime(ride.endTime);
-    }
-    const goals = (ride.goals || '').trim();
-
-    let html = `
-        <div class="ride-info">
-            <h2>${esc(dateDisplay)}</h2>
-            <div class="meta">
-                ${timeDisplay ? '<div>🕐 ' + esc(timeDisplay) + '</div>' : ''}
-                ${ride.meetLocation ? '<div>📍 ' + esc(ride.meetLocation) + '</div>' : ''}
-            </div>
-            ${goals ? '<div class="goals"><strong>Goals:</strong> ' + esc(goals) + '</div>' : ''}
-        </div>
-        <div class="edit-hint">💡 Double-click any coach name to rename them (visual only — changes are NOT saved)</div>
-        <div class="groups-grid" id="groups-grid">
-            ${ride.groups.map((g, i) => renderGroupCard(g, i)).join('')}
-        </div>
-        <div class="actions">
-            <button class="btn btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
-        </div>
-    `;
-
-    content.innerHTML = html;
+function deleteGroup(groupId) {
+    groups = groups.filter(g => g.id !== groupId);
+    // Re-label
+    groups.forEach((g, i) => { g.label = 'Group ' + (i + 1); });
+    render();
 }
 
-function renderGroupCard(group, index) {
-    const groupLabel = group.colorName
-        ? group.colorName + ' Group' + (group.label ? ' (' + group.label.replace(/\D/g, '') + ')' : '')
-        : (group.label || 'Group ' + (index + 1)) + (group.customName ? ' (' + esc(group.customName) + ')' : '');
+function clearAll() {
+    if (groups.length === 0) return;
+    if (!confirm('Clear all groups? Riders and coaches will return to the sidebar.')) return;
+    groups = [];
+    render();
+}
 
-    // Coaches
-    const coachesList = [];
-    if (group.coaches) {
-        if (group.coaches.leader) { const c = getCoach(group.coaches.leader); if (c) coachesList.push({ coach: c, role: 'Leader' }); }
-        if (group.coaches.sweep) { const c = getCoach(group.coaches.sweep); if (c) coachesList.push({ coach: c, role: 'Sweep' }); }
-        if (group.coaches.roam) { const c = getCoach(group.coaches.roam); if (c) coachesList.push({ coach: c, role: 'Roam' }); }
-        if (Array.isArray(group.coaches.extraRoam)) {
-            group.coaches.extraRoam.forEach(id => { const c = getCoach(id); if (c) coachesList.push({ coach: c, role: 'Roam' }); });
-        }
+// ─── Auto-Generate ───
+function autoGenerate() {
+    const numStr = prompt('How many groups?', '4');
+    if (!numStr) return;
+    const num = parseInt(numStr, 10);
+    if (!num || num < 1 || num > 20) { alert('Enter a number between 1 and 20.'); return; }
+
+    // Reset
+    groups = [];
+    for (let i = 0; i < num; i++) {
+        groups.push({ id: nextGroupId++, label: 'Group ' + (i + 1), coaches: { leader: null, sweep: null, roam: null }, riders: [], routeId: null });
     }
 
-    const coachFirstNames = coachesList.map(({ coach }) => (coach.name || '').split(/\s+/)[0]).filter(Boolean).join(', ');
+    // Sort riders by fitness descending
+    const sortedRiders = allRiders.slice().sort((a, b) => parseInt(b.fitness || '5', 10) - parseInt(a.fitness || '5', 10));
 
-    const coachesHtml = coachesList.length > 0
-        ? coachesList.map(({ coach, role }) => {
-            const levelRaw = coach.coachingLicenseLevel || coach.level || '1';
-            const levelNum = parseInt(levelRaw || '1', 10);
-            const levelDisplay = levelRaw === 'N/A' ? 'N/A' : 'L' + levelNum;
-            let levelBg = '#777', levelFg = '#fff';
-            if (levelNum === 2) { levelBg = '#ccc'; levelFg = '#333'; }
-            else if (levelNum >= 3) { levelBg = '#f9a825'; levelFg = '#333'; }
+    // Snake-draft riders across groups for balanced fitness
+    sortedRiders.forEach((rider, i) => {
+        const cycle = Math.floor(i / num);
+        const pos = cycle % 2 === 0 ? (i % num) : (num - 1 - (i % num));
+        groups[pos].riders.push(rider.id);
+    });
 
-            const bikeMode = ride.coachBikeMode && ride.coachBikeMode[coach.id];
-            const isEbike = bikeMode === 'electric' || (!bikeMode && coach.bikePrimary === 'electric');
-            const bikeBadge = isEbike ? '<span class="bike-badge">⚡</span>' : '';
-
-            return `<div class="coach-inline-item">
-                <div class="coach-name-wrap">
-                    <span class="coach-name" data-coach-id="${coach.id}" ondblclick="editCoachName(this)" title="Double-click to rename">${esc(coach.name)}</span>
-                    <span class="coach-level-badge" style="background:${levelBg};color:${levelFg};">${levelDisplay}</span>
-                    ${bikeBadge}
-                </div>
-                <span class="coach-role-badge">${role}</span>
-            </div>`;
-        }).join('')
-        : '<div style="color:#999;font-size:12px;padding:4px;">No coaches assigned</div>';
-
-    // Riders
-    const availableSet = new Set((ride.availableRiders || []).map(id => typeof id === 'string' ? parseInt(id, 10) : id));
-    const riderObjects = (group.riders || []).map(id => getRider(id)).filter(Boolean)
-        .sort((a, b) => {
-            const ap = parseInt(a.fitness || '5', 10);
-            const bp = parseInt(b.fitness || '5', 10);
-            if (bp !== ap) return bp - ap;
-            return (a.name || '').localeCompare(b.name || '');
-        });
-
-    const visibleSkills = ride.visibleSkills || ['pace'];
-    const attendingCount = riderObjects.filter(r => availableSet.has(r.id)).length;
-
-    // Fitness range
-    const fitnesses = riderObjects.filter(r => availableSet.has(r.id)).map(r => parseInt(r.fitness || '5', 10));
-    let fitnessRange = '';
-    if (fitnesses.length > 0) {
-        const min = Math.min(...fitnesses);
-        const max = Math.max(...fitnesses);
-        fitnessRange = min === max ? ' ❤' + min : ' ❤' + min + '-' + max;
+    // Assign coaches round-robin: leaders first, then sweeps, then roam
+    const sortedCoaches = allCoaches.slice().sort((a, b) => parseInt(b.level || '1', 10) - parseInt(a.level || '1', 10));
+    let coachIdx = 0;
+    // Leaders
+    for (let i = 0; i < num && coachIdx < sortedCoaches.length; i++) {
+        groups[i].coaches.leader = sortedCoaches[coachIdx++].id;
+    }
+    // Sweeps
+    for (let i = 0; i < num && coachIdx < sortedCoaches.length; i++) {
+        groups[i].coaches.sweep = sortedCoaches[coachIdx++].id;
+    }
+    // Roam
+    for (let i = 0; i < num && coachIdx < sortedCoaches.length; i++) {
+        groups[i].coaches.roam = sortedCoaches[coachIdx++].id;
     }
 
-    const ridersHtml = riderObjects.length > 0
-        ? riderObjects.map(rider => {
-            const isAvail = availableSet.has(rider.id);
-            const cls = isAvail ? 'rider-item' : 'rider-item unavailable';
-            const badges = [];
-            if (visibleSkills.includes('pace') && rider.fitness) badges.push('❤' + rider.fitness);
-            if (visibleSkills.includes('climbing') && rider.climbing) badges.push('◢' + rider.climbing);
-            if (visibleSkills.includes('skills') && rider.skills) badges.push('◣' + rider.skills);
-            const badgesHtml = badges.map(b => '<span class="skill-badge">' + b + '</span>').join('');
-            const name = rider.nickname || rider.name || 'Rider';
-            return `<div class="${cls}"><span class="rider-name">${esc(name)}</span><div class="rider-badges">${badgesHtml}</div></div>`;
-        }).join('')
-        : '<div style="color:#999;font-size:12px;padding:4px;">No riders assigned</div>';
+    render();
+}
 
-    // Route
-    const route = group.routeId ? getRoute(group.routeId) : null;
-    const routeName = route ? esc(route.name) : (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : '— No route —');
+// ─── Which coaches/riders are assigned? ───
+function getAssignedCoachIds() {
+    const ids = new Set();
+    groups.forEach(g => {
+        if (g.coaches.leader) ids.add(g.coaches.leader);
+        if (g.coaches.sweep) ids.add(g.coaches.sweep);
+        if (g.coaches.roam) ids.add(g.coaches.roam);
+    });
+    return ids;
+}
+function getAssignedRiderIds() {
+    const ids = new Set();
+    groups.forEach(g => g.riders.forEach(id => ids.add(id)));
+    return ids;
+}
 
-    return `
-        <div class="group-card" data-group-id="${group.id}">
-            <div class="group-header">
-                <span>${esc(groupLabel)}</span>
-            </div>
-            <div class="group-body">
-                <div style="margin-bottom:4px;">
-                    <div class="section-header">
-                        <span>Coaches${coachFirstNames ? ': ' + esc(coachFirstNames) : ''}</span>
-                    </div>
-                    <div style="margin-top:2px;">${coachesHtml}</div>
-                </div>
-                <div style="margin-bottom:4px;flex:1;">
-                    <div class="section-header">
-                        <span>Riders: ${attendingCount}${fitnessRange}</span>
-                    </div>
-                    <div style="margin-top:2px;">${ridersHtml}</div>
-                </div>
-                <div class="route-bar">
-                    <div class="route-display">${routeName}</div>
-                </div>
-            </div>
-        </div>
-    `;
+// ─── Drag & Drop ───
+function onDragStart(e, type, id) {
+    dragData = { type, id };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', type + ':' + id);
+    e.target.classList.add('dragging');
+}
+function onDragEnd(e) {
+    dragData = null;
+    e.target.classList.remove('dragging');
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drag-over'); }
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+function dropCoach(e, groupId, role) {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    if (!dragData || dragData.type !== 'coach') return;
+    const coachId = dragData.id;
+    // Remove from any existing assignment
+    groups.forEach(g => {
+        if (g.coaches.leader === coachId) g.coaches.leader = null;
+        if (g.coaches.sweep === coachId) g.coaches.sweep = null;
+        if (g.coaches.roam === coachId) g.coaches.roam = null;
+    });
+    // Assign to new slot
+    const group = groups.find(g => g.id === groupId);
+    if (group) group.coaches[role] = coachId;
+    render();
+}
+
+function dropRider(e, groupId) {
+    e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+    if (!dragData || dragData.type !== 'rider') return;
+    const riderId = dragData.id;
+    // Remove from any existing group
+    groups.forEach(g => { g.riders = g.riders.filter(id => id !== riderId); });
+    // Add to new group
+    const group = groups.find(g => g.id === groupId);
+    if (group) group.riders.push(riderId);
+    render();
+}
+
+function removeCoach(groupId, role) {
+    const group = groups.find(g => g.id === groupId);
+    if (group) group.coaches[role] = null;
+    render();
+}
+function removeRider(groupId, riderId) {
+    const group = groups.find(g => g.id === groupId);
+    if (group) group.riders = group.riders.filter(id => id !== riderId);
+    render();
+}
+function setRoute(groupId, routeId) {
+    const group = groups.find(g => g.id === groupId);
+    if (group) group.routeId = routeId || null;
 }
 
 // ─── Coach Name Editing ───
 function editCoachName(el) {
     el.setAttribute('contenteditable', 'true');
     el.focus();
-    // Select all text
     const range = document.createRange();
     range.selectNodeContents(el);
     const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    sel.removeAllRanges(); sel.addRange(range);
 
-    function finishEdit() {
+    function finish() {
         el.removeAttribute('contenteditable');
-        el.removeEventListener('blur', finishEdit);
+        el.removeEventListener('blur', finish);
         el.removeEventListener('keydown', onKey);
         const coachId = parseInt(el.dataset.coachId, 10);
         const newName = el.textContent.trim();
-        if (newName && coachId) {
-            customCoachNames[coachId] = newName;
-        }
-        // Re-render to update coach first names in section headers
-        renderPage();
+        if (newName && coachId) customCoachNames[coachId] = newName;
+        render();
     }
-
     function onKey(e) {
-        if (e.key === 'Enter') { e.preventDefault(); finishEdit(); }
-        if (e.key === 'Escape') { el.removeAttribute('contenteditable'); el.removeEventListener('blur', finishEdit); el.removeEventListener('keydown', onKey); }
+        if (e.key === 'Enter') { e.preventDefault(); finish(); }
+        if (e.key === 'Escape') { el.removeAttribute('contenteditable'); el.removeEventListener('blur', finish); el.removeEventListener('keydown', onKey); }
+    }
+    el.addEventListener('blur', finish);
+    el.addEventListener('keydown', onKey);
+}
+
+// ─── Rendering ───
+function render() {
+    renderSidebar();
+    renderGroups();
+}
+
+function renderSidebar() {
+    const assignedCoaches = getAssignedCoachIds();
+    const assignedRiders = getAssignedRiderIds();
+    const unassignedCoaches = allCoaches.filter(c => !assignedCoaches.has(c.id));
+    const unassignedRiders = allRiders.filter(r => !assignedRiders.has(r.id));
+
+    document.getElementById('unassigned-coach-count').textContent = unassignedCoaches.length + ' available';
+    document.getElementById('unassigned-rider-count').textContent = unassignedRiders.length + ' available';
+
+    const coachPool = document.getElementById('coach-pool');
+    if (unassignedCoaches.length === 0) {
+        coachPool.innerHTML = '<div style="padding:12px;color:#999;font-size:12px;text-align:center;">All coaches assigned</div>';
+    } else {
+        coachPool.innerHTML = unassignedCoaches.map(c => {
+            const display = customCoachNames[c.id] || c.name;
+            const levelNum = parseInt(c.level || '1', 10);
+            const levelClass = levelNum >= 3 ? 'l3' : (levelNum === 2 ? 'l2' : '');
+            return `<div class="sidebar-item" draggable="true" ondragstart="onDragStart(event,'coach',${c.id})" ondragend="onDragEnd(event)">
+                <span class="name">${esc(display)}</span>
+                <span class="badge badge-level ${levelClass}">L${levelNum}</span>
+                ${c.fitness ? '<span class="badge badge-pace">❤' + c.fitness + '</span>' : ''}
+            </div>`;
+        }).join('');
     }
 
-    el.addEventListener('blur', finishEdit);
-    el.addEventListener('keydown', onKey);
+    const riderPool = document.getElementById('rider-pool');
+    if (unassignedRiders.length === 0) {
+        riderPool.innerHTML = '<div style="padding:12px;color:#999;font-size:12px;text-align:center;">All riders assigned</div>';
+    } else {
+        riderPool.innerHTML = unassignedRiders
+            .sort((a, b) => parseInt(b.fitness || '5', 10) - parseInt(a.fitness || '5', 10))
+            .map(r => {
+                const name = r.nickname || r.name || 'Rider';
+                return `<div class="sidebar-item" draggable="true" ondragstart="onDragStart(event,'rider',${r.id})" ondragend="onDragEnd(event)">
+                    <span class="name">${esc(name)}</span>
+                    ${r.fitness ? '<span class="badge badge-pace">❤' + r.fitness + '</span>' : ''}
+                </div>`;
+            }).join('');
+    }
+}
+
+function renderGroups() {
+    const grid = document.getElementById('groups-grid');
+    if (groups.length === 0) {
+        grid.innerHTML = '<div class="empty-groups"><h3>No groups yet</h3><p>Click <strong>+ Add Group</strong> or <strong>⚡ Auto-Generate</strong> to get started.</p></div>';
+        return;
+    }
+
+    grid.innerHTML = groups.map(g => {
+        // Coach slots
+        const coachSlots = ['leader', 'sweep', 'roam'].map(role => {
+            const coachId = g.coaches[role];
+            const coach = coachId ? getCoach(coachId) : null;
+            if (coach) {
+                const levelNum = parseInt(coach.level || '1', 10);
+                let levelBg = '#777', levelFg = '#fff';
+                if (levelNum === 2) { levelBg = '#ccc'; levelFg = '#333'; }
+                else if (levelNum >= 3) { levelBg = '#f9a825'; levelFg = '#333'; }
+                const isEbike = coach.bikePrimary === 'electric';
+                return `<div class="coach-slot filled" draggable="true" ondragstart="onDragStart(event,'coach',${coach.id})" ondragend="onDragEnd(event)">
+                    <div class="coach-name-wrap">
+                        <span class="coach-name" data-coach-id="${coach.id}" ondblclick="editCoachName(this)" title="Double-click to rename">${esc(coach.name)}</span>
+                        <span class="coach-level-badge" style="background:${levelBg};color:${levelFg};">L${levelNum}</span>
+                        ${isEbike ? '<span class="bike-badge">⚡</span>' : ''}
+                    </div>
+                    <span class="coach-role-badge">${role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                    <button class="coach-remove" onclick="removeCoach(${g.id},'${role}')" title="Remove">×</button>
+                </div>`;
+            } else {
+                const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+                return `<div class="coach-slot empty" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="dropCoach(event,${g.id},'${role}')">
+                    <span class="empty-slot-label">Drop ${roleLabel} here</span>
+                </div>`;
+            }
+        }).join('');
+
+        // Coach first names for header
+        const coachNames = ['leader','sweep','roam'].map(role => {
+            const c = g.coaches[role] ? getCoach(g.coaches[role]) : null;
+            return c ? coachFirstName(c) : null;
+        }).filter(Boolean).join(', ');
+
+        // Riders
+        const riderObjects = g.riders.map(id => getRider(id)).filter(Boolean)
+            .sort((a, b) => parseInt(b.fitness || '5', 10) - parseInt(a.fitness || '5', 10));
+        const fitnesses = riderObjects.map(r => parseInt(r.fitness || '5', 10));
+        let fitnessRange = '';
+        if (fitnesses.length > 0) {
+            const min = Math.min(...fitnesses), max = Math.max(...fitnesses);
+            fitnessRange = min === max ? ' ❤' + min : ' ❤' + min + '-' + max;
+        }
+        const ridersHtml = riderObjects.length > 0
+            ? riderObjects.map(r => {
+                const name = r.nickname || r.name || 'Rider';
+                return `<div class="rider-item" draggable="true" ondragstart="onDragStart(event,'rider',${r.id})" ondragend="onDragEnd(event)">
+                    <span class="rider-name">${esc(name)}</span>
+                    <div class="rider-badges">
+                        ${r.fitness ? '<span class="skill-badge">❤' + r.fitness + '</span>' : ''}
+                        ${r.climbing ? '<span class="skill-badge">◢' + r.climbing + '</span>' : ''}
+                    </div>
+                    <button class="rider-remove" onclick="removeRider(${g.id},${r.id})" title="Remove">×</button>
+                </div>`;
+            }).join('')
+            : '<div style="color:#aaa;font-size:12px;padding:8px;text-align:center;">Drop riders here</div>';
+
+        // Route selector
+        const routeOptions = '<option value="">— Select Route —</option><option value="leader-choice"' + (g.routeId === 'leader-choice' ? ' selected' : '') + '>Ride Leader\'s Choice</option>'
+            + allRoutes.map(r => '<option value="' + r.id + '"' + (String(g.routeId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
+
+        return `<div class="group-card" data-group-id="${g.id}">
+            <div class="group-header">
+                <span>${esc(g.label)}</span>
+                <div class="group-actions">
+                    <button onclick="deleteGroup(${g.id})" title="Delete group">🗑</button>
+                </div>
+            </div>
+            <div class="group-body">
+                <div style="margin-bottom:4px;">
+                    <div class="section-header"><span>Coaches${coachNames ? ': ' + esc(coachNames) : ''}</span></div>
+                    <div style="margin-top:2px;">${coachSlots}</div>
+                </div>
+                <div style="margin-bottom:4px;flex:1;">
+                    <div class="section-header"><span>Riders: ${riderObjects.length}${fitnessRange}</span></div>
+                    <div class="rider-zone" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="dropRider(event,${g.id})">${ridersHtml}</div>
+                </div>
+                <div class="route-bar">
+                    <select class="route-select" onchange="setRoute(${g.id}, this.value)">${routeOptions}</select>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 // ─── PDF Export ───
 function exportPDF() {
-    if (!ride || !ride.groups || ride.groups.length === 0) {
-        alert('No groups to export.');
-        return;
-    }
-
+    if (groups.length === 0) { alert('No groups to export. Add groups first.'); return; }
     try {
         const { jsPDF } = window.jspdf;
-        const rideDate = new Date(ride.date + 'T12:00:00');
-        const dateDisplay = rideDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-        let timeDisplay = '';
-        if (ride.time) {
-            timeDisplay = formatTime(ride.time);
-            if (ride.endTime) timeDisplay += ' - ' + formatTime(ride.endTime);
-        }
-        const goals = (ride.goals || '').trim();
-
-        // Mobile-friendly single-page PDF
+        const dateDisplay = 'Wednesday, April 1, 2026';
         const pw = 90, margin = 8, maxW = pw - margin * 2;
 
-        // Measure height
+        // Measure
         const tmp = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pw, 5000] });
-        let h = margin + 6 + 7 + 5;
-        if (timeDisplay) h += 5;
-        if (ride.meetLocation) h += 5;
-        if (goals) { h += 8; tmp.setFontSize(9); h += tmp.splitTextToSize(goals, maxW).length * 5; }
-        h += 5;
-
-        ride.groups.forEach(group => {
+        let h = margin + 6 + 7 + 5 + 5;
+        groups.forEach(g => {
             h += 6;
-            const coaches = getGroupCoachesList(group);
+            const coaches = getGroupCoachesList(g);
             h += 5 + Math.max(coaches.length, 1) * 5 + 2;
-            const riders = (group.riders || []).map(id => getRider(id)).filter(Boolean);
+            const riders = g.riders.map(id => getRider(id)).filter(Boolean);
             h += 5 + Math.max(riders.length, 1) * 5;
-            const route = group.routeId ? getRoute(group.routeId) : null;
-            if (route || group.routeId === 'leader-choice') { h += 7; tmp.setFontSize(11); h += tmp.splitTextToSize(route ? route.name : "Ride Leader's Choice", maxW).length * 4.4 + 2; }
+            const route = g.routeId ? getRoute(g.routeId) : null;
+            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
+            if (routeLabel) { h += 7; tmp.setFontSize(11); h += tmp.splitTextToSize(routeLabel, maxW).length * 4.4 + 2; }
             h += 8;
         });
 
@@ -506,39 +622,26 @@ function exportPDF() {
         doc.text('Group Assignments', margin, y); y += 7;
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
         doc.text('Date: ' + dateDisplay, margin, y); y += 5;
-        if (timeDisplay) { doc.text('Time: ' + timeDisplay, margin, y); y += 5; }
-        if (ride.meetLocation) { doc.text('Location: ' + ride.meetLocation, margin, y); y += 5; }
-        if (goals) {
-            y += 3; doc.setFont(undefined, 'bold'); doc.text('Practice Goals:', margin, y); y += 5;
-            doc.setFont(undefined, 'normal'); doc.setFontSize(9);
-            const gl = doc.splitTextToSize(goals, maxW); doc.text(gl, margin, y); y += gl.length * 5;
-            doc.setFontSize(10);
-        }
         y += 5;
 
-        ride.groups.forEach((group, i) => {
-            const label = group.colorName
-                ? group.colorName + ' Group'
-                : (group.label || 'Group ' + (i + 1));
-
+        groups.forEach((g, i) => {
             doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.setTextColor(33, 150, 243);
-            doc.text(label, margin, y); y += 6;
+            doc.text(g.label, margin, y); y += 6;
 
-            const coaches = getGroupCoachesList(group);
+            const coaches = getGroupCoachesList(g);
             doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
             doc.text('Ride Leaders:', margin, y); y += 5;
             doc.setFont(undefined, 'normal'); doc.setFontSize(11);
             if (coaches.length > 0) {
                 coaches.forEach(({ coach, role }) => {
-                    const bikeMode = ride.coachBikeMode && ride.coachBikeMode[coach.id];
-                    const isEbike = bikeMode === 'electric' || (!bikeMode && coach.bikePrimary === 'electric');
+                    const isEbike = coach.bikePrimary === 'electric';
                     doc.text((coach.name || 'Coach') + (isEbike ? ' (e-bike)' : '') + ' (' + role + ')', margin, y);
                     y += 5;
                 });
             } else { doc.text('No coaches assigned', margin, y); y += 5; }
             y += 2;
 
-            const riders = (group.riders || []).map(id => getRider(id)).filter(Boolean);
+            const riders = g.riders.map(id => getRider(id)).filter(Boolean);
             doc.setFontSize(9); doc.setFont(undefined, 'bold');
             doc.text('Riders (' + riders.length + '):', margin, y); y += 5;
             doc.setFont(undefined, 'normal'); doc.setFontSize(11);
@@ -546,15 +649,14 @@ function exportPDF() {
                 riders.forEach(r => { doc.text(r.nickname || r.name || 'Rider', margin, y); y += 5; });
             } else { doc.text('No riders assigned', margin, y); y += 5; }
 
-            const route = group.routeId ? getRoute(group.routeId) : null;
-            const routeLabel = route ? route.name : (group.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
+            const route = g.routeId ? getRoute(g.routeId) : null;
+            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
             if (routeLabel) {
                 y += 2; doc.setFontSize(9); doc.setFont(undefined, 'bold');
                 doc.text('Route:', margin, y); y += 5;
                 doc.setFont(undefined, 'normal'); doc.setFontSize(11);
                 const rl = doc.splitTextToSize(routeLabel, maxW); doc.text(rl, margin, y); y += rl.length * 4.4 + 2;
             }
-
             y += 8;
         });
 
@@ -565,29 +667,12 @@ function exportPDF() {
     }
 }
 
-function getGroupCoachesList(group) {
+function getGroupCoachesList(g) {
     const list = [];
-    if (group.coaches) {
-        if (group.coaches.leader) { const c = getCoach(group.coaches.leader); if (c) list.push({ coach: c, role: 'Leader' }); }
-        if (group.coaches.sweep) { const c = getCoach(group.coaches.sweep); if (c) list.push({ coach: c, role: 'Sweep' }); }
-        if (group.coaches.roam) { const c = getCoach(group.coaches.roam); if (c) list.push({ coach: c, role: 'Roam' }); }
-        if (Array.isArray(group.coaches.extraRoam)) {
-            group.coaches.extraRoam.forEach(id => { const c = getCoach(id); if (c) list.push({ coach: c, role: 'Roam' }); });
-        }
-    }
+    if (g.coaches.leader) { const c = getCoach(g.coaches.leader); if (c) list.push({ coach: c, role: 'Leader' }); }
+    if (g.coaches.sweep) { const c = getCoach(g.coaches.sweep); if (c) list.push({ coach: c, role: 'Sweep' }); }
+    if (g.coaches.roam) { const c = getCoach(g.coaches.roam); if (c) list.push({ coach: c, role: 'Roam' }); }
     return list;
-}
-
-// ─── Helpers ───
-function formatTime(t) {
-    if (!t) return '';
-    const parts = t.split(':');
-    let h = parseInt(parts[0], 10);
-    const m = parts[1] || '00';
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    if (h > 12) h -= 12;
-    if (h === 0) h = 12;
-    return h + ':' + m + ' ' + ampm;
 }
 </script>
 </body>
