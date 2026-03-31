@@ -7555,7 +7555,7 @@
 
                     // Render rider cards (without badges)
                     const riderCardsHtml = riders.map(rider => {
-                        const name = rider.name || 'Rider';
+                        const name = getPersonDisplayName(rider, 'Rider');
                         const safeName = escapeHtml(name);
                         const initial = escapeHtml((name.trim().charAt(0) || '?').toUpperCase());
                         // Only use photos if they're data URLs (base64 embedded), otherwise omit to avoid broken links
@@ -7592,7 +7592,7 @@
                                         <div style="display: flex; flex-direction: column; gap: 2px;">
                                             ${coachesWithRoles.map(({ coach, role }) => {
                                                 const onEbike = typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(coach, ride) === 'electric';
-                                                const name = (coach.name || 'Coach') + (onEbike ? ' (e-bike)' : '');
+                                                const name = getPersonDisplayName(coach, 'Coach') + (onEbike ? ' (e-bike)' : '');
                                                 const safeName = escapeHtml(name);
                                                 const initial = escapeHtml((name.trim().charAt(0) || '?').toUpperCase());
                                                 // Only use photos if they're data URLs (base64 embedded), otherwise omit to avoid broken links
@@ -7940,10 +7940,10 @@
                     doc.setFontSize(11);
                     const ebikeSuffix = (c) => (typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(c, ride) === 'electric' ? ' (e-bike)' : '');
                     const coachesList = [];
-                    if (leader) coachesList.push(`${leader.name || 'Coach'}${ebikeSuffix(leader)} (Leader)`);
-                    if (sweep) coachesList.push(`${sweep.name || 'Coach'}${ebikeSuffix(sweep)} (Sweep)`);
-                    if (roam) coachesList.push(`${roam.name || 'Coach'}${ebikeSuffix(roam)} (Roam)`);
-                    extraRoam.forEach(coach => coachesList.push(`${coach.name || 'Coach'}${ebikeSuffix(coach)} (Roam+)`));
+                    if (leader) coachesList.push(`${getPersonDisplayName(leader, 'Coach')}${ebikeSuffix(leader)} (Leader)`);
+                    if (sweep) coachesList.push(`${getPersonDisplayName(sweep, 'Coach')}${ebikeSuffix(sweep)} (Sweep)`);
+                    if (roam) coachesList.push(`${getPersonDisplayName(roam, 'Coach')}${ebikeSuffix(roam)} (Roam)`);
+                    extraRoam.forEach(coach => coachesList.push(`${getPersonDisplayName(coach, 'Coach')}${ebikeSuffix(coach)} (Roam+)`));
 
                     if (coachesList.length > 0) {
                         coachesList.forEach(coachText => {
@@ -7966,7 +7966,7 @@
                     doc.setFontSize(11);
                     if (riders.length > 0) {
                         riders.forEach(rider => {
-                            doc.text(`${rider.name || 'Rider'}`, margin, yPos);
+                            doc.text(`${getPersonDisplayName(rider, 'Rider')}`, margin, yPos);
                             yPos += 5;
                         });
                     } else {
@@ -8170,10 +8170,10 @@
 
                         const ebikeSuffixDesktop = (c) => (typeof getCurrentCoachBikeMode === 'function' && getCurrentCoachBikeMode(c, ride) === 'electric' ? ' (e-bike)' : '');
                         const coachesList = [];
-                        if (leader) coachesList.push(`${leader.name || 'Coach'}${ebikeSuffixDesktop(leader)} (Leader)`);
-                        if (sweep) coachesList.push(`${sweep.name || 'Coach'}${ebikeSuffixDesktop(sweep)} (Sweep)`);
-                        if (roam) coachesList.push(`${roam.name || 'Coach'}${ebikeSuffixDesktop(roam)} (Roam)`);
-                        extraRoam.forEach(c => coachesList.push(`${c.name || 'Coach'}${ebikeSuffixDesktop(c)} (Roam+)`));
+                        if (leader) coachesList.push(`${getPersonDisplayName(leader, 'Coach')}${ebikeSuffixDesktop(leader)} (Leader)`);
+                        if (sweep) coachesList.push(`${getPersonDisplayName(sweep, 'Coach')}${ebikeSuffixDesktop(sweep)} (Sweep)`);
+                        if (roam) coachesList.push(`${getPersonDisplayName(roam, 'Coach')}${ebikeSuffixDesktop(roam)} (Roam)`);
+                        extraRoam.forEach(c => coachesList.push(`${getPersonDisplayName(c, 'Coach')}${ebikeSuffixDesktop(c)} (Roam+)`));
 
                         const lh = scaled(BASE.bodyLineLead, s);
                         let height = scaled(BASE.titleTopPad, s);
@@ -8191,7 +8191,7 @@
                         height += scaled(BASE.sectionLabelLead, s); // "Riders:"
                         if (riders.length > 0) {
                             riders.forEach(r => {
-                                height += doc.splitTextToSize(r.name || 'Rider', columnWidth - 6).length * lh;
+                                height += doc.splitTextToSize(getPersonDisplayName(r, 'Rider'), columnWidth - 6).length * lh;
                             });
                         } else {
                             height += lh;
@@ -8348,7 +8348,7 @@
                         doc.setFontSize(scaled(BASE.bodyFont, scale));
                         if (gd.riders.length > 0) {
                             gd.riders.forEach(rider => {
-                                const wl = doc.splitTextToSize(rider.name || 'Rider', columnWidth - 6);
+                                const wl = doc.splitTextToSize(getPersonDisplayName(rider, 'Rider'), columnWidth - 6);
                                 doc.text(wl, boxX + 3, contentY);
                                 contentY += wl.length * lh;
                             });

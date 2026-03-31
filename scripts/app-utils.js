@@ -49,10 +49,28 @@
             cell.innerHTML = buildPaceControlsHtml(entityType, entityId, skillType, newValue, scale);
         }
 
-        // Returns nickname if set, otherwise full name
+        // Returns nickname if set, otherwise full name (ignores nicknameMode)
         function getDisplayName(person) {
             if (!person) return '';
             return person.nickname ? person.nickname : (person.name || '');
+        }
+
+        // Returns display name respecting nicknameMode (firstName vs full replacement)
+        // Used by PDF generation and anywhere nickname logic must match the planner UI
+        function getPersonDisplayName(person, fallback) {
+            if (!person) return fallback || '';
+            if (person.nickname) {
+                var name = person.name || '';
+                var parts = name.trim().split(/\s+/);
+                var firstName = parts[0] || '';
+                var lastName = parts.slice(1).join(' ');
+                if (person.nicknameMode === 'firstName') {
+                    return (person.nickname + ' ' + lastName).trim() || fallback || '';
+                } else {
+                    return person.nickname;
+                }
+            }
+            return person.name || fallback || '';
         }
 
         function escapeHtml(value) {
