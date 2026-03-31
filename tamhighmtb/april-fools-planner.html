@@ -190,6 +190,7 @@ let nextGroupId = 1;
 const customCoachNames = {};   // coachId → display name override
 const customRiderNames = {};   // riderId → display name override
 const customGroupNames = {};   // groupId → display name override
+const customRouteNames = {};   // groupId → custom route name text
 let dragData = null;           // { type: 'coach'|'rider', id: number }
 const SAVE_KEY = 'april_fools_planner';  // Supabase season_settings key
 
@@ -319,6 +320,7 @@ async function saveState() {
             customCoachNames: customCoachNames,
             customRiderNames: customRiderNames,
             customGroupNames: customGroupNames,
+            customRouteNames: customRouteNames,
             savedAt: new Date().toISOString()
         };
 
@@ -351,6 +353,7 @@ async function loadSavedState() {
             Object.assign(customCoachNames, saved.customCoachNames || {});
             Object.assign(customRiderNames, saved.customRiderNames || {});
             Object.assign(customGroupNames, saved.customGroupNames || {});
+            Object.assign(customRouteNames, saved.customRouteNames || {});
             console.log('Restored April Fools planner state from', saved.savedAt);
         }
     } catch (e) {
@@ -496,6 +499,12 @@ function removeRider(groupId, riderId) {
 function setRoute(groupId, routeId) {
     const group = groups.find(g => g.id === groupId);
     if (group) group.routeId = routeId || null;
+    // If switching away from custom, clear the custom name
+    if (routeId !== 'april-fools-custom') delete customRouteNames[groupId];
+    render(); autoSave();
+}
+function setCustomRouteName(groupId, name) {
+    customRouteNames[groupId] = name;
     autoSave();
 }
 
@@ -655,8 +664,11 @@ function renderGroups() {
             : '<div style="color:#aaa;font-size:12px;padding:8px;text-align:center;">Drop riders here</div>';
 
         // Route selector
+        const isCustomRoute = g.routeId === 'april-fools-custom';
+        const customRouteName = customRouteNames[g.id] || '';
         const routeOptions = '<option value="">— Select Route —</option><option value="leader-choice"' + (g.routeId === 'leader-choice' ? ' selected' : '') + '>Ride Leader\'s Choice</option>'
-            + allRoutes.map(r => '<option value="' + r.id + '"' + (String(g.routeId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('');
+            + allRoutes.map(r => '<option value="' + r.id + '"' + (String(g.routeId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('')
+            + '<option value="april-fools-custom"' + (isCustomRoute ? ' selected' : '') + '>🎪 April Fools Route…</option>';
 
         const groupDisplayName = customGroupNames[g.id] || g.label;
         return `<div class="group-card" data-group-id="${g.id}">
@@ -677,6 +689,7 @@ function renderGroups() {
                 </div>
                 <div class="route-bar">
                     <select class="route-select" onchange="setRoute(${g.id}, this.value)">${routeOptions}</select>
+                    ${isCustomRoute ? '<input type="text" class="custom-route-input" placeholder="Type custom route name…" value="' + esc(customRouteName) + '" oninput="setCustomRouteName(' + g.id + ', this.value)" style="width:100%;margin-top:4px;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">' : ''}
                 </div>
             </div>
         </div>`;
@@ -701,7 +714,7 @@ function exportPDF() {
             const riders = g.riders.map(id => getRider(id)).filter(Boolean);
             h += 5 + Math.max(riders.length, 1) * 5;
             const route = g.routeId ? getRoute(g.routeId) : null;
-            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
+            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : (g.routeId === 'april-fools-custom' && customRouteNames[g.id] ? customRouteNames[g.id] : null));
             if (routeLabel) { h += 7; tmp.setFontSize(11); h += tmp.splitTextToSize(routeLabel, maxW).length * 4.4 + 2; }
             h += 8;
         });
@@ -743,12 +756,30 @@ function exportPDF() {
             } else { doc.text('No riders assigned', margin, y); y += 5; }
 
             const route = g.routeId ? getRoute(g.routeId) : null;
-            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : null);
+            const isCustomRouteInPdf = g.routeId === 'april-fools-custom' && customRouteNames[g.id];
+            const routeLabel = route ? route.name : (g.routeId === 'leader-choice' ? "Ride Leader's Choice" : (isCustomRouteInPdf ? customRouteNames[g.id] : null));
             if (routeLabel) {
-                y += 2; doc.setFontSize(9); doc.setFont(undefined, 'bold');
+                y += 2; doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
                 doc.text('Route:', margin, y); y += 5;
                 doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-                const rl = doc.splitTextToSize(routeLabel, maxW); doc.text(rl, margin, y); y += rl.length * 4.4 + 2;
+                // Style custom routes and real routes as blue underlined links
+                if (isCustomRouteInPdf || (route && route.stravaUrl)) {
+                    doc.setTextColor(25, 118, 210);
+                }
+                const rl = doc.splitTextToSize(routeLabel, maxW);
+                doc.text(rl, margin, y);
+                // Draw underline for link-style routes
+                if (isCustomRouteInPdf || (route && route.stravaUrl)) {
+                    rl.forEach((line, li) => {
+                        const tw = doc.getTextWidth(line);
+                        const lineY = y + li * 4.4 + 0.8;
+                        doc.setDrawColor(25, 118, 210);
+                        doc.setLineWidth(0.2);
+                        doc.line(margin, lineY, margin + tw, lineY);
+                    });
+                    doc.setTextColor(0, 0, 0);
+                }
+                y += rl.length * 4.4 + 2;
             }
             y += 8;
         });
