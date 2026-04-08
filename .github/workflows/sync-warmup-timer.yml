@@ -1,6 +1,6 @@
-# Copies warmup timer files to tamhighmtb/ so they're available at
-# teamridepro.com/tamhighmtb/exchequer-warmup.html
-# teamridepro.com/tamhighmtb/sixsigma-warmup.html
+# Copies warmup timer files to tamhighmtb/timers/ so they're available at
+# teamridepro.com/tamhighmtb/timers/exchequer-warmup.html
+# teamridepro.com/tamhighmtb/timers/sixsigma-warmup.html
 name: Sync warmup timer
 
 on:
@@ -18,14 +18,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Copy warmup timer files
         run: |
-          cp "utilities/warmup timer/warmup-timer.html" tamhighmtb/exchequer-warmup.html
-          cp "utilities/warmup timer/sixsigma-warmup.html" tamhighmtb/sixsigma-warmup.html
-          cp "utilities/warmup timer/service-worker.js" tamhighmtb/service-worker.js
-          cp "utilities/warmup timer/manifest.json" tamhighmtb/manifest.json
+          mkdir -p tamhighmtb/timers
+          cp "utilities/warmup timer/warmup-timer.html" tamhighmtb/timers/exchequer-warmup.html
+          cp "utilities/warmup timer/sixsigma-warmup.html" tamhighmtb/timers/sixsigma-warmup.html
+          cp "utilities/warmup timer/service-worker.js" tamhighmtb/timers/service-worker.js
+          cp "utilities/warmup timer/manifest.json" tamhighmtb/timers/manifest.json
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tamhighmtb/exchequer-warmup.html tamhighmtb/sixsigma-warmup.html tamhighmtb/service-worker.js tamhighmtb/manifest.json
+          git add tamhighmtb/timers/
           git diff --cached --quiet || git commit -m "Sync warmup timer files from source"
           git push
