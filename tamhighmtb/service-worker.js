@@ -1,8 +1,9 @@
-var CACHE_NAME = 'warmup-timer-v2';
+var CACHE_NAME = 'warmup-timer-v3';
 var urlsToCache = [
     './', './manifest.json',
     './warmup-timer.html',
-    './exchequer-warmup.html'
+    './exchequer-warmup.html',
+    './sixsigma-warmup.html'
 ];
 
 self.addEventListener('install', function(event) {
