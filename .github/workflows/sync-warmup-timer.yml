@@ -1,12 +1,12 @@
-# Copies warmup timer to tamhighmtb/ so it's available at
-# teamridepro.com/tamhighmtb/exchequer-warmup.html
+# Copies warmup timer files to tamhighmtb/ so it's available at
+# teamridepro.com/tamhighmtb/exchequer-warmup.html (with offline support)
 name: Sync warmup timer
 
 on:
   push:
     branches: [main]
     paths:
-      - 'utilities/warmup timer/warmup-timer.html'
+      - 'utilities/warmup timer/**'
 
 jobs:
   sync:
@@ -15,12 +15,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Copy warmup timer
-        run: cp "utilities/warmup timer/warmup-timer.html" tamhighmtb/exchequer-warmup.html
+      - name: Copy warmup timer files
+        run: |
+          cp "utilities/warmup timer/warmup-timer.html" tamhighmtb/exchequer-warmup.html
+          cp "utilities/warmup timer/service-worker.js" tamhighmtb/service-worker.js
+          cp "utilities/warmup timer/manifest.json" tamhighmtb/manifest.json
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tamhighmtb/exchequer-warmup.html
-          git diff --cached --quiet || git commit -m "Sync exchequer-warmup.html from warmup timer source"
+          git add tamhighmtb/exchequer-warmup.html tamhighmtb/service-worker.js tamhighmtb/manifest.json
+          git diff --cached --quiet || git commit -m "Sync exchequer warmup timer files from source"
           git push
