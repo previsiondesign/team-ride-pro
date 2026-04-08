@@ -1,0 +1,11 @@
+{
+  "name": "Exchequer Race Warmup Timer",
+  "short_name": "Warmup Timer",
+  "description": "Structured race warmup timer with voice announcements",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#f5f5f5",
+  "theme_color": "#2196F3",
+  "icons": []
+}
