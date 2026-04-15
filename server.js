@@ -72,10 +72,18 @@ app.get('/api/fetch-strava-route', async (req, res) => {
         if (embedFetched) {
             let routeName = null, distance = null, elevation = null;
 
-            // The embed page renders route stats as text content in the page
-            const bodyText = document.body ? document.body.textContent : '';
+            // The embed page uses structured .stat elements:
+            //   <div class="stat"><div class="stat-label">Distance</div><div class="stat-value">36.6 mi</div></div>
+            //   <div class="stat"><div class="stat-label">Elev Gain</div><div class="stat-value">5,824 ft</div></div>
+            const statEls = document.querySelectorAll('.stat');
+            for (const stat of statEls) {
+                const label = (stat.querySelector('.stat-label') || {}).textContent || '';
+                const value = (stat.querySelector('.stat-value') || {}).textContent || '';
+                if (/distance/i.test(label) && value) distance = value.trim();
+                if (/elev/i.test(label) && value) elevation = value.trim();
+            }
 
-            // Route name: often in an h2 or heading element, or the first substantial text
+            // Route name: heading elements or name/title classes
             const headings = document.querySelectorAll('h1, h2, h3, [class*="name"], [class*="title"]');
             for (const el of headings) {
                 const text = el.textContent.trim();
@@ -84,30 +92,32 @@ app.get('/api/fetch-strava-route', async (req, res) => {
                     break;
                 }
             }
-            // Fallback: try title tag
             if (!routeName) {
                 const title = document.querySelector('title');
                 if (title) routeName = title.textContent.replace(/\s*[|–-]\s*Strava.*/i, '').trim();
             }
 
-            // Distance: look for patterns like "36.6 mi" or "58.9 km"
-            const distMatch = bodyText.match(/(\d+\.?\d*)\s*(mi|km|miles|kilometers)\b/i);
-            if (distMatch) {
-                const val = parseFloat(distMatch[1]);
-                const unit = distMatch[2].toLowerCase();
-                distance = (unit === 'km' || unit === 'kilometers')
-                    ? `${val.toFixed(2)} km`
-                    : `${val.toFixed(2)} mi`;
-            }
-
-            // Elevation: look for patterns like "5,824 ft" or "1,776 m"
-            const elevMatch = bodyText.match(/(\d{1,3}(?:,\d{3})*|\d+)\s*(ft|feet|m|meters)\b/i);
-            if (elevMatch) {
-                const val = parseInt(elevMatch[1].replace(/,/g, ''));
-                const unit = elevMatch[2].toLowerCase();
-                elevation = (unit === 'm' || unit === 'meters')
-                    ? `${val.toLocaleString()} m`
-                    : `${val.toLocaleString()} ft`;
+            // Fallback: regex on body text if structured elements weren't found
+            if (!distance || !elevation) {
+                const bodyText = document.body ? document.body.textContent : '';
+                if (!distance) {
+                    const distMatch = bodyText.match(/(\d+\.?\d*)\s*(mi|km|miles|kilometers)\b/i);
+                    if (distMatch) {
+                        const val = parseFloat(distMatch[1]);
+                        const unit = distMatch[2].toLowerCase();
+                        distance = (unit === 'km' || unit === 'kilometers')
+                            ? `${val.toFixed(2)} km` : `${val.toFixed(2)} mi`;
+                    }
+                }
+                if (!elevation) {
+                    const elevMatch = bodyText.match(/(\d{1,3}(?:,\d{3})*|\d+)\s*(ft|feet|m|meters)\b/i);
+                    if (elevMatch) {
+                        const val = parseInt(elevMatch[1].replace(/,/g, ''));
+                        const unit = elevMatch[2].toLowerCase();
+                        elevation = (unit === 'm' || unit === 'meters')
+                            ? `${val.toLocaleString()} m` : `${val.toLocaleString()} ft`;
+                    }
+                }
             }
 
             // If we got good data from the embed, return it immediately
