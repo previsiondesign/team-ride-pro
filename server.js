@@ -14,7 +14,7 @@ app.use(express.json());
 app.get('/api/fetch-strava-route', async (req, res) => {
     try {
         const routeUrl = req.query.url || req.query.routeUrl;
-        
+
         if (!routeUrl) {
             return res.status(400).json({ error: 'Route URL is required' });
         }
@@ -24,22 +24,105 @@ app.get('/api/fetch-strava-route', async (req, res) => {
             return res.status(400).json({ error: 'Invalid Strava URL' });
         }
 
-        // Fetch the route page
-        const response = await fetch(routeUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
+        // Extract route ID to try the embed endpoint first (doesn't require auth)
+        const routeIdMatch = routeUrl.match(/routes\/(\d+)/);
+        const routeId = routeIdMatch ? routeIdMatch[1] : null;
 
-        if (!response.ok) {
-            return res.status(response.status).json({ 
-                error: `Failed to fetch route: ${response.statusText}` 
-            });
+        let html, embedFetched = false;
+
+        // Try the public embed endpoint first — Strava's main route pages now require login
+        if (routeId) {
+            try {
+                const embedUrl = `https://strava-embeds.com/route/${routeId}`;
+                const embedResponse = await fetch(embedUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                    }
+                });
+                if (embedResponse.ok) {
+                    html = await embedResponse.text();
+                    embedFetched = true;
+                }
+            } catch (e) {
+                // Embed fetch failed, will fall back to main URL
+            }
         }
 
-        const html = await response.text();
+        // Fall back to the original Strava route URL
+        if (!html) {
+            const response = await fetch(routeUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                }
+            });
+
+            if (!response.ok) {
+                return res.status(response.status).json({
+                    error: `Failed to fetch route: ${response.statusText}`
+                });
+            }
+
+            html = await response.text();
+        }
+
         const dom = new JSDOM(html);
         const document = dom.window.document;
+
+        // If we fetched from the embed page, try to extract data from its cleaner format first
+        if (embedFetched) {
+            let routeName = null, distance = null, elevation = null;
+
+            // The embed page renders route stats as text content in the page
+            const bodyText = document.body ? document.body.textContent : '';
+
+            // Route name: often in an h2 or heading element, or the first substantial text
+            const headings = document.querySelectorAll('h1, h2, h3, [class*="name"], [class*="title"]');
+            for (const el of headings) {
+                const text = el.textContent.trim();
+                if (text && text.length > 1 && text.length < 200 && !/strava/i.test(text)) {
+                    routeName = text;
+                    break;
+                }
+            }
+            // Fallback: try title tag
+            if (!routeName) {
+                const title = document.querySelector('title');
+                if (title) routeName = title.textContent.replace(/\s*[|–-]\s*Strava.*/i, '').trim();
+            }
+
+            // Distance: look for patterns like "36.6 mi" or "58.9 km"
+            const distMatch = bodyText.match(/(\d+\.?\d*)\s*(mi|km|miles|kilometers)\b/i);
+            if (distMatch) {
+                const val = parseFloat(distMatch[1]);
+                const unit = distMatch[2].toLowerCase();
+                distance = (unit === 'km' || unit === 'kilometers')
+                    ? `${val.toFixed(2)} km`
+                    : `${val.toFixed(2)} mi`;
+            }
+
+            // Elevation: look for patterns like "5,824 ft" or "1,776 m"
+            const elevMatch = bodyText.match(/(\d{1,3}(?:,\d{3})*|\d+)\s*(ft|feet|m|meters)\b/i);
+            if (elevMatch) {
+                const val = parseInt(elevMatch[1].replace(/,/g, ''));
+                const unit = elevMatch[2].toLowerCase();
+                elevation = (unit === 'm' || unit === 'meters')
+                    ? `${val.toLocaleString()} m`
+                    : `${val.toLocaleString()} ft`;
+            }
+
+            // If we got good data from the embed, return it immediately
+            if (routeName && distance) {
+                return res.json({
+                    success: true,
+                    name: routeName,
+                    distance: distance,
+                    elevation: elevation,
+                    estimatedTime: null,
+                    url: routeUrl
+                });
+            }
+            // Otherwise fall through to the original scraping logic below
+        }
 
         // Patterns for matching distance and elevation
         const distancePattern = /(\d+\.?\d*)\s*(mi|km|miles|kilometers|m|meters)/i;
