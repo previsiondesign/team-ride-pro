@@ -385,8 +385,8 @@
 
         <div class="setup-screen active">
             <div class="duration-controls">
-                <button class="button button-primary duration-btn active" id="dur35" onclick="setDuration(35)">35 min</button>
-                <button class="button button-secondary duration-btn" id="dur30" onclick="setDuration(30)">30 min</button>
+                <button class="button button-secondary duration-btn" id="dur35" onclick="setDuration(35)">35 min</button>
+                <button class="button button-primary duration-btn active" id="dur30" onclick="setDuration(30)">30 min</button>
                 <button class="button button-secondary duration-btn" id="dur25" onclick="setDuration(25)">25 min</button>
                 <button class="button button-secondary duration-btn" id="dur20" onclick="setDuration(20)">20 min</button>
             </div>
@@ -399,7 +399,6 @@
                         <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 50%</td></tr>
                         <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 60%</td></tr>
                         <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 70%</td></tr>
-                        <tr><td class="time-col">2 min</td><td><span class="step-dot dot-build"></span>Build effort to 80%</td></tr>
                         <tr><td class="time-col">2 min</td><td><span class="step-dot dot-easy"></span>Easy spin</td></tr>
                         <tr><td class="time-col">10 sec</td><td><span class="step-dot dot-race"></span>Interval 1: Race pace</td></tr>
                         <tr><td class="time-col">50 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
@@ -409,10 +408,8 @@
                         <tr><td class="time-col">50 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
                         <tr><td class="time-col">10 sec</td><td><span class="step-dot dot-race"></span>Interval 4: Race pace</td></tr>
                         <tr><td class="time-col">50 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
-                        <tr><td class="time-col">10 sec</td><td><span class="step-dot dot-race"></span>Interval 5: Race pace</td></tr>
-                        <tr><td class="time-col">50 sec</td><td><span class="step-dot dot-recovery"></span>Recovery</td></tr>
-                        <tr><td class="time-col">8 min</td><td><span class="step-dot dot-easy"></span>Easy spin cooldown</td></tr>
-                        <tr><td class="time-col"><strong>35 min</strong></td><td><strong>Total Warmup</strong></td></tr>
+                        <tr><td class="time-col">6 min</td><td><span class="step-dot dot-easy"></span>Easy spin cooldown</td></tr>
+                        <tr><td class="time-col"><strong>30 min</strong></td><td><strong>Total Warmup</strong></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -433,14 +430,14 @@
                 <div class="time" id="timeDisplay">00:00</div>
             </div>
             <div class="info-top">
-                <div class="step-info" id="stepDisplay">Step 1 of 18</div>
+                <div class="step-info" id="stepDisplay">Step 1 of 15</div>
                 <div class="up-next" id="upNextDisplay"></div>
             </div>
             <div class="info-middle" id="infoMiddle">
                 <div class="phase-description" id="phaseDescription"></div>
             </div>
             <div class="info-bottom">
-                <div class="remaining-time" id="remainingDisplay">35:00 remaining</div>
+                <div class="remaining-time" id="remainingDisplay">30:00 remaining</div>
                 <div class="completion-time" id="completionDisplay"></div>
             </div>
             <div class="controls">
@@ -473,7 +470,7 @@
     <script>
         var PHASE_DESCRIPTIONS = {
             warmup: "Keep it genuinely easy \u2014 conversational pace, around 60\u201370% max HR. Just get the blood moving and joints loose. Cadence slightly higher than your natural tendency (90+ rpm if you can).",
-            build: "Over the next 10 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.",
+            build: "Over the next 8 minutes gradually increase effort every 2 minutes. By the end you should be at a solid tempo effort \u2014 breathing hard but controlled. This primes your aerobic engine and starts opening up the legs.",
             intervals: "Short 10-second bursts at actual race intensity (the kind of hard you\u2019d hit on a punchy climb). 50 seconds easy between each. These wake up your fast-twitch recruitment and get your body used to the intensity before the gun goes off.",
             cooldown: "Bring HR back to an easy zone. You want to toe the start line feeling warm and ready but not already in debt."
         };
@@ -484,7 +481,6 @@
             { duration: 120, label: 'Build effort to 50%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 50 percent' },
             { duration: 120, label: 'Build effort to 60%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 60 percent' },
             { duration: 120, label: 'Build effort to 70%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 70 percent' },
-            { duration: 120, label: 'Build effort to 80%',    type: 'build',    descKey: 'build',     announce: 'Build effort to 80 percent' },
             { duration: 120, label: 'Easy spin',              type: 'easy',     descKey: 'warmup',    announce: 'Easy spin for 2 minutes' },
             { duration: 10,  label: 'Interval 1: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 1. Race pace! 10 seconds' },
             { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
@@ -494,14 +490,12 @@
             { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
             { duration: 10,  label: 'Interval 4: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 4. Race pace! 10 seconds' },
             { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
-            { duration: 10,  label: 'Interval 5: Race pace',  type: 'race',     descKey: 'intervals', announce: 'Interval 5. Race pace! 10 seconds' },
-            { duration: 50,  label: 'Recovery',               type: 'recovery', descKey: 'intervals', announce: 'Recovery for 50 seconds' },
-            { duration: 480, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 8 minutes to cool down' }
+            { duration: 360, label: 'Easy spin',              type: 'easy',     descKey: 'cooldown',  announce: 'Final easy spin. 6 minutes to cool down' }
         ];
 
         var TOTAL_WARMUP = WARMUP_STEPS.reduce(function(sum, s) { return sum + s.duration; }, 0);
 
-        var currentDuration = 35;
+        var currentDuration = 30;
 
         function buildSteps(minutes) {
             var steps;
