@@ -268,8 +268,9 @@ async function getUpcomingPlannedRides(
     return true;
   });
 
-  // Skip the first one (it's the current/next practice which has its own poll)
-  return deduped.slice(1, 1 + limit);
+  // Include all upcoming practices — the current one has its own poll, but skipping
+  // it breaks end-of-season when only one practice remains.
+  return deduped.slice(0, limit);
 }
 
 /** Check if a date matches a planned (non-excluded) practice */
@@ -542,16 +543,42 @@ async function postAttendeeSummary(
       if (r.coach_id && r.slack_user_id) coachSlackMap.set(r.coach_id, r.slack_user_id);
     }
 
-    // Fetch coach names as final fallback for coaches with no historical slack interaction
+    // Fill gaps by matching coach emails to Slack workspace members
     const missingSlackIds = availableCoachIds.filter(id => !coachSlackMap.has(id));
     const coachNameMap = new Map<number, string>();
     if (missingSlackIds.length > 0) {
       const { data: coachRows } = await supabase
         .from("coaches")
-        .select("id, name")
+        .select("id, name, email")
         .in("id", missingSlackIds);
+      const emailToCoachId = new Map<string, number>();
       for (const c of (coachRows ?? [])) {
         if (c.name) coachNameMap.set(c.id, c.name);
+        if (c.email) emailToCoachId.set(c.email.toLowerCase(), c.id);
+      }
+
+      // Look up Slack IDs by email via users.list
+      if (emailToCoachId.size > 0) {
+        const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN") || "";
+        let slackCursor: string | undefined;
+        do {
+          const params = new URLSearchParams({ limit: "200" });
+          if (slackCursor) params.set("cursor", slackCursor);
+          const res = await fetch(`https://slack.com/api/users.list?${params}`, {
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+          });
+          const data = await res.json();
+          if (!data.ok) { console.error("[attendeeSummary] users.list error:", data.error); break; }
+          for (const member of data.members ?? []) {
+            if (member.deleted || member.is_bot) continue;
+            const email = member.profile?.email?.toLowerCase();
+            if (!email) continue;
+            const cId = emailToCoachId.get(email);
+            if (cId) { coachSlackMap.set(cId, member.id); emailToCoachId.delete(email); }
+          }
+          slackCursor = data.response_metadata?.next_cursor || undefined;
+          if (emailToCoachId.size === 0) break;
+        } while (slackCursor);
       }
     }
 
@@ -1784,12 +1811,16 @@ serve(async (req) => {
       const now = getCurrentPacificTime();
       console.log(`[post_poll_if_due] ride=${ride.id} date=${ride.date} targetDate=${targetDate} targetHour=${pollHour} now=${now.date} ${now.hour}`);
 
-      // Self-gate: only post when current Pacific date+hour matches
+      // Self-gate: post if we are AT or PAST the target time (but before the practice itself).
+      // This handles missed cron runs — the duplicate check below prevents double-posting.
       const isManualTrigger = !!body.force;
-      if (!isManualTrigger && (now.date !== targetDate || now.hour !== pollHour)) {
+      const nowTs = `${now.date}T${String(now.hour).padStart(2, "0")}:${String(now.minute).padStart(2, "0")}`;
+      const targetTs = `${targetDate}T${pollTime}`;
+      const practiceTs = `${ride.date}T00:00`; // Don't post on or after practice day starts (too late)
+      if (!isManualTrigger && (nowTs < targetTs || nowTs >= practiceTs)) {
         return jsonResponse({
           skipped: true,
-          reason: "Not poll posting time",
+          reason: nowTs < targetTs ? "Not poll posting time yet" : "Past practice date — too late to post poll",
           nextRide: { id: ride.id, date: ride.date },
           targetPostTime: `${targetDate} ${pollTime} Pacific`,
           currentTime: `${now.date} ${now.hour}:${String(now.minute).padStart(2, "0")} Pacific`,
@@ -1858,13 +1889,16 @@ serve(async (req) => {
 
       console.log(`[send_reminders] ride=${ride.id} date=${ride.date} targetDate=${targetDate} targetHour=${reminderHour} now=${now.date} ${now.hour}`);
 
-      // Gate check: only send if current Pacific date+hour matches the configured reminder date+hour
-      // For manual workflow_dispatch, bypass the timing gate (allow immediate send)
+      // Gate check: send if we are AT or PAST the target time (but before the practice itself).
+      // This handles missed cron runs — the slackReminderSentAt flag prevents double-sends.
       const isManualTrigger = !!body.force;
-      if (!isManualTrigger && (now.date !== targetDate || now.hour !== reminderHour)) {
+      const nowTs = `${now.date}T${String(now.hour).padStart(2, "0")}:${String(now.minute).padStart(2, "0")}`;
+      const reminderTargetTs = `${targetDate}T${reminderTimeStr}`;
+      const practiceDateTs = `${ride.date}T${matchedPractice?.time || "23:59"}`; // Don't remind after practice starts
+      if (!isManualTrigger && (nowTs < reminderTargetTs || nowTs >= practiceDateTs)) {
         return jsonResponse({
           skipped: true,
-          reason: "Not reminder time",
+          reason: nowTs < reminderTargetTs ? "Not reminder time yet" : "Past practice start — too late to remind",
           nextRide: { id: ride.id, date: ride.date },
           targetReminderTime: `${targetDate} ${reminderTimeStr} Pacific`,
           currentTime: `${now.date} ${now.hour}:${String(now.minute).padStart(2, "0")} Pacific`,
@@ -1912,9 +1946,51 @@ serve(async (req) => {
 
       // Get active roster (coaches include opt-out flag)
       const [{ data: riders }, { data: coaches }] = await Promise.all([
-        supabase.from("riders").select("id").or("archived.is.null,archived.eq.false"),
-        supabase.from("coaches").select("id, slack_reminders_disabled").or("archived.is.null,archived.eq.false"),
+        supabase.from("riders").select("id, email, name").or("archived.is.null,archived.eq.false"),
+        supabase.from("coaches").select("id, email, name, slack_reminders_disabled").or("archived.is.null,archived.eq.false"),
       ]);
+
+      // Fill gaps in riderSlackMap and coachSlackMap by matching Slack workspace
+      // members by email. This covers riders/coaches who never clicked a poll button.
+      const ridersNeedingSlackId = (riders ?? []).filter((r: any) => !riderSlackMap.has(r.id) && r.email);
+      const coachesNeedingSlackId = (coaches ?? []).filter((c: any) => !coachSlackMap.has(c.id) && c.email);
+      if (ridersNeedingSlackId.length > 0 || coachesNeedingSlackId.length > 0) {
+        // Build email → person lookup
+        const emailToRiderId = new Map<string, number>();
+        for (const r of ridersNeedingSlackId) emailToRiderId.set((r as any).email.toLowerCase(), r.id);
+        const emailToCoachId = new Map<string, number>();
+        for (const c of coachesNeedingSlackId) emailToCoachId.set((c as any).email.toLowerCase(), c.id);
+
+        // Paginate through Slack users.list to match by email
+        let slackCursor: string | undefined;
+        let slackLookupCount = 0;
+        do {
+          const params = new URLSearchParams({ limit: "200" });
+          if (slackCursor) params.set("cursor", slackCursor);
+          const res = await fetch(`https://slack.com/api/users.list?${params}`, {
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+          });
+          const data = await res.json();
+          if (!data.ok) { console.error("[send_reminders] users.list error:", data.error); break; }
+          for (const member of data.members ?? []) {
+            if (member.deleted || member.is_bot) continue;
+            const email = member.profile?.email?.toLowerCase();
+            if (!email) continue;
+            const rId = emailToRiderId.get(email);
+            if (rId) { riderSlackMap.set(rId, member.id); emailToRiderId.delete(email); }
+            const cId = emailToCoachId.get(email);
+            if (cId) { coachSlackMap.set(cId, member.id); emailToCoachId.delete(email); }
+          }
+          slackLookupCount += (data.members ?? []).length;
+          slackCursor = data.response_metadata?.next_cursor || undefined;
+          // Stop early if all gaps are filled
+          if (emailToRiderId.size === 0 && emailToCoachId.size === 0) break;
+        } while (slackCursor);
+        console.log(`[send_reminders] Slack users.list scanned ${slackLookupCount} members, filled ${ridersNeedingSlackId.length - emailToRiderId.size} rider + ${coachesNeedingSlackId.length - emailToCoachId.size} coach Slack IDs`);
+        if (emailToRiderId.size > 0) {
+          console.log(`[send_reminders] Riders still missing Slack ID (no email match): ${[...emailToRiderId.values()].join(", ")}`);
+        }
+      }
 
       // Find non-responders who have a known Slack user ID (by role)
       // Track coach Slack IDs separately so we can add the mute button to their DMs
@@ -2622,7 +2698,7 @@ serve(async (req) => {
           seenDates2.add(r.date);
           return true;
         });
-        const upcomingRides = dedupedPlanned.slice(1, 26); // Skip first (current practice), cap at 25
+        const upcomingRides = dedupedPlanned.slice(0, 25); // Include all upcoming practices (the current one already has its own poll, but skipping it breaks end-of-season when only one remains)
 
         // Determine coach/rider
         let isCoach = false;
