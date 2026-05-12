@@ -1684,7 +1684,7 @@ async function createBackup(backupName, backupData, backupType = 'manual') {
     if (skipSupabaseWriteInDevMode()) { console.log('Developer mode: skipping createBackup'); return null; }
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not initialized');
-    
+
     const currentUser = getCurrentUser();
     const { data, error } = await client
         .from('backups')
@@ -1696,8 +1696,26 @@ async function createBackup(backupName, backupData, backupType = 'manual') {
         })
         .select()
         .single();
-    
+
     if (error) throw error;
+
+    // Trim auto-backups to keep only the 10 most recent
+    if (backupType === 'auto_login' || backupType === 'auto_logout') {
+        try {
+            const { data: allAuto } = await client
+                .from('backups')
+                .select('id')
+                .in('backup_type', ['auto_login', 'auto_logout'])
+                .order('created_at', { ascending: false });
+            if (allAuto && allAuto.length > 10) {
+                const idsToDelete = allAuto.slice(10).map(b => b.id);
+                await client.from('backups').delete().in('id', idsToDelete);
+            }
+        } catch (e) {
+            console.warn('Auto-backup trim failed:', e);
+        }
+    }
+
     return data;
 }
 
