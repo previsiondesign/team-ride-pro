@@ -265,7 +265,7 @@
             
             const seasonStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
             const seasonEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-            
+
             // Get existing ride dates (non-deleted only)
             const existingRideDates = new Set();
             const deletedRideDates = new Set(); // Track deleted dates so we don't recreate them
@@ -280,7 +280,47 @@
                     }
                 });
             }
-            
+
+            // DB source-of-truth check: union in any rides that exist in Supabase for the
+            // season window. Prevents duplicates when data.rides is stale (multi-tab/device,
+            // localStorage drift, post-cleanInvalidRides) — the in-memory list alone isn't
+            // reliable for dedupe. Catches races against the new partial unique index too,
+            // so we don't fall through to a constraint-violation error path. (2026-05-12)
+            const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+            const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+            if (client && currentUser) {
+                try {
+                    const seasonStartIso = formatDateToISO(seasonStart);
+                    const seasonEndIso = formatDateToISO(seasonEnd);
+                    const { data: dbRides, error: dbErr } = await client
+                        .from('rides')
+                        .select('date, deleted, cancelled')
+                        .gte('date', seasonStartIso)
+                        .lte('date', seasonEndIso);
+                    if (dbErr) {
+                        console.error('🔵 ensureRidesFromSchedule: DB pre-check failed (continuing with local data):', dbErr);
+                    } else if (Array.isArray(dbRides)) {
+                        let dbAdds = 0;
+                        dbRides.forEach(r => {
+                            if (!r || !r.date) return;
+                            const isDeleted = r.deleted === true;
+                            const isCancelled = r.cancelled === true;
+                            if (isDeleted) {
+                                deletedRideDates.add(r.date);
+                            } else if (!isCancelled && !existingRideDates.has(r.date)) {
+                                existingRideDates.add(r.date);
+                                dbAdds++;
+                            }
+                        });
+                        if (dbAdds > 0) {
+                            console.log(`🔵 ensureRidesFromSchedule: DB pre-check found ${dbAdds} active ride(s) not in local data — won't recreate`);
+                        }
+                    }
+                } catch (err) {
+                    console.error('🔵 ensureRidesFromSchedule: DB pre-check exception (continuing with local data):', err);
+                }
+            }
+
             // Create rides for each scheduled practice date
             const cursor = new Date(seasonStart.getTime());
             let ridesCreated = false;
@@ -413,9 +453,57 @@
                                 console.error('Error saving to localStorage:', lsError);
                             }
                         } catch (error) {
-                            console.error('🔵 ensureRidesFromSchedule: Error creating ride in Supabase:', error);
-                            // If create fails, add to local array as fallback
-                            data.rides.push(ride);
+                            // Unique-constraint violation (idx_rides_date_unique_active) means another
+                            // tab/process beat us to it. Refetch the existing row instead of pushing a
+                            // phantom local ride that won't have a real DB id.
+                            const code = error && (error.code || error.details);
+                            const msg = (error && error.message) || '';
+                            const isDupKey = code === '23505' || /idx_rides_date_unique_active|duplicate key/i.test(msg);
+                            if (isDupKey) {
+                                console.log('🔵 ensureRidesFromSchedule: Date', dateKey, 'already has a ride (constraint hit); refetching');
+                                try {
+                                    const { data: existingRows } = await client
+                                        .from('rides')
+                                        .select('*')
+                                        .eq('date', dateKey)
+                                        .or('deleted.is.null,deleted.eq.false')
+                                        .or('cancelled.is.null,cancelled.eq.false')
+                                        .order('created_at', { ascending: true })
+                                        .limit(1);
+                                    if (existingRows && existingRows[0]) {
+                                        const row = existingRows[0];
+                                        const refetched = {
+                                            id: row.id,
+                                            date: row.date,
+                                            time: row.time || '',
+                                            endTime: row.end_time || row.endTime || '',
+                                            description: row.description || '',
+                                            meetLocation: row.meet_location || row.meetLocation || '',
+                                            locationLat: row.location_lat != null ? row.location_lat : (row.locationLat != null ? row.locationLat : null),
+                                            locationLng: row.location_lng != null ? row.location_lng : (row.locationLng != null ? row.locationLng : null),
+                                            goals: row.goals || '',
+                                            availableCoaches: row.available_coaches || [],
+                                            availableRiders: row.available_riders || [],
+                                            assignments: row.assignments || {},
+                                            groups: row.groups || [],
+                                            cancelled: row.cancelled || false,
+                                            cancellationReason: row.cancellation_reason || row.cancellationReason || '',
+                                            deleted: row.deleted || false,
+                                            rescheduledFrom: row.rescheduled_from || row.rescheduledFrom || null,
+                                            publishedGroups: row.published_groups || false,
+                                            isPersisted: true
+                                        };
+                                        data.rides.push(refetched);
+                                        existingRideDates.add(dateKey);
+                                    }
+                                } catch (refetchErr) {
+                                    console.error('🔵 ensureRidesFromSchedule: Refetch after dup-key failed:', refetchErr);
+                                }
+                            } else {
+                                console.error('🔵 ensureRidesFromSchedule: Error creating ride in Supabase:', error);
+                                // Non-dup error: add to local array as fallback so the UI still shows something
+                                data.rides.push(ride);
+                            }
                         }
                     } else {
                         // Not authenticated - add to local array
